@@ -6,100 +6,170 @@ They are spoken at hearths, at partings, over work, and over graves.
 **On the voice.** These are proverbs, not poetry. Keep them short enough to say
 in one breath. Ground each in something that can be touched — root, frost, rope,
 bowl, blade — and let the meaning arrive on its own. No archaism, no *thee* or
-*'tis*; the elves speak simply and mean it entirely. When adding to this lexicon,
-put the new saying under the truest heading and keep the list alphabetically
-unordered — these are arranged by how they are spoken, not how they are filed.
+*'tis*; the elves speak simply and mean it entirely.
+
+**How this is arranged.** Sayings are filed by the moment they are used, not by
+subject, so that the right words can be found while they are still needed. Each
+heading is a situation; the italic line under it says who speaks and when. A
+saying belongs in one place only — if it seems to fit two moments, file it under
+the harder one.
+
+**Contents**
+
+I. Meeting and Parting · II. Hearth and Guest · III. Oaths and Forgiveness ·
+IV. Grief and Death · V. Birth and Coming of Age · VI. Work and Craft ·
+VII. Counsel and Silence · VIII. Fear and Endurance · IX. Conflict ·
+X. The Sea · XI. Blessings, Toasts, and Formulas
 
 ---
 
-## On Kin
+# I. Meeting and Parting
 
-> **Kin is who returns for you.**
-
-> No branch shades itself alone.
-
-> Count your people in winters, not in summers.
-
-> The hearth does not ask how far you walked.
-
-> Blood roots; choosing grafts. Both bear fruit.
-
-> We do not say *mine*. We say *in my keeping*.
-
-> The one who sets out a second bowl is never the poorer for it.
-
-> A name is a loan from those who will say it after you.
-
-## On Memory
-
-> **The tree remembers every wound.**
-
-> Rings do not lie and do not forgive. They only keep.
-
-> Bark closes. The grain still bends around it.
-
-> Ask the old wood where the fire came through.
-
-> A long life is a long memory, carried lightly or not at all.
-
-> What you refuse to remember, you agree to repeat.
-
-## On Shelter and Debt
-
-> Shade given is not shade lost.
-
-> Plant for the ones whose faces you will not know.
-
-> Take the windfall. Leave the bough.
-
-> The roof you mend in summer is the roof that keeps you in the rain.
-
-> A debt spoken aloud is half repaid. A debt hidden doubles by morning.
-
-> Borrow from the forest the way you would borrow from a friend: openly,
-> and less than you were offered.
-
-## On Patience
-
-> The oak is in no hurry and is never late.
-
-> Seasons are not obstacles. They are the road.
-
-> Slow water carves the deeper channel.
-
-> Do not measure your growth against the year you were pruned.
-
-> Haste is the shortest way to walk a circle.
-
-> Winter is the forest thinking.
-
-> Frost teaches the seed what it is for.
-
-## On Speech
-
-> Say the true thing quietly. It carries further.
-
-> A sharp word is a green branch bent — it keeps the bend.
-
-> Silence is an answer. Learn which one.
-
-> Three things do not come back: the loosed arrow, the spoken name, the spent year.
-
-> Listen until the other has stopped needing to be right.
-
-> Praise in the open, correct in the shade.
-
-## On Strangers
+## When you meet a stranger on the road
+*Spoken by the one who arrives second, or by whoever has more water.*
 
 > The stranger at your fire is kin you have not yet kept.
 
-> Feed first. Ask after.
-
 > Every road is someone's road home.
+
+> Feed first. Ask after.
 
 > Judge a traveler by what they leave behind them, not by what they carry.
 
-## On Grief
+> Ask a name once. Remember it always.
+
+## When kin returns after long absence
+*Spoken at the door, before anything is carried inside.*
+
+> **Kin is who returns for you.**
+
+> The hearth does not ask how far you walked.
+
+> Sit. The questions have waited this long; they can wait through supper.
+
+> You were counted in every winter.
+
+## When you part for a season
+*Spoken at the gate or the gangway, by the one staying.*
+
+> Every leaving is a promise. Every return is its keeping.
+
+> Go far. Come back changed. Come back.
+
+> Leave the fire banked, not drowned — someone may come in the night.
+
+> Take the long look now. The road is short on looking back.
+
+> Your place at the table is not a courtesy. It is kept.
+
+## When the parting may be the last
+*Spoken plainly, both standing, nothing held back for later.*
+
+> Say the whole thing. There may be no second saying.
+
+> Three things do not come back: the loosed arrow, the spoken name, the spent year.
+
+> The way out and the way home are one path, walked by two different people.
+
+> If you do not return, I will carry your name until someone takes it from me.
+
+> I am not finished loving you. Only finished holding you.
+
+# II. Hearth and Guest
+
+## When you take someone in
+*Spoken by the host, before questions.*
+
+> The one who sets out a second bowl is never the poorer for it.
+
+> Shade given is not shade lost.
+
+> **No branch shades itself alone.**
+
+> Eat before you explain yourself.
+
+> This roof does not ask what you are running from.
+
+## When you are the guest
+*Spoken to oneself, mostly, and proved by the hands.*
+
+> Borrow from the forest the way you would borrow from a friend: openly, and
+> less than you were offered.
+
+> Leave the woodpile higher than you found it.
+
+> Sleep light in another's house. Wake early and be useful.
+
+> A guest who stays past the welcome becomes weather.
+
+## When food is shared
+*Spoken over the first passing of the bowl.*
+
+> We do not say *mine*. We say *in my keeping*.
+
+> The bowl is passed, not given. It comes back.
+
+> Feed the quietest first.
+
+## When a gift is given
+*Spoken by either hand, giving or taking.*
+
+> A debt spoken aloud is half repaid. A debt hidden doubles by morning.
+
+> Take the windfall. Leave the bough.
+
+> Accept plainly. A refused gift weighs more than a kept one.
+
+> What is given twice is no longer a gift. It is a bond.
+
+# III. Oaths and Forgiveness
+
+## When you swear an oath
+*Spoken once, standing still, hands empty.*
+
+> Swear by what you would not survive losing.
+
+> An oath is a load. Lift it before you name it.
+
+> A name is a loan from those who will say it after you.
+
+## When you ask to be trusted
+*Spoken by the newcomer, or by the one asking for a second chance.*
+
+> Do not ask for trust. Ask for a task.
+
+> Judge me on the third winter.
+
+> Count your people in winters, not in summers.
+
+## When a promise is broken
+*Spoken by whichever of the two can still speak evenly.*
+
+> Rings do not lie and do not forgive. They only keep.
+
+> Say the breaking out loud. A silent break rots the wood around it.
+
+> I am not owed an explanation. I am owed that your next word be true.
+
+> What you refuse to remember, you agree to repeat.
+
+## When you forgive
+*Spoken slowly, and only when it is true.*
+
+> **The tree remembers every wound.**
+
+> Bark closes. The grain still bends around it.
+
+> Forgiveness is not forgetting. It is agreeing to grow past it.
+
+> I will not carry it for you, and I will not hold it against you.
+
+> Come back to the fire. Sit farther out for a while.
+
+# IV. Grief and Death
+
+## When someone dies
+*Spoken at the planting, by whoever knew them longest.*
 
 > We do not bury. We plant.
 
@@ -107,115 +177,378 @@ unordered — these are arranged by how they are spoken, not how they are filed.
 
 > The empty chair belongs to the table still.
 
-> Cut grief the way you cut wood: with the grain, and not all in one day.
+> Say the name today. Tomorrow is soon enough for silence.
+
+> A long life is a long memory, carried lightly or not at all.
+
+## When you speak to the grieving
+*Spoken little, and late.*
 
 > Grief is love with nowhere left to put its hands.
 
-## On Work
+> Cut grief the way you cut wood: with the grain, and not all in one day.
+
+> Do not fill the silence. Fill the woodbox.
+
+> Ask nothing. Bring soup. Stay until the fire is low.
+
+> There is no cure. There is company.
+
+## At the turning of the year after a loss
+*Spoken at the tree that was planted, by any who come.*
+
+> The first winter is the cruel one. The second is only cold.
+
+> Ask the old wood where the fire came through.
+
+> Salt finds every seam. So does sorrow.
+
+> Tend it every year until the tending is the memory.
+
+# V. Birth and Coming of Age
+
+## When a child is born
+*Spoken at the first carrying-out, under open sky.*
+
+> Another hand for the rope.
+
+> Plant for the ones whose faces you will not know.
+
+> A new ring, and the tree no smaller for it.
+
+> Welcome. You are already owed a great deal.
+
+## When a name is given
+*Spoken by the one who chose it, three times, aloud.*
+
+> Name for what you hope, not for what you fear.
+
+> A name is the smallest house a person lives in. Build it kindly.
+
+> Say it aloud three times, so the house learns it.
+
+## When someone comes of age
+*Spoken by an elder who is not their parent.*
+
+> Blood roots; choosing grafts. Both bear fruit.
+
+> From today, your word is a load-bearing thing.
+
+> You may go anywhere. Learn first what you would miss.
+
+> Frost teaches the seed what it is for.
+
+# VI. Work and Craft
+
+## When you begin a work
+*Spoken at the first cut, quietly, to the material.*
+
+> Build the keel true; the rest is argument.
+
+> Measure by the tree. Cut by the hand.
 
 > Work the wood the way it wants to go.
 
-> A tool left dull insults the hand that comes after.
+> Begin in the morning. Evening is for finishing, not for starting.
 
-> Measure by the tree. Cut by the hand.
+## When the work goes wrong
+*Spoken by the one who made the error, before anyone else can.*
+
+> Rot works in the dark. So look in the dark.
+
+> Undo it back to the last true joint.
+
+> Correct early and small. The sea charges interest on the grand correction.
+
+> A bad cut teaches better than a good one, and costs what it costs.
+
+> Do not measure your growth against the year you were pruned.
+
+## When the work is finished
+*Spoken the following morning, not the same night.*
 
 > Beauty is patience made visible.
 
 > Finish the small joint well; no one will see it, and it will hold everything.
 
-## On Conflict
+> Sign nothing. The grain remembers whose hands.
 
-> Draw last. Aim once.
+> Sit with it one night before you call it done.
 
-> A fire set in anger burns your own forest.
+## When you teach
+*Spoken by the one whose tools are being ruined.*
 
-> There is no clean cut through a living thing.
+> A tool left dull insults the hand that comes after.
 
-> Peace is not the absence of the blade but the length of its rest.
+> Show once. Watch twice. Speak on the third.
+
+> Let them ruin their own board. The lesson is in the ruin.
+
+> Praise in the open, correct in the shade.
+
+## When you hand on your tools
+*Spoken at the giving over, which is done while still living.*
+
+> Chart what you learn. The next hull to pass here may carry someone you love.
+
+> The handle is worn to my hand. Wear it to yours.
+
+> I kept them sharp. That is the whole of the will.
+
+# VII. Counsel and Silence
+
+## When you must correct someone
+*Spoken aside, never across a room.*
+
+> A sharp word is a green branch bent — it keeps the bend.
+
+> Say the true thing quietly. It carries further.
+
+> Name the fault, not the person. Only one of the two can be mended.
+
+## When you are corrected
+*Spoken by the one who was wrong, and meant.*
+
+> Listen until the other has stopped needing to be right.
+
+> Thank the one who tells you the hull is soft.
+
+> Being wrong is only expensive if you keep it.
+
+## When you must give hard news
+*Spoken standing, first thing, no walking up to it.*
+
+> Say it first. Explain it after.
+
+> Do not walk them toward it. Tell them where they are standing.
+
+> Stay after the telling. That is the harder half.
+
+## When you are asked for counsel you do not have
+*Spoken instead of guessing.*
+
+> Silence is an answer. Learn which one.
+
+> I do not know. I will sit with you while you decide.
+
+> Advice is cheap water. Carry it only as far as it was asked for.
+
+## When you must keep a confidence
+*Spoken once, to the one who gave it, and never after.*
+
+> Some words are given to be held, not carried.
+
+> What is told at the low fire stays at the low fire.
+
+# VIII. Fear and Endurance
+
+## When you are afraid
+*Spoken to oneself, under the breath, hands busy.*
+
+> Fear the sea, then learn it, then fear it better.
+
+> Fear is the body paying attention. Thank it, and go.
+
+> Do the next small true thing. Then the one after.
+
+> Winter is the forest thinking.
+
+## When you are lost
+*Spoken by whoever admits it first, who is thereby in command.*
+
+> Lost is not knowing where you are. Drowned is not saying so.
+
+> Stop. Eat. Then decide.
+
+> A known rock is kinder than an unknown channel.
+
+> Steer by the star, not by the wake.
+
+## When you have failed
+*Spoken the once, aloud, and then not returned to.*
+
+> The wake says where you have been. It cannot be steered by.
+
+> Count the loss once, out loud, and then begin.
+
+> Haste is the shortest way to walk a circle.
+
+> A lesson paid for and not taken is the only waste.
+
+## When you must wait
+*Spoken by the impatient, to themselves, repeatedly.*
+
+> The oak is in no hurry and is never late.
+
+> Seasons are not obstacles. They are the road.
+
+> Slow water carves the deeper channel.
+
+> Calm is not rest. Calm is a question.
+
+> Waiting is work, when it is done well.
+
+## When you must go on anyway
+*Spoken at the hour when stopping is the reasonable thing.*
 
 > The river does not argue with the stone. It outlasts it.
 
-## On the Sea
+> One more watch. Only ever one more watch.
 
-> The sea keeps no promises and breaks none.
+> The roof you mend in summer is the roof that keeps you in the rain.
+
+> Tired is not a reason. Tired is a fact.
+
+# IX. Conflict
+
+## When you are wronged
+*Spoken before answering, and preferably the next day.*
+
+> A fire set in anger burns your own forest.
+
+> Let the anger cool once before you spend it.
+
+> Answer the harm, not the insult.
+
+## Before you draw
+*Spoken with the hand still open.*
+
+> Draw last. Aim once.
+
+> There is no clean cut through a living thing.
+
+> Ask what you will still want when the blood is dry.
+
+## When you refuse a fight
+*Spoken clearly enough to be heard by everyone present.*
+
+> I will not burn my own forest for you.
+
+> Walking away does not end the argument. It ends my part in it.
+
+> Peace is not the absence of the blade but the length of its rest.
+
+## When you must fight
+*Spoken short, because there is no time for more.*
+
+> Then quickly, and without joy.
+
+> Guard what is behind you. That is the whole of the strategy.
+
+> Strike as though you will have to explain it to the one you are protecting.
+
+## After the fighting
+*Spoken by whoever is steadiest, in this order.*
+
+> Count everyone twice.
+
+> Wash, eat, sleep, then speak. Not before.
+
+> We do not sing about it until the ones who were there ask us to.
+
+## When you make peace
+*Spoken in daylight, outdoors, with both parties' hands visible.*
+
+> Peace is built with the hands, in the open, where both can watch.
+
+> Begin with what can be returned.
+
+> Two roots in the same ground learn each other or die.
+
+# X. The Sea
+
+## Before casting off
+*Spoken by the one who walks the deck last.*
+
+> Check twice what you cannot reach at sea.
+
+> The last line cast off is the first line coiled.
+
+> Say the destination aloud. A crew sails better knowing.
+
+> Harbor keeps the hull and rusts the sailor.
+
+## When you teach someone the sea
+*Spoken in fair weather, which is the only time it can be heard.*
 
 > Respect is the only payment the sea accepts.
-
-> Deep water is honest water. It is the shallows that lie.
-
-> The sea does not take the bold or the careful. It takes the unready.
 
 > You do not master water. You are permitted.
 
 > Every wave is the same wave, and not one of them is.
 
-> Salt finds every seam. So does sorrow.
+> Learn the boat in fair weather. The gale will not teach you gently.
 
-> Fear the sea, then learn it, then fear it better.
-
-## On Wind and Weather
+## When the weather turns
+*Spoken once, loudly, and then obeyed.*
 
 > Trim to the wind you have, not the wind you wanted.
 
-> The wind owes you nothing. It only shows you what your sails are worth.
-
-> A red sky is advice, not a promise.
-
 > Reef before you must. No one ever drowned of too little sail.
-
-> Calm is not rest. Calm is a question.
 
 > The gale does not sink you. The thing you failed to tie does.
 
+> A red sky is advice, not a promise.
+
+> The wind owes you nothing. It only shows you what your sails are worth.
+
 > Every wind is fair to someone. Learn whose.
 
-## On the Ship
-
-> A ship is a promise the trees keep at sea.
-
-> Build the keel true; the rest is argument.
-
-> A hull is only as strong as its worst weld.
-
-> Rot works in the dark. So look in the dark.
-
-> Paint hides. Salt reveals.
-
-> Patch it in harbor or bail it at sea; the sea will let you choose once.
-
-> The vessel that carries you asks only that you keep it.
-
-## On Crew
-
-> A crew is kin chosen by weather.
-
-> One hand for yourself, one for the ship — never two for either.
+## When the watch changes
+*Spoken at the handover, half asleep, and never skipped.*
 
 > The watch you keep for others is the watch that will be kept for you.
 
-> No one holds a course alone.
+> One hand for yourself, one for the ship — never two for either.
 
-> The quietest sailor in fair weather is the one you want in a gale.
-
-> Share the last water before you are asked for it.
+> Tell the next watch what you are unsure of, not only what you know.
 
 > Wake the one who must be waked. Be hated until morning.
 
-## On Navigation
+> No one holds a course alone.
 
-> Steer by the star, not by the wake.
+## When you take on a new hand
+*Spoken about them, not to them, for the first week.*
 
-> The wake says where you have been. It cannot be steered by.
+> A crew is kin chosen by weather.
 
-> A known rock is kinder than an unknown channel.
+> Give them a rope before you give them an opinion.
 
-> Correct early and small. The sea charges interest on the grand correction.
+> Watch how they treat the tools when no one is looking.
 
-> Lost is not knowing where you are. Drowned is not saying so.
+> The sea does not take the bold or the careful. It takes the unready.
 
-> Chart what you learn. The next hull to pass here may carry someone you love.
+> The quietest sailor in fair weather is the one you want in a gale.
 
-## On Harbor and Tide
+## When the water runs short
+*Spoken by the one with the most left.*
+
+> Share the last water before you are asked for it.
+
+## When a ship is launched or named
+*Spoken with a hand flat on the hull.*
+
+> A ship is a promise the trees keep at sea.
+
+> A hull is only as strong as its worst weld.
+
+> She is named. Now she is owed.
+
+> May she be slow to leak and quick to answer.
+
+## When someone is lost at sea
+*Spoken at the rail, at the hour it happened, once a year after.*
+
+> The sea keeps no promises and breaks none.
+
+> Deep water is honest water. It is the shallows that lie.
+
+> For these we do not plant. We set a stone facing out.
+
+> Keep their watch once more, and then let the ship sail lighter.
+
+## When you make harbor
+*Spoken while the work is still going on, because it is not finished yet.*
 
 > The tide does not wait, and it does not gloat.
 
@@ -223,18 +556,54 @@ unordered — these are arranged by how they are spoken, not how they are filed.
 
 > Moor as though the wind will change, because it will.
 
-> Harbor keeps the hull and rusts the sailor.
+> Patch it in harbor or bail it at sea; the sea will let you choose once.
+
+> Paint hides. Salt reveals.
+
+> The vessel that carries you asks only that you keep it.
 
 > Leave the anchorage cleaner than the tide found it.
 
-> The last line cast off is the first line coiled.
+# XI. Blessings, Toasts, and Formulas
 
-## On Leaving and Returning
+## Blessing a house
+*Spoken at the threshold by the first guest to enter it.*
 
-> Every leaving is a promise. Every return is its keeping.
+> May the roof be mended before the rain, and the door heavy to close.
 
-> The way out and the way home are one path, walked by two different people.
+> Fire in the hearth, a second bowl on the shelf.
 
-> Go far. Come back changed. Come back.
+> May this house be easy to find in the dark.
 
-> Leave the fire banked, not drowned — someone may come in the night.
+## Blessing a road
+*Spoken to the one leaving, who does not answer.*
+
+> Dry feet and short nights.
+
+> May every road you walk be someone's road home, and one of them yours.
+
+> May you be expected somewhere.
+
+## Toasts
+*Spoken standing; the shortest are the oldest.*
+
+> To the keel.
+
+> To whoever has the watch.
+
+> To the second bowl.
+
+> To wounds that close.
+
+> To the ones who returned, and to the ones who are still returning.
+
+## Call and answer
+*Fixed forms. The answer is never improvised.*
+
+> **Keep your watch.** — *And yours.*
+
+> **Fair grain and true joint.** — *And to your hands.*
+
+> **Following seas.** — *And a short way home.*
+
+> **Return for me.** — *I will return.*
