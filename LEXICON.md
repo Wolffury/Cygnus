@@ -135,6 +135,100 @@ unordered — these are arranged by how they are spoken, not how they are filed.
 
 > The river does not argue with the stone. It outlasts it.
 
+## On the Sea
+
+> The sea keeps no promises and breaks none.
+
+> Respect is the only payment the sea accepts.
+
+> Deep water is honest water. It is the shallows that lie.
+
+> The sea does not take the bold or the careful. It takes the unready.
+
+> You do not master water. You are permitted.
+
+> Every wave is the same wave, and not one of them is.
+
+> Salt finds every seam. So does sorrow.
+
+> Fear the sea, then learn it, then fear it better.
+
+## On Wind and Weather
+
+> Trim to the wind you have, not the wind you wanted.
+
+> The wind owes you nothing. It only shows you what your sails are worth.
+
+> A red sky is advice, not a promise.
+
+> Reef before you must. No one ever drowned of too little sail.
+
+> Calm is not rest. Calm is a question.
+
+> The gale does not sink you. The thing you failed to tie does.
+
+> Every wind is fair to someone. Learn whose.
+
+## On the Ship
+
+> A ship is a promise the trees keep at sea.
+
+> Build the keel true; the rest is argument.
+
+> A hull is only as strong as its worst weld.
+
+> Rot works in the dark. So look in the dark.
+
+> Paint hides. Salt reveals.
+
+> Patch it in harbor or bail it at sea; the sea will let you choose once.
+
+> The vessel that carries you asks only that you keep it.
+
+## On Crew
+
+> A crew is kin chosen by weather.
+
+> One hand for yourself, one for the ship — never two for either.
+
+> The watch you keep for others is the watch that will be kept for you.
+
+> No one holds a course alone.
+
+> The quietest sailor in fair weather is the one you want in a gale.
+
+> Share the last water before you are asked for it.
+
+> Wake the one who must be waked. Be hated until morning.
+
+## On Navigation
+
+> Steer by the star, not by the wake.
+
+> The wake says where you have been. It cannot be steered by.
+
+> A known rock is kinder than an unknown channel.
+
+> Correct early and small. The sea charges interest on the grand correction.
+
+> Lost is not knowing where you are. Drowned is not saying so.
+
+> Chart what you learn. The next hull to pass here may carry someone you love.
+
+## On Harbor and Tide
+
+> The tide does not wait, and it does not gloat.
+
+> Every harbor is a borrowed calm.
+
+> Moor as though the wind will change, because it will.
+
+> Harbor keeps the hull and rusts the sailor.
+
+> Leave the anchorage cleaner than the tide found it.
+
+> The last line cast off is the first line coiled.
+
 ## On Leaving and Returning
 
 > Every leaving is a promise. Every return is its keeping.
