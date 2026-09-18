@@ -19,7 +19,7 @@ the harder one.
 I. Meeting and Parting · II. Hearth and Guest · III. Oaths and Forgiveness ·
 IV. Grief and Death · V. Birth and Coming of Age · VI. Work and Craft ·
 VII. Counsel and Silence · VIII. Fear and Endurance · IX. Conflict ·
-X. The Sea · XI. Blessings, Toasts, and Formulas
+X. Injury and Suffering · XI. The Sea · XII. Blessings, Toasts, and Formulas
 
 ---
 
@@ -455,7 +455,88 @@ X. The Sea · XI. Blessings, Toasts, and Formulas
 
 > Two roots in the same ground learn each other or die.
 
-# X. The Sea
+# X. Injury and Suffering
+
+## When someone is hurt in front of you
+*Spoken by whoever reaches them first. The rest is done with the hands.*
+
+> Hands first. Words when the bleeding stops.
+
+> Do not ask if they are well. Ask what they can move.
+
+> Tell them what you are doing before you do it.
+
+> Stay where they can see you.
+
+## When you are the one hurt
+*Spoken by the injured, who has the right to be heard once without argument.*
+
+> Say where it is, and say it plainly. Pride is a poor splint.
+
+> Pain is news, not judgment.
+
+> Let them look. The wound is not yours alone now.
+
+> Ask in the hour you need it, not the hour after.
+
+## When the tending is long
+*Spoken by the one who has tended for weeks and will tend for more.*
+
+> Healing is work done lying down.
+
+> The wound keeps its own calendar.
+
+> Change the dressing before it is asked for.
+
+> Bring the news from outside. A sickroom starves of it.
+
+> Tend the tender too. Someone must.
+
+## When the pain does not end
+*Spoken of those whose hurt has stopped being an event and become weather.*
+
+> Some wounds do not close. They are kept.
+
+> Pain that stays is not a failure of healing. It is a change of country.
+
+> Make the day smaller until it fits.
+
+> Do not ask how they are. Ask what today allows.
+
+> Name what is still yours, out loud, once a day.
+
+## When the body is changed for good
+*Spoken on the first day the scar is seen by others, and not again.*
+
+> The grain bends around it and still bears weight.
+
+> You are not less tree for the scar.
+
+> Twice-worked steel is not weaker for the second working.
+
+> Learn the new hand. It is the only one coming.
+
+## When the suffering has no reason
+*Spoken when there is no lesson in it, and hunting one would be a cruelty.*
+
+> Not every wound teaches. Some only cost.
+
+> The storm did not choose you. It only found you.
+
+> Do not go looking for the meaning on their behalf.
+
+> Ask nothing of it. Outlast it. That is the whole of the work.
+
+## When someone bears it badly
+*Spoken among kin, out of their hearing, to stop a grudge before it roots.*
+
+> Pain makes poor manners. Forgive them in advance.
+
+> The cornered thing bites the hand that frees it.
+
+> Remember them as they were in fair weather.
+
+# XI. The Sea
 
 ## Before casting off
 *Spoken by the one who walks the deck last.*
@@ -564,7 +645,7 @@ X. The Sea · XI. Blessings, Toasts, and Formulas
 
 > Leave the anchorage cleaner than the tide found it.
 
-# XI. Blessings, Toasts, and Formulas
+# XII. Blessings, Toasts, and Formulas
 
 ## Blessing a house
 *Spoken at the threshold by the first guest to enter it.*
