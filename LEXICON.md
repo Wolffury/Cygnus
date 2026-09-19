@@ -19,7 +19,8 @@ the harder one.
 I. Meeting and Parting · II. Hearth and Guest · III. Oaths and Forgiveness ·
 IV. Grief and Death · V. Birth and Coming of Age · VI. Work and Craft ·
 VII. Counsel and Silence · VIII. Fear and Endurance · IX. Conflict ·
-X. Injury and Suffering · XI. The Sea · XII. Blessings, Toasts, and Formulas
+X. Injury and Suffering · XI. Hunting and the Forest · XII. The Sea ·
+XIII. Blessings, Toasts, and Formulas
 
 ---
 
@@ -536,7 +537,134 @@ X. Injury and Suffering · XI. The Sea · XII. Blessings, Toasts, and Formulas
 
 > Remember them as they were in fair weather.
 
-# XI. The Sea
+# XI. Hunting and the Forest
+
+## Before the hunt
+*Spoken at the edge of the trees, before the first step in.*
+
+> Say aloud what you are hunting, so that you do not take something else.
+
+> Take the count you need, not the count you can.
+
+> Sharpen at home. The forest is not the place for mending things.
+
+> Enter as a guest, not as an owner.
+
+## When you walk under the canopy
+*Spoken low, or not at all.*
+
+> The forest is not wilderness. It is somebody's house.
+
+> Walk as though the wood is listening, because something is.
+
+> Step on stone, root, and shadow. The leaf tells on you.
+
+> Louder than the wind is too loud.
+
+## When you track
+*Spoken by the older hunter, teaching, in a voice that does not carry.*
+
+> Wind first, light second, quiet third.
+
+> Read the ground twice before you believe it once.
+
+> A trail is a sentence. Do not answer before the end of it.
+
+> The animal is not hiding from you. It is living. You are the one hiding.
+
+> Hunger makes poor trackers. Eat first.
+
+## When the shot is offered
+*Spoken inwardly, in the breath before.*
+
+> Take the shot you are sure of, or take none.
+
+> One arrow. The second is an apology.
+
+> The clean kill is the whole of the skill. The rest is walking.
+
+> Never the last of its kind, never the one with young, never for the pleasure of it.
+
+> If you would not use all of it, leave it.
+
+## When you have killed
+*Spoken over the animal, hands on it, before it is moved.*
+
+> Thank it in words, then in use.
+
+> Kneel before you carry.
+
+> Name what it will feed. That is its due.
+
+> We do not smile over it. We are fed, not victorious.
+
+## When the animal is wounded and living
+*Spoken while running, or not at all.*
+
+> Follow it until it is finished, however long, however far.
+
+> The mercy owed is speed.
+
+> Your comfort is not a reason to stop.
+
+> A wounded thing left is a debt that cannot be repaid.
+
+## When the hunt fails
+*Spoken at the empty fire, without excuses offered or accepted.*
+
+> The forest owes no one a meal.
+
+> Empty-handed is not the same as wasted.
+
+> Better a clean walk home than a bad shot carried.
+
+> The wood keeps what it did not give.
+
+## When the game is shared out
+*Spoken by whoever did not make the kill.*
+
+> The one who killed eats last.
+
+> First the sick, then the old, then the children, then the hands that carried.
+
+> No one counts their own portion aloud.
+
+> Meat given away keeps longer than meat kept.
+
+## When you take wood or growing things
+*Spoken at the choosing, which takes longer than the cutting.*
+
+> The deadfall first, always.
+
+> Ask the tree in the spring. Cut it in the winter.
+
+> Take one in nine, and never the finest.
+
+> A felled tree is a debt with a long repayment. Burn one, plant two.
+
+## When the forest is cut or burned by others
+*Spoken standing in the cut. It is the one place the elves raise their voices.*
+
+> Count the stumps. Say the number aloud. Do not round it.
+
+> What stood two hundred years was an afternoon's work to end.
+
+> Grief for a forest is grief. Let no one call it less.
+
+> Replant before you retaliate.
+
+## When you are long alone in the wood
+*Spoken by the one who has been out too long, to keep their own shape.*
+
+> Speak aloud once a day, even to the trees.
+
+> Keep one habit of home: the fire laid the same way, the same knot, the same hour.
+
+> The wood will keep you. It will not miss you.
+
+> Come out before you stop wanting to.
+
+# XII. The Sea
 
 ## Before casting off
 *Spoken by the one who walks the deck last.*
@@ -645,7 +773,7 @@ X. Injury and Suffering · XI. The Sea · XII. Blessings, Toasts, and Formulas
 
 > Leave the anchorage cleaner than the tide found it.
 
-# XII. Blessings, Toasts, and Formulas
+# XIII. Blessings, Toasts, and Formulas
 
 ## Blessing a house
 *Spoken at the threshold by the first guest to enter it.*
