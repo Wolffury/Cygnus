@@ -164,8 +164,11 @@ details[open] > summary { margin-bottom: 10px; }
 details > .grid2, details > label { margin-top: 8px; }
 .seg.tools { background: color-mix(in srgb, var(--panel) 92%, transparent); }
 .seg.tools button { padding: 8px 12px; }
-.blockbar { position: absolute; left: 12px; right: 12px; bottom: 44px; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: color-mix(in srgb, var(--panel) 95%, transparent); padding: 8px 10px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; font-weight: 600; }
+.blockbar { position: absolute; left: 12px; top: 64px; max-width: calc(100% - 24px); z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: color-mix(in srgb, var(--panel) 95%, transparent); padding: 8px 10px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; font-weight: 600; }
 .blockbar label { display: flex; align-items: center; gap: 6px; }
+.blockbar input { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 4px 8px; font-family: var(--font-mono); }
+.blockbar .seg button { padding: 8px 10px; }
+.three-tools select { min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .blockbar select { min-height: 38px; max-width: 240px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 4px 6px; }
 .bbsize { font-family: var(--font-mono); color: var(--muted); font-weight: 500; }
 .csvcols { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
@@ -182,6 +185,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <div class="brand">Block Step Planner <small id="jobTitle"></small></div>
     <div class="seg" role="group" aria-label="View">
       <button id="vPlan" aria-pressed="true">Blueprint</button>
+      <button id="vSide" aria-pressed="false">Side view</button>
       <button id="v3d" aria-pressed="false">3D Render</button>
     </div>
     <div class="spacer"></div>
@@ -193,11 +197,18 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <section class="stage" id="stage">
       <canvas id="plan" aria-label="Blueprint plan view"></canvas>
       <canvas id="three" hidden aria-label="3D rendering"></canvas>
+      <canvas id="side" hidden aria-label="Side view"></canvas>
+      <div class="three-tools" id="sideTools" hidden>
+        <label>Section <select id="sideCut"></select></label>
+        <label>Heights <select id="sideVE"><option value="1">True scale</option><option value="2">× 2</option><option value="5">× 5</option></select></label>
+        <button class="btn primary" id="sideSave">Save side view</button>
+      </div>
       <div class="stage-tools" id="planTools">
         <div class="seg tools" role="group" aria-label="Tool">
           <button data-tool="select" aria-pressed="true">Select</button>
           <button data-tool="block" aria-pressed="false">Place blocks</button>
           <button data-tool="dim" aria-pressed="false">Measure</button>
+          <button data-tool="ground" aria-pressed="false">Ground</button>
         </div>
         <button class="btn" id="fitBtn">Fit</button>
         <button class="btn" id="secBtn">Section</button>
@@ -219,6 +230,16 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <label>Colour <select id="bbColor"></select></label>
         <span class="bbsize" id="bbSize"></span>
         <button class="btn" id="bbTurn">Turn 90°</button>
+        <button class="btn primary" data-tool="select">Done</button>
+      </div>
+      <div class="blockbar" id="groundBar" hidden>
+        <div class="seg" role="group" aria-label="Ground tool">
+          <button data-gtool="shore" aria-pressed="true">Shoreline</button>
+          <button data-gtool="contour" aria-pressed="false">Contour</button>
+          <button data-gtool="spot" aria-pressed="false">Spot elevation</button>
+          <button data-gtool="cut" aria-pressed="false">Section line</button>
+        </div>
+        <label id="gElevWrap" hidden>Elevation <input id="gElev" value='0"' size="7"></label>
         <button class="btn primary" data-tool="select">Done</button>
       </div>
       <div class="hint" id="hint">Drag to move · pinch or wheel to zoom · drag empty space to pan</div>
@@ -525,7 +546,9 @@ const TYPE_INFO = {
   steps: { label: "Steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
   house: { label: "House" }, grade: { label: "Upper grade" }, unit: { label: "Block" }, dim: { label: "Measurement" },
+  shore: { label: "Shoreline" }, contour: { label: "Contour" }, spot: { label: "Spot elevation" }, cut: { label: "Section line" },
 };
+const LINE_TYPES = new Set(["shore", "contour"]);
 const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade", "unit"]);
 const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit"]);
 let uid = 1;
@@ -555,6 +578,10 @@ function defaults(type, x, y) {
     case "rock": return { ...b, canopy: 30, height: 18, label: "" };
     case "unit": { const m = mat(d.block) || mat("ab-classic"); return { ...b, block: m.id, color: validColor(m.id, d.color), w: m.L || 12, d: m.D || 12, h: m.H, z: 0 }; }
     case "dim": return { ...b, x2: x + 48, y2: y, off: 12 };
+    case "shore": return { ...b, pts: [[x, y]], water: -12, side: 1, label: "Shoreline" };
+    case "contour": return { ...b, pts: [[x, y]], elev: 0 };
+    case "spot": return { ...b, elev: 0 };
+    case "cut": return { ...b, x2: x + 120, y2: y, label: "A" };
   }
   return b;
 }
@@ -590,6 +617,7 @@ function commit(opts = {}) {
   drawPlan();
   if (!opts.keepPanel) renderItemPane();
   renderList(); renderQuote(); $("jobTitle").textContent = job.name || "";
+  if (view === "side") drawSide();
   if (view === "3d") build3d();
 }
 
@@ -702,7 +730,11 @@ function wallCalc(it) {
   const capH = c ? c.H : 0, courses = Math.max(1, Math.round((it.h - capH) / b.H));
   return { b, c, courses, perCourse: Math.ceil(it.w / b.L), blocks: Math.ceil(it.w / b.L) * courses, caps: c ? Math.ceil(it.w / c.L) : 0, step: b.H * Math.tan((b.setback || 0) * Math.PI / 180), top: courses * b.H + capH };
 }
+function bboxPts(pts) { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const [x, y] of pts) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } return [a, b, c, d]; }
 function itemSize(it) {
+  if (LINE_TYPES.has(it.type)) { const [a, b, c, d] = bboxPts(it.pts); return { w: c - a, d: d - b, xc: 0 }; }
+  if (it.type === "spot") return { w: 12, d: 12, xc: 0 };
+  if (it.type === "cut") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "dim") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "steps") { const c = stepCalc(it); return { w: c.xw, d: c.run, xc: c.xc }; }
   if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d, xc: 0 };
@@ -718,7 +750,9 @@ function segDist(px, py, ax, ay, bx, by) {
 function hitTest(px, py) {
   const order = drawOrder().slice().reverse();
   for (const it of order) {
-    if (it.type === "dim") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= 12 / view2d.s) return it; continue; }
+    if (it.type === "dim" || it.type === "cut") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= 12 / view2d.s) return it; continue; }
+    if (it.type === "spot") { if (Math.hypot(px - it.x, py - it.y) <= 16 / view2d.s) return it; continue; }
+    if (LINE_TYPES.has(it.type)) { const t = 12 / view2d.s; for (let k = 1; k < it.pts.length; k++) if (segDist(px, py, ...it.pts[k - 1], ...it.pts[k]) <= t) return it; continue; }
     if (RECT_TYPES.has(it.type)) {
       const s = itemSize(it), l = localOf(it, px, py);
       if (Math.abs(l.x - s.xc) <= s.w / 2 && Math.abs(l.y) <= s.d / 2) return it;
@@ -731,11 +765,61 @@ function hitTest(px, py) {
   return null;
 }
 function drawOrder() {
-  const rank = { grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, unit: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9, dim: 10 };
+  const rank = { shore: -2, contour: -1, grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, unit: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9, dim: 10, spot: 11, cut: 12 };
   return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type] || ((a.elev || 0) + (a.z || 0)) - ((b.elev || 0) + (b.z || 0)));
 }
+// ---------- terrain: contours, spot elevations and the shoreline (at water level) define the natural ground ----------
+// Elevation anywhere is an inverse-distance blend of the nearest sample points. Inches, 0 = the job's datum.
+let terrainCache = { key: "", pts: [] };
+function terrainSamples() {
+  const key = JSON.stringify(job.items.filter((i) => i.type === "contour" || i.type === "spot" || i.type === "shore").map((i) => [i.pts || [i.x, i.y], i.elev, i.water, i.side]));
+  if (key === terrainCache.key) return terrainCache.pts;
+  const pts = [];
+  for (const it of job.items) {
+    if (it.type === "spot") pts.push([it.x, it.y, it.elev || 0]);
+    else if (LINE_TYPES.has(it.type)) {
+      const z = it.type === "shore" ? it.water || 0 : it.elev || 0;
+      for (let k = 0; k < it.pts.length; k++) {
+        pts.push([it.pts[k][0], it.pts[k][1], z]);
+        if (k) { const [ax, ay] = it.pts[k - 1], [bx, by] = it.pts[k], n = Math.floor(Math.hypot(bx - ax, by - ay) / 18); for (let j = 1; j < n; j++) pts.push([ax + (bx - ax) * j / n, ay + (by - ay) * j / n, z]); }
+      }
+      if (it.type === "shore") { // the bed slopes down under the water: 18" deep 4 ft out, 4 ft deep 12 ft out
+        const side = it.side || 1;
+        for (let k = 0; k < it.pts.length; k++) {
+          const a = it.pts[Math.max(0, k - 1)], b = it.pts[Math.min(it.pts.length - 1, k + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * side, ny = dx / L * side;
+          pts.push([it.pts[k][0] + nx * 48, it.pts[k][1] + ny * 48, z - 18], [it.pts[k][0] + nx * 144, it.pts[k][1] + ny * 144, z - 48]);
+        }
+      }
+    }
+  }
+  terrainCache = { key, pts };
+  return pts;
+}
+function hasTerrain() { return terrainSamples().length > 0; }
+function terrainAt(x, y) {
+  const pts = terrainSamples(); if (!pts.length) return 0;
+  // nearest 10 samples, weighted 1/d²
+  const near = [];
+  for (const p of pts) { const d2 = (p[0] - x) ** 2 + (p[1] - y) ** 2; if (d2 < 1e-6) return p[2]; if (near.length < 10) { near.push([d2, p[2]]); near.sort((a, b) => a[0] - b[0]); } else if (d2 < near[9][0]) { near[9] = [d2, p[2]]; near.sort((a, b) => a[0] - b[0]); } }
+  let sw = 0, sz = 0; for (const [d2, z] of near) { const w = 1 / d2; sw += w; sz += w * z; } return sz / sw;
+}
+const fmtElev = (z) => (z < -0.06 ? "−" : "+") + fmtLen(Math.abs(z));
+function waterLevel() { const sh = job.items.find((i) => i.type === "shore"); return sh ? sh.water || 0 : null; }
+
+// Finished ground: the natural ground, dug out where steps are set into it.
+function finishedAt(x, y) {
+  let z = terrainAt(x, y);
+  for (const it of job.items) {
+    if (it.type !== "steps") continue;
+    const l = localOf(it, x, y), w = it.w / 2 + 6;
+    if (Math.abs(l.x) > w) continue;
+    const c = stepCalc(it); if (Math.abs(l.y) > c.run / 2 + 2) continue;
+    z = Math.min(z, c.E + Math.min(0, c.base));
+  }
+  return z;
+}
 function groundAt(x, y, exceptId) {
-  let h = 0;
+  let h = hasTerrain() ? finishedAt(x, y) : 0;
   for (const it of job.items) {
     if (it.id === exceptId || (it.type !== "grade" && it.type !== "landing")) continue;
     const l = localOf(it, x, y);
@@ -770,7 +854,9 @@ function sizeCanvas(c) {
 }
 function fitView(W, H, v = view2d, pad = 60) {
   let minX = 0, minY = 0, maxX = job.site.w, maxY = job.site.d;
-  for (const it of job.items) { const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
+  for (const it of job.items) {
+    if (it.pts) { const [a, b, c, d] = bboxPts(it.pts); minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d); continue; }
+    if (it.type === "cut" || it.type === "dim") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
   v.s = Math.max(0.05, Math.min((W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY)));
   v.ox = W / 2 - (minX + maxX) / 2 * v.s;
   v.oy = H / 2 + (minY + maxY) / 2 * v.s;
@@ -804,6 +890,7 @@ function renderSheet(ctx, W, H, v, o) {
   ctx.strokeRect(a1, b2, a2 - a1, b1 - b2); ctx.restore();
   label(ctx, "WORK AREA " + fmtLen(job.site.w) + " × " + fmtLen(job.site.d), a1 + 6 * u, b2 - 8 * u, 11 * u, "left", BP.ink2);
 
+  if (hasTerrain()) drawElevationTint(ctx, v, W, H);
   for (const it of drawOrder()) drawItem(ctx, v, it, u, it.id === o.selId);
   if (o.screen && o.selId) { const it = job.items.find((i) => i.id === o.selId); if (it) drawHandles(ctx, v, it); }
 
@@ -828,6 +915,32 @@ function renderSheet(ctx, W, H, v, o) {
   }
 }
 
+// Light elevation shading behind the plan: low ground blue-green, high ground tan; water darker blue.
+let tintCache = { key: "", cells: [] };
+function drawElevationTint(ctx, v, W, H) {
+  const step = 24, wl = waterLevel(), m = 240, key = terrainCache.key + "|" + wl + "|" + job.site.w + "x" + job.site.d;
+  if (tintCache.key !== key) {
+    const cells = [];
+    let lo = Infinity, hi = -Infinity;
+    for (let x = -m; x < job.site.w + m; x += step) for (let y = -m; y < job.site.d + m; y += step) { const z = terrainAt(x + step / 2, y + step / 2); cells.push([x, y, z]); lo = Math.min(lo, z); hi = Math.max(hi, z); }
+    tintCache = { key, cells, lo, hi };
+  }
+  const { cells, lo, hi } = tintCache, span = Math.max(1, hi - lo);
+  for (const [x, y, z] of cells) {
+    const [sx, sy] = W2S(v, x, y + step); const sz = step * v.s + 0.6;
+    if (sx > W || sy > H || sx + sz < 0 || sy + sz < 0) continue;
+    if (wl != null && z < wl) ctx.fillStyle = `rgba(70,150,230,${(0.22 + Math.min(0.25, (wl - z) / 120)).toFixed(3)})`;
+    else { const t = (z - lo) / span; ctx.fillStyle = `rgba(${Math.round(120 + 110 * t)},${Math.round(190 - 30 * t)},${Math.round(150 - 70 * t)},0.13)`; }
+    ctx.fillRect(sx, sy, sz, sz);
+  }
+}
+function smoothPath(ctx, v, pts) {
+  const sp = pts.map(([x, y]) => W2S(v, x, y));
+  ctx.beginPath(); ctx.moveTo(...sp[0]);
+  if (sp.length < 3) { for (const p of sp.slice(1)) ctx.lineTo(...p); return; }
+  for (let k = 1; k < sp.length - 1; k++) { const mx = (sp[k][0] + sp[k + 1][0]) / 2, my = (sp[k][1] + sp[k + 1][1]) / 2; ctx.quadraticCurveTo(sp[k][0], sp[k][1], mx, my); }
+  ctx.lineTo(...sp[sp.length - 1]);
+}
 function label(ctx, text, x, y, size, align = "center", color = BP.ink, weight = 500, font = "IBM Plex Mono") {
   ctx.save(); ctx.font = `${weight} ${size}px "${font}", ui-monospace, monospace`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle";
   ctx.fillText(text, x, y); ctx.restore();
@@ -966,6 +1079,44 @@ function drawItem(ctx, v, it, u, sel) {
       if (v.s * Math.min(it.w, it.d) > 26 * u && it.z > 0.05) label(ctx, "+" + fmtLen(it.z), cx, cy, 9 * u, "center", BP.ink2);
       break;
     }
+    case "shore": {
+      if (it.pts.length < 2) break;
+      // water band on the water side, then the shoreline itself
+      const band = 36, side = it.side || 1, off = it.pts.map((p, k) => { const a = it.pts[Math.max(0, k - 1)], b = it.pts[Math.min(it.pts.length - 1, k + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [p[0] - dy / L * band * side, p[1] + dx / L * band * side]; });
+      const poly = it.pts.concat(off.slice().reverse()).map(([x, y]) => W2S(v, x, y));
+      ctx.beginPath(); poly.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
+      ctx.fillStyle = "rgba(90,170,240,.28)"; ctx.fill();
+      ctx.save(); ctx.clip(); ctx.strokeStyle = "rgba(220,240,255,.45)"; ctx.lineWidth = 1 * u;
+      for (const [x, y] of off.filter((_, k) => k % 2 === 0)) { const [sx, sy] = W2S(v, x, y); ctx.beginPath(); for (let k = -10; k <= 10; k++) { const px = sx + k * 1.6 * u, py = sy + Math.sin(k / 1.6) * 2.2 * u; k === -10 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke(); }
+      ctx.restore();
+      smoothPath(ctx, v, it.pts); ctx.strokeStyle = "#8fd0ff"; ctx.lineWidth = 3 * u; ctx.stroke();
+      const mid = it.pts[Math.floor(it.pts.length / 2)], [mx, my] = W2S(v, mid[0], mid[1]);
+      label(ctx, `${(it.label || "SHORELINE").toUpperCase()} · WATER ${fmtElev(it.water || 0)}`, mx, my - 12 * u, 10 * u, "center", "#cfeaff", 600);
+      break;
+    }
+    case "contour": {
+      if (it.pts.length < 2) break;
+      smoothPath(ctx, v, it.pts); ctx.strokeStyle = "rgba(255,214,150,.75)"; ctx.lineWidth = 1.4 * u; ctx.setLineDash([]); ctx.stroke();
+      const mid = it.pts[Math.floor(it.pts.length / 2)], [mx, my] = W2S(v, mid[0], mid[1]), txt = fmtElev(it.elev || 0);
+      ctx.font = `600 ${10 * u}px "IBM Plex Mono", monospace`; const tw = ctx.measureText(txt).width + 6 * u;
+      ctx.fillStyle = BP.paper; ctx.fillRect(mx - tw / 2, my - 7 * u, tw, 14 * u); label(ctx, txt, mx, my, 10 * u, "center", "#ffd696", 600);
+      break;
+    }
+    case "spot": {
+      ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.6 * u; ctx.beginPath(); ctx.moveTo(cx - 6 * u, cy); ctx.lineTo(cx + 6 * u, cy); ctx.moveTo(cx, cy - 6 * u); ctx.lineTo(cx, cy + 6 * u); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, 3 * u, 0, Math.PI * 2); ctx.stroke();
+      label(ctx, fmtElev(it.elev || 0), cx + 8 * u, cy - 9 * u, 10 * u, "left", "#ffd696", 600);
+      break;
+    }
+    case "cut": {
+      const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), L = Math.hypot(bx - ax, by - ay) || 1, nx = -(by - ay) / L, ny = (bx - ax) / L;
+      ctx.strokeStyle = BP.sel; ctx.lineWidth = 2 * u; ctx.setLineDash([14 * u, 5 * u, 3 * u, 5 * u]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+      for (const [px, py] of [[ax, ay], [bx, by]]) { // section markers: looking direction arrows
+        ctx.fillStyle = BP.sel; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + nx * 16 * u, py + ny * 16 * u); ctx.lineTo(px + nx * 9 * u + (bx - ax) / L * 5 * u * (px === ax ? 1 : -1), py + ny * 9 * u + (by - ay) / L * 5 * u * (px === ax ? 1 : -1)); ctx.closePath(); ctx.fill();
+        label(ctx, it.label || "A", px - nx * 12 * u, py - ny * 12 * u, 13 * u, "center", BP.sel, 700);
+      }
+      break;
+    }
     case "dim": {
       const len = Math.hypot(it.x2 - it.x, it.y2 - it.y);
       if (len > 0.5) {
@@ -1074,7 +1225,9 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
 // ---------- handles: drag to resize, rotate and scale ----------
 function handlesOf(it) {
   const hs = [], v = view2d;
-  if (it.type === "dim") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  if (it.type === "dim" || it.type === "cut") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  if (LINE_TYPES.has(it.type)) return it.pts.map((p, idx) => ({ kind: "pt", idx, x: p[0], y: p[1] }));
+  if (it.type === "spot") return [];
   if (!RECT_TYPES.has(it.type)) { hs.push({ kind: "radius", x: it.x + it.canopy / 2, y: it.y }); return hs; }
   const s = itemSize(it), pt = (lx, ly) => rotPt(it, lx, ly);
   const dirs = it.type === "steps" ? [[1, 0], [-1, 0]] : [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -1151,9 +1304,10 @@ const bb = { block: "ab-classic", color: "Grey", rot: 0 };
 function setTool(t) {
   tool = t;
   document.querySelectorAll("[data-tool]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.tool === t));
-  $("blockBar").hidden = t !== "block";
+  $("blockBar").hidden = t !== "block"; $("groundBar").hidden = t !== "ground";
   $("hint").textContent = t === "block" ? "Tap to place a block · tap on a block to stack on it · drag to slide it into place"
     : t === "dim" ? "Drag from one point to another to measure · ends snap to corners"
+    : t === "ground" ? { shore: "Draw the shoreline with your finger · set the water level on the Item tab", contour: "Draw a contour line at the elevation shown below", spot: "Tap to mark a measured ground elevation", cut: "Drag across the site where you want the side view" }[gTool]
     : "Drag to move · drag the handles to resize or rotate · pinch to zoom";
   if (t === "block") renderBlockBar();
 }
@@ -1166,6 +1320,16 @@ function renderBlockBar() {
   const m = mat(bb.block); $("bbSize").textContent = m ? `${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : "";
 }
 document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
+let gTool = "shore";
+document.querySelectorAll("[data-gtool]").forEach((b) => b.addEventListener("click", () => { gTool = b.dataset.gtool; document.querySelectorAll("[data-gtool]").forEach((x) => x.setAttribute("aria-pressed", x === b)); $("gElevWrap").hidden = !(gTool === "contour" || gTool === "spot"); setTool("ground"); }));
+function gElev() { const n = parseLen($("gElev").value); return isFinite(n) ? n : 0; }
+// Ramer–Douglas–Peucker: keeps the shape of a finger-drawn line with far fewer points
+function simplify(pts, tol) {
+  if (pts.length < 3) return pts;
+  let idx = 0, dmax = 0; const a = pts[0], b = pts[pts.length - 1];
+  for (let k = 1; k < pts.length - 1; k++) { const d = segDist(pts[k][0], pts[k][1], a[0], a[1], b[0], b[1]); if (d > dmax) { dmax = d; idx = k; } }
+  return dmax > tol ? simplify(pts.slice(0, idx + 1), tol).slice(0, -1).concat(simplify(pts.slice(idx), tol)) : [a, b];
+}
 $("bbMat").addEventListener("change", (e) => { bb.block = e.target.value; renderBlockBar(); });
 $("bbColor").addEventListener("change", (e) => { bb.color = e.target.value; });
 $("bbTurn").addEventListener("click", () => { bb.rot = (bb.rot + 90) % 360; toast("New blocks turn to " + bb.rot + "°"); });
@@ -1183,6 +1347,7 @@ function placeUnit(wx, wy) {
 }
 function applyHandle(dr, wx, wy) {
   const it = dr.item, o = dr.orig, h = dr.h, q = snap ? 1 : 0.125, rq = (n) => Math.round(n / q) * q;
+  if (h.kind === "pt") { it.pts[h.idx] = snap ? [Math.round(wx), Math.round(wy)] : [wx, wy]; if (h.idx === 0) { it.x = it.pts[0][0]; it.y = it.pts[0][1]; } return fmtElev(it.type === "shore" ? it.water || 0 : it.elev || 0); }
   if (h.kind === "end") { const [x, y] = snapPoint(wx, wy, it.id); if (h.idx === 1) { it.x = x; it.y = y; } else { it.x2 = x; it.y2 = y; } return fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y)); }
   if (h.kind === "radius") { it.canopy = Math.max(6, rq(2 * Math.hypot(wx - o.x, wy - o.y))); return "⌀ " + fmtLen(it.canopy); }
   if (h.kind === "rot") { let a = Math.atan2(wx - o.x, wy - o.y) * 180 / Math.PI; a = snap ? Math.round(a / 15) * 15 : Math.round(a); it.rot = ((a % 360) + 360) % 360; return it.rot + "°"; }
@@ -1212,6 +1377,13 @@ plan.addEventListener("pointerdown", (e) => {
     const d = defaults("dim", x, y); d.x2 = x; d.y2 = y; job.items.push(d); selId = d.id;
     drag = { handle: true, h: { kind: "end", idx: 2 }, item: d, orig: { ...d }, moved: true, newDim: true }; drawPlan(); return;
   }
+  if (tool === "ground") {
+    snapshot(); const [x, y] = snap ? [Math.round(wx), Math.round(wy)] : [wx, wy];
+    if (gTool === "spot") { const sp = defaults("spot", x, y); sp.elev = gElev(); job.items.push(sp); selId = sp.id; drag = { item: sp, dx: wx - x, dy: wy - y, moved: true, placed: true }; renderItemPane(); drawPlan(); return; }
+    if (gTool === "cut") { const c = defaults("cut", x, y); c.x2 = x; c.y2 = y; c.label = "ABCDEFGH"[job.items.filter((i) => i.type === "cut").length % 8]; job.items.push(c); selId = c.id; drag = { handle: true, h: { kind: "end", idx: 2 }, item: c, orig: { ...c }, moved: true, newDim: true }; drawPlan(); return; }
+    const ln = defaults(gTool, x, y); if (gTool === "contour") ln.elev = gElev();
+    job.items.push(ln); selId = ln.id; drag = { sketch: true, item: ln, moved: true }; drawPlan(); return;
+  }
   if (tool === "block") {
     snapshot(); const it = placeUnit(wx, wy);
     if (it) { selId = it.id; drag = { item: it, dx: wx - it.x, dy: wy - it.y, moved: true, placed: true }; renderItemPane(); renderList(); drawPlan(); }
@@ -1233,6 +1405,11 @@ plan.addEventListener("pointermove", (e) => {
   if (!drag) return;
   if (drag.pan) { view2d.ox = drag.ox + e.offsetX - drag.sx; view2d.oy = drag.oy + e.offsetY - drag.sy; if (Math.abs(e.offsetX - drag.sx) + Math.abs(e.offsetY - drag.sy) > 4) moved = true; drawPlan(); return; }
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
+  if (drag.sketch) {
+    const pts = drag.item.pts, last = pts[pts.length - 1];
+    if (Math.hypot(wx - last[0], wy - last[1]) * view2d.s > 8) { pts.push([wx, wy]); drawPlan(); }
+    return;
+  }
   if (drag.handle) {
     if (!drag.moved) { snapshot(); drag.moved = true; }
     const tip = applyHandle(drag, wx, wy); drawPlan(); liveTip(tip, e.offsetX, e.offsetY); return;
@@ -1241,7 +1418,8 @@ plan.addEventListener("pointermove", (e) => {
   if (snap) { nx = Math.round(nx); ny = Math.round(ny); }
   if (!drag.moved) { if (Math.hypot(nx - drag.item.x, ny - drag.item.y) * view2d.s < 4) return; snapshot(); drag.moved = true; }
   const it = drag.item;
-  if (it.type === "dim") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
+  if (it.type === "dim" || it.type === "cut") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
+  if (it.pts) { const dx = nx - it.x, dy = ny - it.y; it.pts = it.pts.map(([x, y]) => [x + dx, y + dy]); }
   it.x = nx; it.y = ny;
   if (it.type === "unit" && snap) snapUnit(it);
   drawPlan();
@@ -1250,6 +1428,11 @@ plan.addEventListener("pointermove", (e) => {
 function endPointer(e) {
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;
+  if (drag && drag.sketch) {
+    const it = drag.item;
+    if (it.pts.length < 2) { job.items = job.items.filter((i) => i !== it); undoStack.pop(); selId = null; drag = null; drawPlan(); }
+    else { it.pts = simplify(it.pts, 3 / view2d.s).map(([x, y]) => [Math.round(x * 4) / 4, Math.round(y * 4) / 4]); it.x = it.pts[0][0]; it.y = it.pts[0][1]; showPane("pItem"); }
+  }
   if (drag && drag.newDim && Math.hypot(drag.item.x2 - drag.item.x, drag.item.y2 - drag.item.y) < 1) { job.items = job.items.filter((i) => i !== drag.item); undoStack.pop(); selId = null; drawPlan(); drag = null; }
   if (drag && drag.item && drag.moved) commit();
   if (drag && drag.pan && !moved && selId) { selId = null; renderItemPane(); renderList(); drawPlan(); }
@@ -1349,6 +1532,23 @@ function renderItemPane() {
       <p class="note">${cuts.length ? "Cut: " + cuts.join(", ") + "." : "Full block, no cuts."} The thick edge is the face. Drag the handles to cut it shorter.</p>
       <div class="row"><button class="btn" id="unitNext">Add next in row</button><button class="btn" id="unitStack">Stack on top</button></div>
       <div class="row"><label class="f" style="flex:1">Repeat along the row<input id="unitRepeat" inputmode="numeric" placeholder="e.g. 6"></label><button class="btn" id="unitRepeatGo" style="align-self:flex-end">Add</button></div>`;
+  } else if (t === "shore") {
+    h = `<h2>Shoreline</h2><label class="f">Label<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>
+      <div class="grid2">${field("Water level (elevation)", "water", it)}<span></span></div>
+      <div class="row"><button class="btn" id="flipWater">Water is on the other side</button><button class="btn" id="toSide">Side view</button></div>
+      <p class="note">Elevations are measured from your datum (0 = the bottom of the steps, unless you set otherwise). Below the datum is negative, e.g. <code>-2' 6"</code>. Drag the dots to reshape the line.</p>`;
+  } else if (t === "contour") {
+    h = `<h2>Contour</h2><div class="grid2">${field("Elevation", "elev", it)}<span></span></div>
+      <p class="note">Every point on this line is at ${fmtElev(it.elev || 0)}. Draw more contours, spot elevations and the shoreline, and the ground between them is filled in for the side view and 3D. Drag the dots to reshape it.</p>
+      <div class="row"><button class="btn" id="toSide">Side view</button></div>`;
+  } else if (t === "spot") {
+    h = `<h2>Spot elevation</h2><div class="grid2">${field("Elevation", "elev", it)}${field("East (x)", "x", it)}${field("North (y)", "y", it)}</div>
+      <p class="note">A measured ground height, e.g. from a level or laser. Use negative values below the datum.</p>`;
+  } else if (t === "cut") {
+    h = `<h2>Section line ${escapeHtml(it.label || "")}</h2><label class="f">Letter<input data-k="label" data-kind="text" maxlength="2" value="${escapeHtml(it.label || "")}"></label>
+      <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))}</dd></div><div><dt>Ground</dt><dd>${fmtElev(groundAt(it.x, it.y))} → ${fmtElev(groundAt(it.x2, it.y2))}</dd></div></dl>
+      <div class="row"><button class="btn primary" id="toSide">Open side view</button></div>
+      <p class="note">The side view shows the ground, water, steps, walls and trees along this line, looking in the arrow direction.</p>`;
   } else if (t === "dim") {
     h = `<h2>Measurement</h2><label class="f">Label (optional)<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}" placeholder="e.g. Porch to curb"></label>
       <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))}</dd></div><div><dt>Angle</dt><dd>${Math.round(((Math.atan2(it.x2 - it.x, it.y2 - it.y) * 180 / Math.PI) + 360) % 360)}° from north</dd></div></dl>
@@ -1367,8 +1567,10 @@ function renderItemPane() {
   const rotBy = (d) => { snapshot(); it.rot = ((it.rot || 0) + d + 360) % 360; commit(); };
   $("rotL") && ($("rotL").onclick = () => rotBy(-90));
   $("rotR") && ($("rotR").onclick = () => rotBy(90));
-  $("dupBtn").onclick = () => { snapshot(); const c = { ...it, id: newId(), x: it.x + 24, y: it.y - 24 }; job.items.push(c); selId = c.id; commit(); };
+  $("dupBtn").onclick = () => { snapshot(); const c = { ...JSON.parse(JSON.stringify(it)), id: newId(), x: it.x + 24, y: it.y - 24 }; if (c.pts) c.pts = c.pts.map(([x, y]) => [x + 24, y - 24]); if (c.x2 != null) { c.x2 += 24; c.y2 -= 24; } job.items.push(c); selId = c.id; commit(); };
   $("delBtn").onclick = () => { snapshot(); job.items = job.items.filter((i) => i.id !== it.id); selId = null; commit(); toast("Deleted. Tap Undo to bring it back."); };
+  $("toSide") && ($("toSide").onclick = () => { const c = job.items.find((i) => i.type === "cut"); if (it.type === "cut") sideCutId = it.id; else if (!c) { toast("Draw a section line first: Ground tool → Section line."); return; } setView("side"); });
+  $("flipWater") && ($("flipWater").onclick = () => { snapshot(); it.side = -(it.side || 1); commit(); });
   if (t === "unit") {
     const copyAt = (lx, dz) => { const p = rotPt(it, lx, 0); return { ...it, id: newId(), x: Math.round(p.x * 8) / 8, y: Math.round(p.y * 8) / 8, z: (it.z || 0) + dz }; };
     $("unitNext").onclick = () => { snapshot(); const c = copyAt(it.w, 0); job.items.push(c); selId = c.id; commit(); };
@@ -1394,7 +1596,7 @@ function setItemField(it, inp) {
   } else if (kind === "deg") { const n = parseFloat(inp.value); if (isNaN(n)) { undoStack.pop(); inp.value = it[key] || 0; return; } it[key] = ((n % 360) + 360) % 360; }
   else {
     const n = parseLen(inp.value);
-    const signed = ["x", "y", "base", "elev", "capOver", "stepRise", "cheekAbove", "z", "off"].includes(key);
+    const signed = ["x", "y", "base", "elev", "capOver", "stepRise", "cheekAbove", "z", "off", "water"].includes(key);
     if (isNaN(n) || (!signed && n <= 0)) { toast("Couldn't read that measurement. Try 4' 6\" or 54\"."); undoStack.pop(); inp.value = fmtLen(it[key]); return; }
     it[key] = n;
     if (it.type === "steps" && (key === "stepRise" || key === "capOver")) { const P = build(it); it.base = defaultBase(P); if (key === "capOver") it.tread = defaultTread(P); }
@@ -1850,7 +2052,7 @@ function sanitizeItem(raw, legacy) {
   const out = { ...d, id: typeof raw.id === "string" && raw.id ? raw.id.slice(0, 40) : d.id, label: String(raw.label ?? d.label).slice(0, 60) };
   for (const k of Object.keys(d)) {
     if (["id", "type", "label"].includes(k)) continue;
-    if (typeof d[k] === "number") { if (raw[k] != null) out[k] = num(raw[k], d[k], ["x", "y", "base", "elev", "z", "x2", "y2", "off"].includes(k) ? -1e5 : 0, 1e5); }
+    if (typeof d[k] === "number") { if (raw[k] != null) out[k] = num(raw[k], d[k], ["x", "y", "base", "elev", "z", "x2", "y2", "off", "water"].includes(k) ? -1e5 : 0, 1e5); }
     else if (STR_OPTS[k]) out[k] = STR_OPTS[k].includes(raw[k]) ? raw[k] : d[k];
     else if (["block", "surface", "infill"].includes(k)) out[k] = mat(raw[k]) ? raw[k] : d[k];
     else if (k === "cap") out[k] = raw[k] === "" || raw[k] === null ? "" : mat(raw[k]) ? raw[k] : d[k];
@@ -1859,6 +2061,12 @@ function sanitizeItem(raw, legacy) {
   if (out.cap) out.capColor = validColor(out.cap, raw.capColor ?? d.capColor);
   if (out.surface) out.color = validColor(out.surface, raw.color ?? d.color);
   if (out.type === "landing" && out.block) out.blockColor = validColor(out.block, raw.blockColor ?? d.blockColor);
+  if (LINE_TYPES.has(out.type)) {
+    out.pts = (Array.isArray(raw.pts) ? raw.pts : []).filter((p) => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1])).slice(0, 2000).map((p) => [+p[0], +p[1]]);
+    if (out.pts.length < 2) return null;
+    out.x = out.pts[0][0]; out.y = out.pts[0][1];
+  }
+  if (out.type === "shore") out.side = raw.side === -1 ? -1 : 1;
   out.rot = ((out.rot % 360) + 360) % 360;
   if (out.type === "steps") {
     out.w = Math.max(out.w, 12);
@@ -1916,9 +2124,11 @@ $("exportBtn").onclick = async () => {
   renderSheet(ctx, W, H, v, { unit: u, section: false, selId: null });
   ctx.fillStyle = "#123a6b"; ctx.fillRect(colX, 14, W - colX - 14, H - titleH - 14);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(colX, 14); ctx.lineTo(colX, H - titleH); ctx.stroke();
-  const stairs = job.items.filter((i) => i.type === "steps").slice(0, 2);
+  const cutLine = job.items.find((i) => i.type === "cut");
+  const stairs = job.items.filter((i) => i.type === "steps").slice(0, cutLine ? 1 : 2);
   const cw = W - colX - 80; let cy = 60;
-  stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 500, u, "AB"[k]); cy += 540; });
+  if (cutLine) { renderProfile(ctx, colX + 40, cy, cw, 520, cutLine, 2.2, sideVE); cy += 560; }
+  stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 500, u, "SX"[k]); cy += 540; });
   label(ctx, "MATERIAL SCHEDULE", colX + 40, cy + 20, 30, "left", BP.ink, 600);
   cy += 70;
   const q = estimate();
@@ -1958,15 +2168,144 @@ $("snapBtn").onclick = (e) => { snap = !snap; e.target.setAttribute("aria-presse
 let view = "plan";
 function setView(vw) {
   view = vw;
-  $("vPlan").setAttribute("aria-pressed", vw === "plan"); $("v3d").setAttribute("aria-pressed", vw === "3d");
-  plan.hidden = vw !== "plan"; $("planTools").hidden = vw !== "plan"; $("hint").textContent = vw === "plan" ? "Drag to move · pinch or wheel to zoom · drag empty space to pan" : "Drag to orbit · two fingers to pan and zoom";
+  $("vPlan").setAttribute("aria-pressed", vw === "plan"); $("v3d").setAttribute("aria-pressed", vw === "3d"); $("vSide").setAttribute("aria-pressed", vw === "side");
+  plan.hidden = vw !== "plan"; $("planTools").hidden = vw !== "plan"; $("blockBar").hidden = vw !== "plan" || tool !== "block"; $("groundBar").hidden = vw !== "plan" || tool !== "ground";
+  $("side").hidden = vw !== "side"; $("sideTools").hidden = vw !== "side";
   $("three").hidden = vw !== "3d"; $("threeTools").hidden = vw !== "3d";
-  if (vw === "plan") drawPlan(); else start3d();
+  if (vw === "plan") { setTool(tool); drawPlan(); }
+  else if (vw === "side") { $("hint").textContent = "Side view along the section line · exaggerate heights to read small slopes"; drawSide(); }
+  else { $("hint").textContent = "Drag to orbit · two fingers to pan and zoom"; start3d(); }
 }
 $("vPlan").onclick = () => setView("plan");
+$("vSide").onclick = () => setView("side");
+
+// ---------- side view: ground profile, water and structures along a section line ----------
+let sideCutId = null, sideVE = 1;
+$("sideVE").addEventListener("change", (e) => { sideVE = +e.target.value; drawSide(); });
+$("sideCut").addEventListener("change", (e) => { sideCutId = e.target.value; drawSide(); });
+$("sideSave").addEventListener("click", async () => {
+  const c = document.createElement("canvas"); c.width = 3000; c.height = 1500; const cut = currentCut(); if (!cut) return;
+  const ctx = c.getContext("2d"); renderProfile(ctx, 0, 0, 3000, 1500, cut, 2.4, sideVE);
+  saveFile(slug(job.name) + "_section_" + (cut.label || "A") + ".png", await canvasBlob(c));
+});
+function currentCut() { const cuts = job.items.filter((i) => i.type === "cut"); return cuts.find((c) => c.id === sideCutId) || cuts[0] || null; }
+// Height of anything built at a point: [top, kind] where kind is "block", "cap", "house", "fill" or null
+function builtAt(x, y) {
+  let top = -Infinity, kind = null;
+  const take = (z, k) => { if (z > top) { top = z; kind = k; } };
+  for (const it of job.items) {
+    if (it.type === "steps") {
+      const c = stepCalc(it), l = localOf(it, x, y);
+      for (const q of c.pieces) if (l.x >= q.x0 && l.x <= q.x1 && l.y >= q.y0 && l.y <= q.y1) take(q.z1, q.kind === "cap" || q.kind === "cheekcap" ? "cap" : q.kind === "infill" ? "cap" : "block");
+      for (const f of c.fills) if (l.x >= f.x0 && l.x <= f.x1 && l.y >= f.y0 && l.y <= f.y1) take(f.z1, "fill");
+    } else if (RECT_TYPES.has(it.type) && it.type !== "grade") {
+      const l = localOf(it, x, y); if (Math.abs(l.x) > it.w / 2 || Math.abs(l.y) > it.d / 2) continue;
+      if (it.type === "unit") take((it.z || 0) + it.h, mat(it.block) && mat(it.block).kind === "cap" ? "cap" : "block");
+      else if (it.type === "wall") { const wc = wallCalc(it); take(terrainAt(it.x, it.y) + wc.top, "block"); }
+      else if (it.type === "landing") take(it.h, "cap");
+      else if (it.type === "house") take(terrainAt(it.x, it.y) + it.h, "house");
+      else if (it.type === "path") take(terrainAt(x, y) + 2, "cap");
+    }
+  }
+  return [top, kind];
+}
+function profileOf(cut) {
+  const len = Math.hypot(cut.x2 - cut.x, cut.y2 - cut.y), n = Math.min(1500, Math.max(60, Math.round(len))), out = [];
+  for (let k = 0; k <= n; k++) {
+    const t = k / n, x = cut.x + (cut.x2 - cut.x) * t, y = cut.y + (cut.y2 - cut.y) * t;
+    const ground = groundAt(x, y), [top, kind] = builtAt(x, y);
+    out.push({ s: t * len, ground, top, kind });
+  }
+  return { len, pts: out };
+}
+function renderProfile(ctx, X, Y, W, H, cut, u, ve) {
+  const { len, pts } = profileOf(cut), wl = waterLevel();
+  ctx.save();
+  ctx.fillStyle = BP.paper; ctx.fillRect(X, Y, W, H);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p.ground); hi = Math.max(hi, p.ground, p.top > -1e9 ? p.top : -Infinity); }
+  if (wl != null) { lo = Math.min(lo, wl - 12); hi = Math.max(hi, wl); }
+  // trees, shrubs and rocks near the line stand in the view
+  const flora = job.items.filter((i) => ["tree", "evergreen", "shrub", "rock"].includes(i.type)).map((i) => {
+    const dx = cut.x2 - cut.x, dy = cut.y2 - cut.y, L2 = dx * dx + dy * dy, t = clamp(((i.x - cut.x) * dx + (i.y - cut.y) * dy) / L2, 0, 1);
+    const off = Math.hypot(i.x - cut.x - t * dx, i.y - cut.y - t * dy);
+    return off <= Math.max(i.canopy / 2, 24) + 60 ? { it: i, s: t * len, g: groundAt(i.x, i.y), off } : null;
+  }).filter(Boolean);
+  for (const f of flora) hi = Math.max(hi, f.g + (f.it.height || 0));
+  lo = Math.floor((lo - 18) / 12) * 12; hi = Math.ceil((hi + 12) / 12) * 12;
+  const pl = 70 * u, pr = 24 * u, pt = 44 * u, pb = 40 * u;
+  // always fill the width; heights get the chosen exaggeration unless that would overflow the view
+  const sx = (W - pl - pr) / len, sy = Math.min(sx * ve, (H - pt - pb) / (hi - lo));
+  ve = sy / sx;
+  const ox = X + pl, oz = Y + H - pb, P = (s, z) => [ox + s * sx, oz - (z - lo) * sy];
+  // grid + elevation labels every foot (or 5 ft when tight)
+  const stepZ = (hi - lo) * sy / 12 < 14 * u ? 12 : (hi - lo) / 12 > 30 ? 60 : 12;
+  ctx.lineWidth = 1 * u; ctx.font = `500 ${10 * u}px "IBM Plex Mono", monospace`;
+  for (let z = lo; z <= hi; z += stepZ) { const [, yy] = P(0, z); ctx.strokeStyle = z % 60 === 0 ? BP.grid5 : BP.grid; ctx.beginPath(); ctx.moveTo(ox, yy); ctx.lineTo(ox + len * sx, yy); ctx.stroke(); label(ctx, fmtElev(z), ox - 6 * u, yy, 10 * u, "right", BP.ink2); }
+  const stepS = len * sx / 12 < 20 * u ? 60 : 12;
+  for (let s0 = 0; s0 <= len + 0.1; s0 += stepS) { const [xx] = P(s0, lo); ctx.strokeStyle = s0 % 60 === 0 ? BP.grid5 : BP.grid; ctx.beginPath(); ctx.moveTo(xx, Y + pt); ctx.lineTo(xx, oz); ctx.stroke(); if (s0 % 60 === 0) label(ctx, Math.round(s0 / 12) + " ft", xx, oz + 14 * u, 10 * u, "center", BP.ink2); }
+  // water
+  if (wl != null) {
+    ctx.fillStyle = "rgba(90,170,240,.45)";
+    for (let k = 1; k < pts.length; k++) if (pts[k].ground < wl) { const [x0] = P(pts[k - 1].s, 0), [x1] = P(pts[k].s, 0), [, yw] = P(0, wl), [, yg] = P(0, pts[k].ground); ctx.fillRect(x0, yw, x1 - x0 + 0.5, yg - yw); }
+    const [, yw] = P(0, wl); ctx.strokeStyle = "#8fd0ff"; ctx.lineWidth = 1.5 * u; ctx.setLineDash([8 * u, 5 * u]); ctx.beginPath(); ctx.moveTo(ox, yw); ctx.lineTo(ox + len * sx, yw); ctx.stroke(); ctx.setLineDash([]);
+    label(ctx, "WATER " + fmtElev(wl), ox + len * sx - 4 * u, yw - 9 * u, 10 * u, "right", "#cfeaff", 600);
+  }
+  // earth
+  ctx.beginPath(); ctx.moveTo(...P(0, lo));
+  for (const p of pts) ctx.lineTo(...P(p.s, Math.max(p.ground, p.kind === "fill" ? p.top : -Infinity)));
+  ctx.lineTo(...P(len, lo)); ctx.closePath();
+  ctx.fillStyle = "rgba(160,120,80,.35)"; ctx.fill();
+  ctx.save(); ctx.clip(); ctx.strokeStyle = "rgba(234,242,252,.12)"; for (let k = -H; k < W + H; k += 9 * u) { ctx.beginPath(); ctx.moveTo(X + k, Y + H); ctx.lineTo(X + k + H, Y); ctx.stroke(); } ctx.restore();
+  ctx.beginPath(); pts.forEach((p, k) => { const [a, b] = P(p.s, p.ground); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); ctx.strokeStyle = "#e6c79c"; ctx.lineWidth = 2 * u; ctx.stroke();
+  // structures: columns from the ground up to whatever is built there
+  const colors = { block: "rgba(234,242,252,.55)", cap: "rgba(255,255,255,.85)", house: "rgba(234,242,252,.25)" };
+  for (let k = 1; k < pts.length; k++) {
+    const p = pts[k]; if (!p.kind || p.kind === "fill" || p.top <= p.ground + 0.05) continue;
+    const [x0] = P(pts[k - 1].s, 0), [x1] = P(p.s, 0), [, yt] = P(0, p.top), [, yb] = P(0, Math.max(lo, Math.min(p.ground, p.top - 0.5)));
+    ctx.fillStyle = colors[p.kind] || colors.block; ctx.fillRect(x0, yt, x1 - x0 + 0.6, yb - yt);
+  }
+  // outline of the built profile
+  ctx.beginPath(); let on = false;
+  for (const p of pts) { if (p.kind && p.kind !== "fill" && p.top > p.ground + 0.05) { const [a, b] = P(p.s, p.top); on ? ctx.lineTo(a, b) : ctx.moveTo(a, b); on = true; } else on = false; }
+  ctx.strokeStyle = BP.ink; ctx.lineWidth = 1.6 * u; ctx.stroke();
+  // trees and shrubs
+  for (const f of flora) {
+    const i = f.it, [bx, by] = P(f.s, f.g), r = (i.canopy / 2) * sx, h = (i.height || 0) * sy;
+    ctx.strokeStyle = "rgba(160,220,170,.8)"; ctx.fillStyle = "rgba(140,200,150,.18)"; ctx.lineWidth = 1.4 * u;
+    if (i.type === "rock") { ctx.beginPath(); ctx.ellipse(bx, by - h * 0.35, r, h * 0.6, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke(); continue; }
+    if (i.type === "shrub") { ctx.beginPath(); ctx.ellipse(bx, by - h / 2, r, h / 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); continue; }
+    const trunkH = i.type === "tree" ? h * 0.45 : h * 0.2, tw = Math.max(2, (i.trunk || 10) * sx);
+    ctx.fillStyle = "rgba(200,170,130,.6)"; ctx.fillRect(bx - tw / 2, by - trunkH, tw, trunkH);
+    ctx.fillStyle = "rgba(140,200,150,.18)"; ctx.beginPath();
+    if (i.type === "tree") ctx.ellipse(bx, by - trunkH - (h - trunkH) / 2, r, (h - trunkH) / 2, 0, 0, Math.PI * 2);
+    else { ctx.moveTo(bx - r, by - trunkH); ctx.lineTo(bx, by - h); ctx.lineTo(bx + r, by - trunkH); ctx.closePath(); }
+    ctx.fill(); ctx.stroke();
+    label(ctx, (i.label || "").toUpperCase(), bx, by - h - 10 * u, 9 * u, "center", BP.ink2);
+  }
+  // frame and title
+  ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1);
+  label(ctx, `SECTION ${cut.label || "A"}–${cut.label || "A"} · ${fmtLen(len)} LONG${Math.abs(ve - 1) > 0.05 ? ` · HEIGHTS × ${Math.round(ve * 10) / 10}` : ""}`, X + 14 * u, Y + 20 * u, 13 * u, "left", BP.ink, 700);
+  label(ctx, `${cut.label || "A"}`, ox, Y + pt - 12 * u, 12 * u, "center", BP.sel, 700); label(ctx, `${cut.label || "A"}′`, ox + len * sx, Y + pt - 12 * u, 12 * u, "center", BP.sel, 700);
+  ctx.restore();
+}
+function drawSide() {
+  if (view !== "side") return;
+  const cv = $("side"), { w, h, dpr } = sizeCanvas(cv), ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cuts = job.items.filter((i) => i.type === "cut");
+  $("sideCut").innerHTML = cuts.map((c) => `<option value="${c.id}"${currentCut() === c ? " selected" : ""}>Section ${escapeHtml(c.label || "")}</option>`).join("");
+  const cut = currentCut();
+  if (!cut) {
+    ctx.fillStyle = BP.paper; ctx.fillRect(0, 0, w, h);
+    label(ctx, "No section line yet", w / 2, h / 2 - 14, 18, "center", BP.ink, 600, "IBM Plex Sans");
+    label(ctx, "On the Blueprint, tap Ground → Section line and drag across the site.", w / 2, h / 2 + 14, 13, "center", BP.ink2, 500, "IBM Plex Sans");
+    return;
+  }
+  renderProfile(ctx, 0, 0, w, h, cut, 1, sideVE);
+}
 $("v3d").onclick = () => setView("3d");
 let lastW = 0;
-window.addEventListener("resize", () => { const w = plan.clientWidth; if (view === "plan") { if (w && Math.abs(w - lastW) > 40) { fitView(w, plan.clientHeight); lastW = w; } drawPlan(); } else resize3d(); });
+window.addEventListener("resize", () => { const w = plan.clientWidth; if (view === "side") { drawSide(); return; } if (view === "plan") { if (w && Math.abs(w - lastW) > 40) { fitView(w, plan.clientHeight); lastW = w; } drawPlan(); } else resize3d(); });
 
 // ---------- 3D ----------
 let R3 = null, dirty3d = true;
@@ -2043,7 +2382,7 @@ function resize3d() {
   R3.renderer.setSize(r.width, r.height, false); R3.camera.aspect = r.width / Math.max(1, r.height); R3.camera.updateProjectionMatrix();
 }
 function sceneCenter() {
-  const st = job.items.find((i) => i.id === selId) || job.items.find((i) => i.type === "steps");
+  const st = job.items.find((i) => i.id === selId && BUILT_TYPES.has(i.type)) || job.items.find((i) => i.type === "steps");
   return st ? new THREE.Vector3(st.x, 20 + (st.elev || 0), -st.y) : new THREE.Vector3(job.site.w / 2, 0, -job.site.d / 2);
 }
 function camPreset(kind) {
@@ -2101,7 +2440,23 @@ function build3d() {
   const leaf = (c) => mat3("leaf" + c, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }));
 
   const margin = Math.max(job.site.w, job.site.d) * 2 + 1200;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(margin, margin), mGrass); ground.rotation.x = -Math.PI / 2; ground.position.set(job.site.w / 2, 0, -job.site.d / 2); ground.receiveShadow = true; world.add(ground);
+  let baseY = 0;
+  if (hasTerrain()) {
+    // shaped ground over the site and a margin around it
+    const m = 240, gw = job.site.w + 2 * m, gd = job.site.d + 2 * m, segX = Math.min(120, Math.ceil(gw / 12)), segY = Math.min(120, Math.ceil(gd / 12));
+    const geo = new THREE.PlaneGeometry(gw, gd, segX, segY), pos = geo.attributes.position;
+    let lo = Infinity;
+    for (let k = 0; k < pos.count; k++) { const px = pos.getX(k) + job.site.w / 2, py = pos.getY(k) + job.site.d / 2, z = finishedAt(px, py); pos.setZ(k, z); lo = Math.min(lo, z); }
+    geo.computeVertexNormals();
+    const tm = new THREE.Mesh(geo, mGrass); tm.rotation.x = -Math.PI / 2; tm.position.set(job.site.w / 2, 0, -job.site.d / 2); tm.receiveShadow = true; world.add(tm);
+    baseY = Math.min(0, lo) - 1;
+    const wl = waterLevel();
+    if (wl != null) {
+      const wm = mat3("water", () => new THREE.MeshStandardMaterial({ color: "#3d7fb8", roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.82 }));
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(margin, margin), wm); water.rotation.x = -Math.PI / 2; water.position.set(job.site.w / 2, wl, -job.site.d / 2); world.add(water);
+    }
+  }
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(margin, margin), mGrass); ground.rotation.x = -Math.PI / 2; ground.position.set(job.site.w / 2, baseY, -job.site.d / 2); ground.receiveShadow = true; world.add(ground);
   // Plan rotation is clockwise seen from above; in three.js (y up, z = -north) that is a negative turn about +y.
   const place = (obj, it, lx, ly, z) => { const p = rotPt(it, lx, ly); obj.position.set(p.x, z, -p.y); obj.rotation.y = -(it.rot * Math.PI / 180); world.add(obj); return obj; };
   const placeBox = (it, q, m, shrink = 0.25) => place(box(q.x1 - q.x0 - shrink, q.z1 - q.z0 - 0.15, q.y1 - q.y0 - shrink, m), it, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, (q.z0 + q.z1) / 2);
@@ -2230,6 +2585,11 @@ Item types:
 - rock: {"type":"rock","x","y","canopy": size across,"height","label"}
 - unit: {"type":"unit","x","y","rot","block": material id,"color","w": length,"d": depth,"h": height,"z": elevation of its bottom} one individual block, cap, slab or step unit
 - dim: {"type":"dim","x","y","x2","y2","label"} a measurement line drawn on the blueprint between two points
+- shore: {"type":"shore","pts": [[x,y],...],"water": water level elevation,"label"} the shoreline (water lies to the left of the drawing direction)
+- contour: {"type":"contour","pts": [[x,y],...],"elev": elevation} a ground contour line
+- spot: {"type":"spot","x","y","elev"} a measured ground elevation
+- cut: {"type":"cut","x","y","x2","y2","label": "A"} a section line for the side view
+Elevations are inches from the job datum (0 = bottom of the steps); below the datum is negative.
 For L-shaped, U-turn or multi-flight stairs, use separate steps items joined by landings; each upper flight's "elev" equals the landing "h".
 Keep existing "id" values for items you keep; new items need no id.`;
 function aiPrompt(mode, text, nPhotos) {
