@@ -148,7 +148,20 @@ textarea { resize: vertical; }
 .mats { display: flex; flex-direction: column; gap: 6px; }
 .matrow { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .matrow .btn.small { grid-column: 1 / -1; justify-self: start; }
-.matinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.matinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; border-radius: 6px; }
+.matinfo:hover b, .matinfo:focus-visible b { text-decoration: underline; }
+.matpic { width: 54px; height: 40px; border-radius: 6px; border: 1px solid var(--line); flex-shrink: 0; cursor: pointer; }
+.matrow { grid-template-columns: auto 1fr auto !important; }
+#mdPic { width: 100%; height: 260px; border-radius: 10px; border: 1px solid var(--line); }
+.swatchrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatchrow button { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+.swatchrow button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.swatchrow i { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.photos figure { margin: 0; position: relative; }
+.photos img { width: 110px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; display: block; }
+.photos button { position: absolute; top: 4px; right: 4px; border: 0; border-radius: 50%; width: 24px; height: 24px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; }
+#photoView img { max-width: 100%; max-height: 100%; border-radius: 8px; cursor: zoom-out; }
 .matinfo b { font-weight: 600; }
 .matinfo span { font-size: 12px; color: var(--muted); }
 .swatches { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
@@ -465,6 +478,21 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="modal" id="matDlg" hidden role="dialog" aria-modal="true" aria-labelledby="mdTitle">
+  <div class="modalbox">
+    <div class="row" style="justify-content:space-between"><h2 id="mdTitle"></h2><button class="btn" id="mdClose" aria-label="Close">✕</button></div>
+    <p class="note" id="mdSub"></p>
+    <canvas id="mdPic" aria-label="Picture of this material"></canvas>
+    <div class="row"><a class="btn primary" id="mdWeb" target="_blank" rel="noopener">See photos online</a><a class="btn" id="mdSite" target="_blank" rel="noopener" href="https://www.abbotsfordconcrete.com/">Abbotsford's website</a></div>
+    <div class="swatchrow" id="mdColors"></div>
+    <dl class="stats" id="mdStats"></dl>
+    <h3>Your photos</h3>
+    <div class="photos" id="mdPhotos"></div>
+    <div class="row"><label class="btn" id="mdAddLabel">Add a photo<input type="file" id="mdAdd" accept="image/*" multiple hidden></label><span class="note" id="mdPhotoNote"></span></div>
+    <p class="note">The picture is drawn by the planner to the published size, in the colour you pick. Real product colours vary by batch; check samples with your supplier. "See photos online" opens the real product pictures in your browser. To keep one here, save it there and tap Add a photo; your photos show here on all your devices.</p>
+  </div>
+</div>
+<div class="modal" id="photoView" hidden role="dialog" aria-modal="true"><img id="photoBig" alt="Material photo"></div>
 <div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
   <div class="modalbox">
     <h2 id="prTitle">Print on regular paper</h2>
@@ -2141,7 +2169,7 @@ function renderMaterials() {
     h += `<h3>${KIND_LABEL[kind]}</h3><div class="mats">`;
     for (const m of list) {
       const custom = m.id.startsWith("c-");
-      h += `<div class="matrow"><div class="matinfo"><b>${escapeHtml(matName(m))}</b><span>${escapeHtml(m.brand)}${m.L ? ` · ${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : m.H ? ` · ${fmtIn(m.H)} thick` : ""}${m.setback ? ` · ${m.setback}°` : ""}</span>
+      h += `<div class="matrow"><canvas class="matpic" data-pic="${m.id}" width="108" height="80" aria-hidden="true"></canvas><div class="matinfo" data-open="${m.id}" role="button" tabindex="0" title="Show a picture and details"><b>${escapeHtml(matName(m))}</b><span>${escapeHtml(m.brand)}${m.L ? ` · ${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : m.H ? ` · ${fmtIn(m.H)} thick` : ""}${m.setback ? ` · ${m.setback}°` : ""}</span>
         <span class="swatches">${(m.colors || []).map((c) => `<i style="background:${hexOf(c)}" title="${escapeHtml(c)}"></i>`).join("")}<em>${escapeHtml((m.colors || []).join(", "))}</em></span></div>
         <label class="price">$<input data-price="${m.id}" inputmode="decimal" value="${priceOf(m.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"><small>/${perSqft(m) ? "sq ft" : "ea"}</small></label>
         ${custom ? `<button class="btn danger small" data-delmat="${m.id}" aria-label="Delete ${escapeHtml(m.name)}">Delete</button>` : ""}</div>`;
@@ -2149,6 +2177,8 @@ function renderMaterials() {
     h += `</div>`;
   }
   $("matList").innerHTML = h;
+  $("matList").querySelectorAll("[data-pic]").forEach((c) => { const m = mat(c.dataset.pic); if (m) { drawMaterialPic(c.getContext("2d"), c.width, c.height, m, m.colors && m.colors[0], true); c.onclick = () => openMat(m.id); } });
+  $("matList").querySelectorAll("[data-open]").forEach((el) => { el.onclick = () => openMat(el.dataset.open); el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMat(el.dataset.open); } }; });
   $("matList").querySelectorAll("[data-price]").forEach((inp) => inp.addEventListener("change", () => {
     const n = parseFloat(inp.value.replace(/[$,]/g, ""));
     if (!(n >= 0)) { toast("Enter a price like 12.50"); inp.value = priceOf(inp.dataset.price).toFixed(2); return; }
@@ -2653,6 +2683,112 @@ $("exportBtn").onclick = async () => {
   saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(planLook() === "real" ? c : themed(c)));
 };
 
+// ---------- material pictures: drawn to the published size in the chosen colour, plus the user's own photos ----------
+function speckles(ctx, x, y, w, h, n, seed, light, dark) {
+  for (let k = 0; k < n; k++) { ctx.fillStyle = rand(seed + k * 3) < 0.5 ? light : dark; const r = 0.4 + rand(seed + k * 7) * 1.4; ctx.fillRect(x + rand(seed + k) * w, y + rand(seed + k * 5) * h, r, r); }
+}
+// small = the thumbnail in the list (no words)
+function drawMaterialPic(ctx, W, H, m, colorName, small) {
+  const hex = hexOf(colorName || (m.colors || [])[0]), seed = hashStr(m.id + colorName);
+  ctx.save(); ctx.clearRect(0, 0, W, H);
+  const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#eef2f5"); bg.addColorStop(1, "#d9dee3"); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const pad = small ? 6 : 34, foot = small ? 0 : 34;
+  if (m.kind === "surface" || (!m.L && !m.D)) { // poured or loose: a patch seen from above at an angle
+    const x0 = pad, y0 = pad + (small ? 0 : 10), w = W - 2 * pad, h = H - y0 - pad - foot;
+    if (m.pattern === "gravel") stonesIn(ctx, x0, y0, w, h, shade(hex, 0.95), seed, small ? 1.6 : 4);
+    else if (m.pattern === "wood") { for (let k = 0, bh = h / 7; k < 7; k++) { ctx.fillStyle = shade(hex, 0.9 + 0.2 * rand(seed + k)); ctx.fillRect(x0, y0 + k * bh, w, bh - 2); } }
+    else { ctx.fillStyle = hex; ctx.fillRect(x0, y0, w, h); ctx.strokeStyle = "rgba(0,0,0,.08)"; for (let k = 0; k < w; k += 3) { ctx.beginPath(); ctx.moveTo(x0 + k, y0); ctx.lineTo(x0 + k + 2, y0 + h); ctx.stroke(); } }
+    ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.strokeRect(x0, y0, w, h);
+  } else if (m.kind === "paver" || (m.kind === "slab" && !small && false)) { // a small laid patch in perspective
+    const cols = m.pattern === "flag" ? 4 : Math.max(2, Math.round(36 / m.L)), rows = m.pattern === "flag" ? 3 : Math.max(2, Math.round(28 / m.D));
+    const areaW = cols * m.L, areaD = rows * m.D, s = Math.min((W - 2 * pad) / (areaW * 1.0 + areaD * 0.35), (H - 2 * pad - foot) / (areaD * 0.62 + m.H * 1.2));
+    const ox = pad + areaD * 0.35 * s, oy = H - pad - foot - m.H * s;
+    const P = (x, y, z = 0) => [ox + (x - y * 0.35) * s, oy - (y * 0.62 + z) * s];
+    for (let r = rows - 1; r >= 0; r--) for (let c = 0; c < cols + 1; c++) {
+      const off = m.pattern === "flag" ? 0 : (r % 2) * m.L / 2, x0 = c * m.L - off, x1 = x0 + m.L; if (x1 <= 0.1 || x0 >= areaW - 0.1) continue;
+      const a = Math.max(0, x0) + 0.25, b = Math.min(areaW, x1) - 0.25, y0 = r * m.D + 0.25, y1 = y0 + m.D - 0.5, col = shade(hex, 0.86 + 0.24 * rand(seed + r * 31 + c));
+      const face = [P(a, y0, 0), P(b, y0, 0), P(b, y0, m.H), P(a, y0, m.H)], top = [P(a, y0, m.H), P(b, y0, m.H), P(b, y1, m.H), P(a, y1, m.H)];
+      const poly = (pts, fill) => { ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 0.8; ctx.stroke(); };
+      poly(top, col); if (r === 0) poly(face, shade(hex, 0.7));
+      if (!small) { const xs = top.map((p) => p[0]), ys = top.map((p) => p[1]); ctx.save(); poly(top, col); ctx.clip(); speckles(ctx, Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 60, seed + r * 7 + c, "rgba(255,255,255,.25)", "rgba(0,0,0,.18)"); ctx.restore(); }
+    }
+  } else { // a single unit (block, cap, slab, solid step) seen from the front corner
+    const L = m.L, D = m.D, Hh = m.H, cos = 0.82, sin = 0.42;
+    const s = Math.min((W - 2 * pad) / (L * cos + D * cos * 0.75), (H - 2 * pad - foot - (small ? 0 : 12)) / (Hh + (L + D * 0.75) * sin * 0.5));
+    const P = (x, y, z) => [W / 2 + (x * cos - y * cos * 0.75 - (L * cos - D * cos * 0.75) / 2) * s, H - pad - foot - (z + (x + y * 0.75) * sin * 0.5) * s + (small ? 0 : -4) - (D * 0.75 * sin * 0.5) * s * 0];
+    const poly = (pts, fill, line = "rgba(0,0,0,.4)") => { ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.stroke(); };
+    // ground shadow
+    ctx.fillStyle = "rgba(0,0,0,.12)"; ctx.beginPath(); const g0 = P(0, 0, 0), g1 = P(L, 0, 0), g2 = P(L, D, 0), g3 = P(0, D, 0); ctx.moveTo(g0[0] + 6, g0[1] + 4); ctx.lineTo(g1[0] + 6, g1[1] + 4); ctx.lineTo(g2[0] + 6, g2[1] + 4); ctx.lineTo(g3[0] + 6, g3[1] + 4); ctx.closePath(); ctx.fill();
+    const front = [P(0, 0, 0), P(L, 0, 0), P(L, 0, Hh), P(0, 0, Hh)], side = [P(0, 0, 0), P(0, D, 0), P(0, D, Hh), P(0, 0, Hh)], top = [P(0, 0, Hh), P(L, 0, Hh), P(L, D, Hh), P(0, D, Hh)];
+    poly(side, shade(hex, 0.72)); poly(top, shade(hex, 1.1)); poly(front, shade(hex, 0.92));
+    const box = (pts) => { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)]; };
+    if (m.kind === "block" || m.kind === "cap") { // split, rock-like face: blotches and grain on the face you see
+      ctx.save(); poly(front, shade(hex, 0.92)); ctx.clip(); const [bx, by, bw, bh] = box(front);
+      for (let k = 0; k < (small ? 14 : 70); k++) { ctx.fillStyle = `rgba(${rand(seed + k) < 0.5 ? "255,255,255" : "0,0,0"},${(0.06 + 0.1 * rand(seed + k * 3)).toFixed(2)})`; ctx.beginPath(); ctx.ellipse(bx + rand(seed + k * 5) * bw, by + rand(seed + k * 7) * bh, (2 + rand(seed + k * 11) * 10) * (small ? 0.4 : 1), (1 + rand(seed + k * 13) * 4) * (small ? 0.4 : 1), 0, 0, 7); ctx.fill(); }
+      speckles(ctx, bx, by, bw, bh, small ? 40 : 400, seed, "rgba(255,255,255,.3)", "rgba(0,0,0,.25)"); ctx.restore();
+    } else { const [bx, by, bw, bh] = box(front); ctx.save(); poly(front, shade(hex, 0.92)); ctx.clip(); speckles(ctx, bx, by, bw, bh, small ? 30 : 250, seed, "rgba(255,255,255,.25)", "rgba(0,0,0,.18)"); ctx.restore(); }
+    { const [bx, by, bw, bh] = box(top); ctx.save(); poly(top, shade(hex, 1.1)); ctx.clip(); speckles(ctx, bx, by, bw, bh, small ? 30 : 300, seed + 9, "rgba(255,255,255,.25)", "rgba(0,0,0,.15)"); ctx.restore(); }
+    if (m.kind === "block" && D >= 10) { // hollow cores on top of wall blocks
+      for (const f of [0.28, 0.72]) { const cx = L * f, cw = L * 0.16, cd = D * 0.36, cy = D * 0.45; poly([P(cx - cw, cy - cd / 2, Hh), P(cx + cw, cy - cd / 2, Hh), P(cx + cw, cy + cd / 2, Hh), P(cx - cw, cy + cd / 2, Hh)], shade(hex, 0.45), "rgba(0,0,0,.5)"); }
+    }
+    if (!small) { // size words along the edges
+      const T = (t, [x, y], dx, dy, align) => { ctx.font = '600 13px "IBM Plex Sans", system-ui, sans-serif'; ctx.fillStyle = "#1d2733"; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x + dx, y + dy); };
+      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      T(`${fmtIn(L)} long`, mid(P(0, 0, 0), P(L, 0, 0)), 0, 16, "center");
+      T(`${fmtIn(D)} deep`, mid(P(0, 0, 0), P(0, D, 0)), -10, 10, "right");
+      T(`${fmtIn(Hh)} ${m.kind === "cap" || m.kind === "slab" ? "thick" : "high"}`, mid(P(L, 0, 0), P(L, 0, Hh)), 10, 0, "left");
+    }
+  }
+  if (!small) { ctx.font = '600 14px "IBM Plex Sans", system-ui, sans-serif'; ctx.fillStyle = "#1d2733"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(`${colorName || ""}`, 12, H - 12); ctx.textAlign = "right"; ctx.fillStyle = "#56616d"; ctx.font = '500 12px "IBM Plex Sans", system-ui, sans-serif'; ctx.fillText("Drawn picture, not a photo", W - 12, H - 12); }
+  ctx.restore();
+}
+// Photos: asset ids per material, synced with the rest of the settings. Without the assets capability (the page open on
+// its own) photos are kept on this device as small pictures instead.
+let assetsCap = null, mdOpen = null, mdColor = null;
+const photoList = (id) => (store.get("bsp.photos", {})[id] || []).concat((store.get("bsp.photosLocal", {})[id] || []).map((d) => "data:" + d));
+const photoSrc = (p) => p.startsWith("data:") ? p.slice(5) : "/_blob/" + p;
+function openMat(id) {
+  const m = mat(id); if (!m) return; mdOpen = id; mdColor = (m.colors || [])[0];
+  $("mdTitle").textContent = `${m.brand === "Generic" ? "" : m.brand + " "}${m.line ? m.line + " " : ""}${m.name}`;
+  $("mdSub").textContent = `${KIND_LABEL[m.kind] || ""}${m.setback ? ` · ${m.setback}° setback per course` : ""}${m.note ? " · " + m.note : ""}`;
+  $("mdColors").innerHTML = (m.colors || []).map((c) => `<button data-c="${escapeHtml(c)}" aria-pressed="${c === mdColor}"><i style="background:${hexOf(c)}"></i>${escapeHtml(c)}</button>`).join("");
+  $("mdColors").querySelectorAll("[data-c]").forEach((b) => b.onclick = () => { mdColor = b.dataset.c; $("mdColors").querySelectorAll("[data-c]").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawMd(); });
+  const used = job.items.filter((i) => [i.block, i.cap, i.surface, i.infill].includes(id)).length;
+  $("mdStats").innerHTML = `${m.L ? `<div><dt>Size</dt><dd>${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}</dd></div>` : `<div><dt>Depth</dt><dd>${fmtIn(m.H)}</dd></div>`}
+    <div><dt>Your price</dt><dd>${money(priceOf(id))} / ${perSqft(m) ? "sq ft" : "each"}</dd></div>${m.L && m.D && perSqft(m) ? `<div><dt>Per sq ft</dt><dd>about ${num1(144 / (m.L * m.D))} pieces</dd></div>` : ""}
+    <div><dt>On this job</dt><dd>${used ? used + " item" + (used > 1 ? "s" : "") : "not used"}</dd></div>`;
+  const q = `${m.brand === "Generic" ? "" : m.brand === ABB ? "Abbotsford Concrete " : m.brand + " "}${m.line || ""} ${m.name}`.replace(/\s+/g, " ").trim();
+  $("mdWeb").href = "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(q); $("mdWeb").title = "Opens an image search for " + q;
+  $("mdSite").hidden = m.brand !== ABB;
+  $("matDlg").hidden = false; drawMd(); renderPhotos();
+}
+function drawMd() { const c = $("mdPic"), { w, h, dpr } = sizeCanvas(c), x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); drawMaterialPic(x, w, h, mat(mdOpen), mdColor, false); }
+function renderPhotos() {
+  const id = mdOpen, list = photoList(id);
+  $("mdPhotos").innerHTML = list.length ? list.map((p, k) => `<figure><img src="${photoSrc(p)}" alt="Photo ${k + 1}" data-big="${k}" loading="lazy"><button data-del="${k}" aria-label="Remove photo ${k + 1}">✕</button></figure>`).join("") : `<p class="note">No photos yet.</p>`;
+  $("mdPhotos").querySelectorAll("[data-big]").forEach((img) => { img.onclick = () => { $("photoBig").src = img.src; $("photoView").hidden = false; }; img.onerror = () => { img.alt = "Photo not available"; img.style.opacity = 0.3; }; });
+  $("mdPhotos").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+    const p = list[+b.dataset.del]; if (!confirm("Remove this photo?")) return;
+    if (p.startsWith("data:")) { const loc = store.get("bsp.photosLocal", {}); loc[id] = (loc[id] || []).filter((d) => "data:" + d !== p); store.set("bsp.photosLocal", loc); }
+    else { const all = store.get("bsp.photos", {}); all[id] = (all[id] || []).filter((x) => x !== p); store.set("bsp.photos", all); try { if (assetsCap) await assetsCap.delete(p); } catch {} }
+    renderPhotos();
+  });
+  $("mdPhotoNote").textContent = assetsCap ? "" : "Photos stay on this device when the planner is open on its own.";
+}
+$("mdAdd").onchange = async (e) => {
+  const id = mdOpen, files = [...e.target.files].slice(0, 6); e.target.value = "";
+  for (const f of files) {
+    try {
+      const small = await shrinkImage(f, assetsCap ? 1600 : 900);
+      if (assetsCap) { const r = await assetsCap.upload(small, { type: "image/jpeg" }); const all = store.get("bsp.photos", {}); all[id] = [...(all[id] || []), r.id]; store.set("bsp.photos", all); }
+      else { const loc = store.get("bsp.photosLocal", {}); loc[id] = [...(loc[id] || []), "image/jpeg;base64," + await blobToB64(small)]; store.set("bsp.photosLocal", loc); }
+    } catch (err) { toast(err && err.code === "too_large" ? "That photo is too big." : err && err.code === "quota_or_state" ? "Photo storage is full. Remove some photos first." : "Couldn't add that photo."); }
+  }
+  renderPhotos();
+};
+$("mdClose").onclick = () => { $("matDlg").hidden = true; mdOpen = null; };
+$("matDlg").addEventListener("click", (e) => { if (e.target.id === "matDlg") { $("matDlg").hidden = true; mdOpen = null; } });
+$("photoView").onclick = () => { $("photoView").hidden = true; };
 // ---------- tiled print: PDF of letter/legal/A4 sheets to tape together ----------
 const PAPER = { letter: [8.5, 11, "Letter"], legal: [8.5, 14, "Legal"], tabloid: [11, 17, "Tabloid"], a4: [8.27, 11.69, "A4"] };
 const PR_SCALES = [[0.125, '1/8" = 1 ft'], [0.1875, '3/16" = 1 ft'], [0.25, '1/4" = 1 ft'], [0.375, '3/8" = 1 ft'], [0.5, '1/2" = 1 ft'], [0.75, '3/4" = 1 ft'], [1, '1" = 1 ft']];
@@ -3679,7 +3815,7 @@ $("apiKey").addEventListener("change", (e) => store.set("bsp.apikey", e.target.v
 // ---------- sync between devices ----------
 // Each saved setting is mirrored to one private document per person (data/users/<id>/<key>), so every device
 // signed in to the same Claude account shares it. Last change wins per setting. The API key never leaves the device.
-const SYNC_KEYS = ["current", "jobs", "library", "prices", "company", "csvmap", "defaults", "est"];
+const SYNC_KEYS = ["current", "jobs", "library", "prices", "company", "csvmap", "defaults", "est", "photos"];
 const sync = { db: null, uid: null, dev: Math.random().toString(36).slice(2, 10), at: store.get("bsp.syncAt", {}), timers: {}, busy: {}, again: {}, applying: false, pending: {}, state: "", ready: false };
 const rawSet = store.set;
 store.set = (k, v) => {
@@ -3732,7 +3868,7 @@ function syncApply(key, json) {
       toast("Updated from your other device. Undo goes back.");
     } else {
       if (key === "library") { const lib = store.get("bsp.library", []); for (const m of lib) if (!job.custom.some((c) => c.id === m.id)) job.custom.push(m); }
-      renderMaterials(); renderEstFields(); renderCompany(); renderCsvMap(); renderJobs(); renderQuote();
+      renderMaterials(); renderEstFields(); renderCompany(); renderCsvMap(); renderJobs(); renderQuote(); if (key === "photos" && mdOpen) renderPhotos();
     }
   } finally { sync.applying = false; }
 }
@@ -3776,6 +3912,7 @@ if (window.claude && claude.use) {
     try { const lim = await s.limits(); if (!lim || !lim.images) $("aiPhotoLabel").hidden = true; } catch { $("aiPhotoLabel").hidden = true; }
   });
   claude.use("downloads").then((d) => { downloadsCap = d; });
+  claude.use("assets").then((a) => { assetsCap = a; if (mdOpen) renderPhotos(); });
 } else setAiStatus(false);
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) navigator.serviceWorker.register("sw.js").catch(() => {});
 function loadSavedJob() {
