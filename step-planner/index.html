@@ -109,6 +109,7 @@ textarea { resize: vertical; }
 .aiout { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 14px; white-space: pre-wrap; min-height: 44px; }
 .thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
 .thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.toastbtn { margin-left: 10px; border: 0; border-radius: 6px; padding: 4px 12px; background: var(--accent); color: var(--accent-fg); font-weight: 600; cursor: pointer; }
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 500; z-index: 20; max-width: calc(100% - 32px); }
 .note { font-size: 13px; color: var(--muted); }
 .swatch { display: flex; gap: 8px; align-items: center; }
@@ -1665,6 +1666,14 @@ function sanitizeJob(j) {
 // ---------- files ----------
 let downloadsCap = null;
 async function saveFile(filename, blob) {
+  if (window.AndroidBridge) { // installed Android app: save to Downloads/Block Step Planner, offer to send it
+    const mime = blob.type || "application/octet-stream";
+    let uri = "";
+    try { uri = window.AndroidBridge.saveFile(filename, await blobToB64(blob), mime); } catch {}
+    if (uri) toast(`Saved to Downloads › Block Step Planner › ${filename}`, "Send", () => window.AndroidBridge.shareFile(uri, mime));
+    else toast("Couldn't save the file. Check the tablet has free space.");
+    return;
+  }
   try { if (downloadsCap) { await downloadsCap.save({ filename, data: blob }); return; } } catch (e) { if (e && (e.code === "declined" || e.code === "cancelled")) return; }
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
@@ -1706,7 +1715,12 @@ $("exportBtn").onclick = async () => {
 
 // ---------- undo / toast / view ----------
 $("undoBtn").onclick = () => { const s = undoStack.pop(); if (!s) { toast("Nothing to undo."); return; } job = JSON.parse(s); if (!job.items.find((i) => i.id === selId)) selId = null; renderJobPane(); renderMaterials(); renderEstFields(); commit(); };
-let toastT; function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3400); }
+let toastT;
+function toast(m, actionLabel, action) {
+  const t = $("toast"); t.textContent = m; t.hidden = false;
+  if (actionLabel) { const b = document.createElement("button"); b.className = "toastbtn"; b.textContent = actionLabel; b.onclick = () => { t.hidden = true; action(); }; t.append(" ", b); }
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, actionLabel ? 7000 : 3400);
+}
 $("fitBtn").onclick = () => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); };
 $("secBtn").setAttribute("aria-pressed", showSection);
 $("secBtn").onclick = (e) => { showSection = !showSection; e.target.setAttribute("aria-pressed", showSection); drawPlan(); };

@@ -55,3 +55,19 @@ sheets. Prices are examples until you enter your own on the Materials tab.
 
 Inside claude.ai, the assistant uses your Claude account. Anywhere else,
 enter an Anthropic API key on the AI tab. The key stays on the tablet in local storage.
+
+## Android app (APK)
+
+`android/` wraps the planner in a small native Android app (min Android 10). It runs fully
+offline (three.js is bundled), opens the system picker for photos and files, and saves exports
+to **Downloads › Block Step Planner** with a **Send** button for email, Drive and so on.
+
+- Install: copy `android/dist/StepPlanner-<version>.apk` to the tablet, open it, and allow
+  "Install unknown apps" for the app you opened it from when Android asks.
+- Rebuild: `android/build-apk.sh <version>` (needs Java, Python 3, ImageMagick, curl and npm;
+  it downloads aapt2, dx and apksig from Maven Central, no Android SDK needed).
+- Signing key: put your `release.p12` in `android/` before building (it is never committed; this
+  repo is public). Keep using the same key: an update signed with a different key won't install
+  over the old one, and uninstalling erases the jobs saved in the app. Set `KEY_PASS` if you
+  change its password. Without the file, the script makes a new key.
+- Inside the app the AI assistant uses your Anthropic API key (AI tab).
