@@ -393,12 +393,22 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <p class="note">Pick who you buy each material from. A supplier's price goes straight into the quote; type a price to update it (it is remembered for that supplier). Suppliers and prices below were found online in Oct 2026: always confirm stock and price before ordering.</p>
         <div id="buyList"></div>
         <h3>Getting it there</h3>
-        <div class="grid2">
+        <label class="f">How it gets there <select id="hMode"><option value="0">Supplier's delivery truck</option><option value="1">I haul it with my truck and trailer</option></select></label>
+        <div class="grid2" id="hTruck">
           <label class="f">Ferry $ per foot, one way (0 = no ferry) <input id="fPerFt" inputmode="decimal"></label>
           <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
           <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
           <label class="f">Ferry crossings per load <input id="fWays" inputmode="decimal"></label>
         </div>
+        <div class="grid2" id="hSelf" hidden>
+          <label class="f">Trailer payload (kg) <input id="hPay" inputmode="decimal"></label>
+          <label class="f">Truck + trailer length (ft) <input id="hLen" inputmode="decimal"></label>
+          <label class="f">Ferry fare up to 20 ft ($) <input id="hBase" inputmode="decimal"></label>
+          <label class="f">Ferry $ per foot over 20 ft <input id="hOver" inputmode="decimal"></label>
+          <label class="f">Hours per trip (load, ferry, unload) <input id="hHrs" inputmode="decimal"></label>
+          <label class="f">Haul road base and gravel too <select id="hBulk"><option value="1">Yes</option><option value="0">No, I get it on the island</option></select></label>
+        </div>
+        <div id="hPlan"></div>
         <p class="note" id="fNote"></p>
         <details id="supEdit"><summary>Suppliers list</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
@@ -687,7 +697,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 2, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -2274,6 +2284,32 @@ jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot
 
 // ---------- takeoff, estimate and quote ----------
 const yd3 = (cuIn) => cuIn / 46656;          // cubic inches to cubic yards
+// Weights for hauling. Known: AB Classic 34 kg, Pro Cap Max 28.3 kg, 60mm pavers about 12.6 kg/sq ft. Others are
+// estimated from size (concrete 0.0393 kg per cubic inch; Allan Block style units are about half hollow).
+const KG_EACH = { "ab-classic": 34, "ab-stones": 34, "ab-rocks": 34, "ab-vertical": 34, pcm18: 28.3 };
+function unitKg(m) {
+  if (KG_EACH[m.id]) return KG_EACH[m.id];
+  if (m.kind === "surface") return m.pattern === "gravel" ? 144 * m.H * 0.027 : m.pattern === "wood" ? 1.5 : 144 * m.H * 0.0393;
+  if (perSqft(m)) return 144 * m.H * 0.0393 * 0.93; // per sq ft
+  return m.L * m.D * m.H * 0.0393 * (m.kind === "block" ? 0.52 : 0.93);
+}
+function haulList() {
+  const { mats, w, E } = takeoff(), waste = 1 + E.waste / 100, out = [];
+  for (const o of mats.values()) { const m = mat(o.id), n = Math.ceil(o.qty * waste), bulk = m.kind === "surface"; out.push({ desc: matName(m) + (o.color ? " " + o.color : ""), kg: n * unitKg(m), n, unit: perSqft(m) ? "sq ft" : "ea", bulk }); }
+  const add = (desc, kg, bulk = false) => { if (kg > 0) out.push({ desc, kg, bulk }); };
+  add("Road base / structural fill", ceilTo(w.baseTon, 0.5) * 1000, true);
+  add("Drain rock", ceilTo(w.drainYd, 0.25) * 1450, true);
+  add("Bedding sand", ceilTo(w.sandYd, 0.25) * 1350, true);
+  add("Polymeric sand", Math.ceil(w.polySqft / 60) * 23);
+  add("Concrete for posts", w.railPosts * 2 * 30);
+  add("Handrail posts and lumber", w.railPosts * 9 + w.railFt * 2 * 1.6);
+  return out;
+}
+function haulPlan(E) {
+  const list = haulList().filter((x) => E.haulBulk || !x.bulk), kg = list.reduce((a, x) => a + x.kg, 0), pay = Math.max(100, E.payloadKg || 1000);
+  const trips = Math.ceil(kg / pay), fare = (E.fareBase || 0) + Math.max(0, (E.rigFt || 20) - 20) * (E.farePerFtOver || 0);
+  return { list, kg, trips, fare, pay };
+}
 const TON_PER_YD = 1.5;                      // compacted road base
 const round2 = (n) => Math.round(n * 100) / 100;
 const ceilTo = (n, step) => Math.ceil(n / step - 1e-9) * step;
@@ -2372,7 +2408,11 @@ function estimate() {
   if (lines.length) {
     L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
     L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
-    if (E.ferryPerFt > 0) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
+    if (E.haulSelf) {
+      const hp = haulPlan(E);
+      L("Equipment & disposal", `Ferry with my truck and ${num1(E.rigFt)} ft rig (${hp.trips} trips, about ${num1(hp.kg / 1000)} t at ${num1(hp.pay / 1000)} t a trip; return free)`, hp.trips, "trip", round2(hp.fare));
+      L("Labour", `Hauling materials (${hp.trips} trips × ${num1(E.hrsPerTrip)} h)`, ceilTo(hp.trips * E.hrsPerTrip, 0.5), "hr", E.labourRate);
+    } else if (E.ferryPerFt > 0) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
     L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
@@ -2451,10 +2491,21 @@ function renderBuy() {
     commit(); renderMaterials();
   });
   // ferry
-  const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"]];
+  const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
+  const E2 = { ...EST_DEFAULTS, ...job.est };
+  $("hMode").value = String(E2.haulSelf ? 1 : 0); $("hBulk").value = String(E2.haulBulk ? 1 : 0);
+  $("hTruck").hidden = !!E2.haulSelf; $("hSelf").hidden = !E2.haulSelf;
+  $("hMode").onchange = () => { snapshot(); job.est = { ...job.est, haulSelf: +$("hMode").value }; commit(); };
+  $("hBulk").onchange = () => { snapshot(); job.est = { ...job.est, haulBulk: +$("hBulk").value }; commit(); };
+  if (E2.haulSelf) {
+    const hp = haulPlan(E2), all = haulList();
+    $("hPlan").innerHTML = `<div class="supcard"><b>${hp.trips} trips · about ${num1(hp.kg / 1000)} tonnes · ${money(hp.fare)} ferry a trip (return free) · ${money(hp.trips * hp.fare)} in fares, ${num1(hp.trips * E2.hrsPerTrip)} hours hauling</b>
+      ${all.map((x) => `${escapeHtml(x.desc)}${x.n ? ` (${x.n} ${x.unit})` : ""}: ${num1(x.kg)} kg${x.bulk && !E2.haulBulk ? " (got on the island)" : ""}`).join("<br>")}
+      <br><small>Each trip carries up to ${num1(hp.pay)} kg. Weights: AB Classic 34 kg, Pro Cap Max 28.3 kg, 60mm pavers about 12.6 kg per sq ft, road base about 1 tonne per ton ordered; others estimated from size. Stay within the trailer's and truck's ratings.</small></div>`;
+  } else $("hPlan").innerHTML = "";
   for (const [el, k] of F) { const inp = $(el); if (document.activeElement !== inp) inp.value = job.est[k] ?? EST_DEFAULTS[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = job.est[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
   const pal = [...mats.values()].reduce((a, o) => { const m = mat(o.id); return a + (m.perPallet ? Math.ceil(Math.ceil(o.qty * waste) / m.perPallet) : 0); }, 0);
-  $("fNote").textContent = `${pal ? `About ${pal} pallets of block, caps and pavers. ` : ""}BC Ferries, Swartz Bay to the Southern Gulf Islands: commercial vehicles over 5,500 kg were $4.55 per foot one way (Oct 2026). Otter Bay ramp limit 56,500 kg, 7 axles. Check the fare and whether the return is charged when you book.`;
+  $("fNote").textContent = `${pal ? `About ${pal} pallets of block, caps and pavers. ` : ""}BC Ferries, Swartz Bay to the Southern Gulf Islands (2026): commercial vehicles over 5,500 kg $4.55 per foot one way; regular vehicles $89 up to 20 ft plus $8 a foot over. Otter Bay ramp limit 56,500 kg, 7 axles. The return crossing is not charged, so leave crossings at 1 per load. Check the fare when you book.`;
   // supplier editing
   const list = suppliers();
   $("supList").innerHTML = list.map((x, k) => `<div class="supedit" data-sup="${k}">
