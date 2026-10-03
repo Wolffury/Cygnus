@@ -162,6 +162,12 @@ details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; 
 details > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
 details[open] > summary { margin-bottom: 10px; }
 details > .grid2, details > label { margin-top: 8px; }
+.seg.tools { background: color-mix(in srgb, var(--panel) 92%, transparent); }
+.seg.tools button { padding: 8px 12px; }
+.blockbar { position: absolute; left: 12px; right: 12px; bottom: 44px; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: color-mix(in srgb, var(--panel) 95%, transparent); padding: 8px 10px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; font-weight: 600; }
+.blockbar label { display: flex; align-items: center; gap: 6px; }
+.blockbar select { min-height: 38px; max-width: 240px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 4px 6px; }
+.bbsize { font-family: var(--font-mono); color: var(--muted); font-weight: 500; }
 .csvcols { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .csvrow { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: center; }
 .csvrow input, .csvrow select { min-width: 0; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 14px; }
@@ -188,6 +194,11 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <canvas id="plan" aria-label="Blueprint plan view"></canvas>
       <canvas id="three" hidden aria-label="3D rendering"></canvas>
       <div class="stage-tools" id="planTools">
+        <div class="seg tools" role="group" aria-label="Tool">
+          <button data-tool="select" aria-pressed="true">Select</button>
+          <button data-tool="block" aria-pressed="false">Place blocks</button>
+          <button data-tool="dim" aria-pressed="false">Measure</button>
+        </div>
         <button class="btn" id="fitBtn">Fit</button>
         <button class="btn" id="secBtn">Section</button>
         <button class="btn" id="snapBtn" aria-pressed="true">Snap 1"</button>
@@ -203,6 +214,13 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <button class="btn primary" id="shotBtn">Save rendering</button>
       </div>
       <div class="loading" id="loading3d" hidden>Loading 3D…</div>
+      <div class="blockbar" id="blockBar" hidden>
+        <label>Block <select id="bbMat"></select></label>
+        <label>Colour <select id="bbColor"></select></label>
+        <span class="bbsize" id="bbSize"></span>
+        <button class="btn" id="bbTurn">Turn 90°</button>
+        <button class="btn primary" data-tool="select">Done</button>
+      </div>
       <div class="hint" id="hint">Drag to move · pinch or wheel to zoom · drag empty space to pan</div>
     </section>
 
@@ -506,10 +524,10 @@ function validColor(id, c) { const m = mat(id); return m && m.colors && m.colors
 const TYPE_INFO = {
   steps: { label: "Steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
-  house: { label: "House" }, grade: { label: "Upper grade" },
+  house: { label: "House" }, grade: { label: "Upper grade" }, unit: { label: "Block" }, dim: { label: "Measurement" },
 };
-const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade"]);
-const BUILT_TYPES = new Set(["steps", "landing", "path", "wall"]);
+const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade", "unit"]);
+const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit"]);
 let uid = 1;
 const newId = () => "i" + Date.now().toString(36) + (uid++);
 
@@ -535,6 +553,8 @@ function defaults(type, x, y) {
     case "evergreen": return { ...b, canopy: 120, height: 300, trunk: 10, label: "Spruce" };
     case "shrub": return { ...b, canopy: 36, height: 30, label: "Shrub" };
     case "rock": return { ...b, canopy: 30, height: 18, label: "" };
+    case "unit": { const m = mat(d.block) || mat("ab-classic"); return { ...b, block: m.id, color: validColor(m.id, d.color), w: m.L || 12, d: m.D || 12, h: m.H, z: 0 }; }
+    case "dim": return { ...b, x2: x + 48, y2: y, off: 12 };
   }
   return b;
 }
@@ -683,6 +703,7 @@ function wallCalc(it) {
   return { b, c, courses, perCourse: Math.ceil(it.w / b.L), blocks: Math.ceil(it.w / b.L) * courses, caps: c ? Math.ceil(it.w / c.L) : 0, step: b.H * Math.tan((b.setback || 0) * Math.PI / 180), top: courses * b.H + capH };
 }
 function itemSize(it) {
+  if (it.type === "dim") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "steps") { const c = stepCalc(it); return { w: c.xw, d: c.run, xc: c.xc }; }
   if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d, xc: 0 };
   return { w: it.canopy, d: it.canopy, xc: 0 };
@@ -690,9 +711,14 @@ function itemSize(it) {
 // rot is clockwise from north: rotate local by -rot in standard math orientation
 function rotPt(it, lx, ly) { const a = -it.rot * Math.PI / 180; return { x: it.x + lx * Math.cos(a) - ly * Math.sin(a), y: it.y + lx * Math.sin(a) + ly * Math.cos(a) }; }
 function localOf(it, px, py) { const a = it.rot * Math.PI / 180; const dx = px - it.x, dy = py - it.y; return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) }; }
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy, t = L2 ? clamp(((px - ax) * dx + (py - ay) * dy) / L2, 0, 1) : 0;
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
 function hitTest(px, py) {
   const order = drawOrder().slice().reverse();
   for (const it of order) {
+    if (it.type === "dim") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= 12 / view2d.s) return it; continue; }
     if (RECT_TYPES.has(it.type)) {
       const s = itemSize(it), l = localOf(it, px, py);
       if (Math.abs(l.x - s.xc) <= s.w / 2 && Math.abs(l.y) <= s.d / 2) return it;
@@ -705,8 +731,8 @@ function hitTest(px, py) {
   return null;
 }
 function drawOrder() {
-  const rank = { grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9 };
-  return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type] || (a.elev || 0) - (b.elev || 0));
+  const rank = { grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, unit: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9, dim: 10 };
+  return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type] || ((a.elev || 0) + (a.z || 0)) - ((b.elev || 0) + (b.z || 0)));
 }
 function groundAt(x, y, exceptId) {
   let h = 0;
@@ -779,6 +805,7 @@ function renderSheet(ctx, W, H, v, o) {
   label(ctx, "WORK AREA " + fmtLen(job.site.w) + " × " + fmtLen(job.site.d), a1 + 6 * u, b2 - 8 * u, 11 * u, "left", BP.ink2);
 
   for (const it of drawOrder()) drawItem(ctx, v, it, u, it.id === o.selId);
+  if (o.screen && o.selId) { const it = job.items.find((i) => i.id === o.selId); if (it) drawHandles(ctx, v, it); }
 
   const nx = W - 46 * u, ny = (o.screen ? 70 : 60) * u;
   ctx.save(); ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u;
@@ -930,6 +957,23 @@ function drawItem(ctx, v, it, u, sel) {
       if (tag) { const tp = rotPt(it, 0, -c.run / 2 - 38); const [tx, ty] = W2S(v, tp.x, tp.y); label(ctx, tag.toUpperCase() + (c.E ? ` · FROM +${fmtLen(c.E)}` : ""), tx, ty, 11 * u, "center", BP.ink, 600); }
       break;
     }
+    case "unit": {
+      const m = mat(it.block), cut = m && (it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05);
+      polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2);
+      ctx.fillStyle = cut ? "rgba(255,200,87,.20)" : `rgba(234,242,252,${(0.12 + clamp((it.z || 0) / 40, 0, 1) * 0.25).toFixed(3)})`;
+      ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.stroke();
+      ctx.lineWidth = 2.6 * u; lineL(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, -it.d / 2); // face side
+      if (v.s * Math.min(it.w, it.d) > 26 * u && it.z > 0.05) label(ctx, "+" + fmtLen(it.z), cx, cy, 9 * u, "center", BP.ink2);
+      break;
+    }
+    case "dim": {
+      const len = Math.hypot(it.x2 - it.x, it.y2 - it.y);
+      if (len > 0.5) {
+        const ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), frame = { x: it.x, y: it.y, rot: -ang * 180 / Math.PI };
+        dimLine(ctx, v, frame, 0, 0, len, 0, it.off ?? 12, (it.label ? it.label + " " : "") + fmtLen(len), u);
+      }
+      break;
+    }
     case "tree": case "evergreen": {
       const r = it.canopy / 2 * v.s;
       ctx.strokeStyle = BP.ink2; ctx.setLineDash(it.type === "tree" ? [] : [2 * u, 3 * u]);
@@ -1027,6 +1071,131 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
   ctx.restore();
 }
 
+// ---------- handles: drag to resize, rotate and scale ----------
+function handlesOf(it) {
+  const hs = [], v = view2d;
+  if (it.type === "dim") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  if (!RECT_TYPES.has(it.type)) { hs.push({ kind: "radius", x: it.x + it.canopy / 2, y: it.y }); return hs; }
+  const s = itemSize(it), pt = (lx, ly) => rotPt(it, lx, ly);
+  const dirs = it.type === "steps" ? [[1, 0], [-1, 0]] : [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  for (const [sx, sy] of dirs) { const p = pt(s.xc + sx * s.w / 2, sy * s.d / 2); hs.push({ kind: "size", sx, sy, x: p.x, y: p.y }); }
+  const r = pt(s.xc, s.d / 2 + 34 / v.s); hs.push({ kind: "rot", x: r.x, y: r.y });
+  return hs;
+}
+function drawHandles(ctx, v, it) {
+  ctx.save();
+  for (const h of handlesOf(it)) {
+    const [sx, sy] = W2S(v, h.x, h.y);
+    if (h.kind === "rot") { const s = itemSize(it), a = rotPt(it, s.xc, s.d / 2), [ax, ay] = W2S(v, a.x, a.y); ctx.strokeStyle = BP.sel; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.beginPath(); ctx.arc(sx, sy, h.kind === "rot" ? 9 : 7, 0, Math.PI * 2);
+    ctx.fillStyle = h.kind === "rot" ? BP.sel : "#ffffff"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = h.kind === "rot" ? "#ffffff" : BP.sel; ctx.stroke();
+    if (h.kind === "rot") { ctx.strokeStyle = "#173f73"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(sx, sy, 4.5, -2.4, 1.4); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+function handleAt(sx, sy) {
+  const it = job.items.find((i) => i.id === selId); if (!it || view !== "plan") return null;
+  let best = null, bd = 22; // generous touch target
+  for (const h of handlesOf(it)) { const [hx, hy] = W2S(view2d, h.x, h.y), d = Math.hypot(hx - sx, hy - sy); if (d < bd) { bd = d; best = h; } }
+  return best ? { h: best, it } : null;
+}
+// Points a measurement snaps to: corners of everything rectangular, centres of trees and rocks, other measurement ends.
+function snapPoints() {
+  const pts = [];
+  for (const it of job.items) {
+    if (it.type === "dim") { pts.push([it.x, it.y], [it.x2, it.y2]); continue; }
+    if (!RECT_TYPES.has(it.type)) { pts.push([it.x, it.y]); continue; }
+    const s = itemSize(it);
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) { const p = rotPt(it, s.xc + a * s.w / 2, b * s.d / 2); pts.push([p.x, p.y]); }
+  }
+  return pts;
+}
+function snapPoint(x, y, exceptId) {
+  const tol = 14 / view2d.s; let best = null, bd = tol;
+  for (const it of job.items) if (it.id === exceptId) continue;
+  for (const [px, py] of snapPoints()) { const d = Math.hypot(px - x, py - y); if (d < bd && d > 1e-6) { bd = d; best = [px, py]; } }
+  return best || (snap ? [Math.round(x), Math.round(y)] : [x, y]);
+}
+const rotDiff = (a, b) => ((((a - b) % 360) + 360) % 360);
+// Butts a block against the nearest block on the same course: ends touch, faces and backs line up.
+function snapUnit(it) {
+  const tol = 10 / view2d.s;
+  const others = job.items.filter((n) => n.type === "unit" && n.id !== it.id && Math.abs((n.z || 0) - (it.z || 0)) < 0.5 && rotDiff(n.rot, it.rot) % 90 === 0)
+    .sort((a, b) => Math.hypot(a.x - it.x, a.y - it.y) - Math.hypot(b.x - it.x, b.y - it.y));
+  for (const n of others) {
+    const turned = rotDiff(n.rot, it.rot) % 180 === 90, iw = turned ? it.d : it.w, idp = turned ? it.w : it.d;
+    const l = localOf(n, it.x, it.y);
+    if (Math.abs(l.x) > (n.w + iw) / 2 + tol || Math.abs(l.y) > (n.d + idp) / 2 + tol) continue;
+    const pick = (val, cands) => { let b = val, bd = tol; for (const c of cands) if (Math.abs(c - val) < bd) { bd = Math.abs(c - val); b = c; } return b; };
+    const nx = pick(l.x, [(n.w + iw) / 2, -(n.w + iw) / 2, 0, (n.w - iw) / 2, -(n.w - iw) / 2]);
+    const ny = pick(l.y, [(n.d + idp) / 2, -(n.d + idp) / 2, 0, (n.d - idp) / 2, -(n.d - idp) / 2]);
+    const p = rotPt(n, nx, ny); it.x = Math.round(p.x * 8) / 8; it.y = Math.round(p.y * 8) / 8;
+    return;
+  }
+}
+function stackTopAt(x, y) {
+  let top = null;
+  for (const n of job.items) if (n.type === "unit") { const l = localOf(n, x, y); if (Math.abs(l.x) <= n.w / 2 && Math.abs(l.y) <= n.d / 2 && (!top || n.z + n.h > top.z + top.h)) top = n; }
+  return top;
+}
+function liveTip(text, sx, sy) {
+  const { dpr } = sizeCanvas(plan); pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  pctx.font = '600 13px "IBM Plex Mono", monospace'; const w = pctx.measureText(text).width + 16;
+  const x = clamp(sx - w / 2, 4, plan.clientWidth - w - 4), y = Math.max(4, sy - 44);
+  pctx.fillStyle = "rgba(10,25,45,.92)"; pctx.fillRect(x, y, w, 24); pctx.fillStyle = BP.sel; pctx.textBaseline = "middle"; pctx.fillText(text, x + 8, y + 12);
+}
+
+// Tools: select (move and resize), place individual blocks, measure.
+let tool = "select";
+const bb = { block: "ab-classic", color: "Grey", rot: 0 };
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll("[data-tool]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.tool === t));
+  $("blockBar").hidden = t !== "block";
+  $("hint").textContent = t === "block" ? "Tap to place a block · tap on a block to stack on it · drag to slide it into place"
+    : t === "dim" ? "Drag from one point to another to measure · ends snap to corners"
+    : "Drag to move · drag the handles to resize or rotate · pinch to zoom";
+  if (t === "block") renderBlockBar();
+}
+function renderBlockBar() {
+  const opts = matOptions(["block", "solid", "cap", "slab", "paver"]);
+  if (!mat(bb.block)) bb.block = job.defaults.block;
+  $("bbMat").innerHTML = opts.map(([v, t]) => `<option value="${escapeHtml(v)}"${v === bb.block ? " selected" : ""}>${escapeHtml(t)}</option>`).join("");
+  bb.color = validColor(bb.block, bb.color);
+  $("bbColor").innerHTML = colorOptions(bb.block).map(([v]) => `<option${v === bb.color ? " selected" : ""}>${escapeHtml(v)}</option>`).join("");
+  const m = mat(bb.block); $("bbSize").textContent = m ? `${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : "";
+}
+document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
+$("bbMat").addEventListener("change", (e) => { bb.block = e.target.value; renderBlockBar(); });
+$("bbColor").addEventListener("change", (e) => { bb.color = e.target.value; });
+$("bbTurn").addEventListener("click", () => { bb.rot = (bb.rot + 90) % 360; toast("New blocks turn to " + bb.rot + "°"); });
+function placeUnit(wx, wy) {
+  const m = mat(bb.block); if (!m) return null;
+  const it = defaults("unit", wx, wy);
+  Object.assign(it, { block: m.id, color: bb.color, w: m.L || 12, d: m.D || 12, h: m.H, rot: bb.rot });
+  const under = stackTopAt(wx, wy);
+  if (under) { // stack on it, running bond: centred on the block below or on one of its joints
+    it.z = under.z + under.h; it.rot = under.rot;
+    const l = localOf(under, wx, wy), lx = [-under.w / 2, 0, under.w / 2].reduce((a, b) => Math.abs(b - l.x) < Math.abs(a - l.x) ? b : a);
+    const p = rotPt(under, lx, 0); it.x = p.x; it.y = p.y;
+  } else { if (snap) { it.x = Math.round(wx); it.y = Math.round(wy); } snapUnit(it); }
+  job.items.push(it); return it;
+}
+function applyHandle(dr, wx, wy) {
+  const it = dr.item, o = dr.orig, h = dr.h, q = snap ? 1 : 0.125, rq = (n) => Math.round(n / q) * q;
+  if (h.kind === "end") { const [x, y] = snapPoint(wx, wy, it.id); if (h.idx === 1) { it.x = x; it.y = y; } else { it.x2 = x; it.y2 = y; } return fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y)); }
+  if (h.kind === "radius") { it.canopy = Math.max(6, rq(2 * Math.hypot(wx - o.x, wy - o.y))); return "⌀ " + fmtLen(it.canopy); }
+  if (h.kind === "rot") { let a = Math.atan2(wx - o.x, wy - o.y) * 180 / Math.PI; a = snap ? Math.round(a / 15) * 15 : Math.round(a); it.rot = ((a % 360) + 360) % 360; return it.rot + "°"; }
+  // size: the opposite edge stays put
+  const s = itemSize(o), l = localOf(o, wx, wy), ax = s.xc - h.sx * s.w / 2, ay = -h.sy * s.d / 2;
+  const m = it.type === "unit" ? mat(it.block) : null, maxW = m && m.L ? m.L : 1e5, maxD = m && m.D ? m.D : 1e5;
+  const extraW = s.w - o.w; // cheek walls on steps widen the footprint beyond the stair width
+  let nw = h.sx ? clamp(rq(Math.abs(l.x - ax)) - extraW, 2, maxW) : o.w, nd = h.sy ? clamp(rq(Math.abs(l.y - ay)), 2, maxD) : o.d;
+  const cxL = h.sx ? ax + h.sx * (nw + extraW) / 2 : s.xc, cyL = h.sy ? ay + h.sy * nd / 2 : 0;
+  const c = rotPt(o, cxL - s.xc, cyL); it.x = c.x; it.y = c.y; it.w = nw; if (it.type !== "steps") it.d = nd;
+  return it.type === "steps" ? fmtLen(nw) + " wide" : `${fmtLen(nw)} × ${fmtLen(nd)}${m && (nw < maxW - 0.05 || nd < maxD - 0.05) ? " (cut)" : ""}`;
+}
+
 // ---------- plan interaction ----------
 const pointers = new Map();
 let drag = null, pinch = null, moved = false;
@@ -1035,9 +1204,21 @@ plan.addEventListener("pointerdown", (e) => {
   pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, s: view2d.s, ox: view2d.ox, oy: view2d.oy }; if (drag && drag.item && drag.moved) commit(); drag = null; return; }
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
-  const hit = hitTest(wx, wy);
   moved = false;
-  if (hit) { drag = { item: hit, dx: wx - hit.x, dy: wy - hit.y, moved: false }; if (selId !== hit.id) { selId = hit.id; renderItemPane(); renderList(); showPane("pItem"); } drawPlan(); }
+  const ha = handleAt(e.offsetX, e.offsetY);
+  if (ha) { drag = { handle: true, h: ha.h, item: ha.it, orig: JSON.parse(JSON.stringify(ha.it)), moved: false }; return; }
+  if (tool === "dim") {
+    snapshot(); const [x, y] = snapPoint(wx, wy);
+    const d = defaults("dim", x, y); d.x2 = x; d.y2 = y; job.items.push(d); selId = d.id;
+    drag = { handle: true, h: { kind: "end", idx: 2 }, item: d, orig: { ...d }, moved: true, newDim: true }; drawPlan(); return;
+  }
+  if (tool === "block") {
+    snapshot(); const it = placeUnit(wx, wy);
+    if (it) { selId = it.id; drag = { item: it, dx: wx - it.x, dy: wy - it.y, moved: true, placed: true }; renderItemPane(); renderList(); drawPlan(); }
+    return;
+  }
+  const hit = hitTest(wx, wy);
+  if (hit) { drag = { item: hit, dx: wx - hit.x, dy: wy - hit.y, moved: false }; if (hit.type === "dim") { drag.dx2 = wx - hit.x2; drag.dy2 = wy - hit.y2; } if (selId !== hit.id) { selId = hit.id; renderItemPane(); renderList(); showPane("pItem"); } drawPlan(); }
   else drag = { pan: true, sx: e.offsetX, sy: e.offsetY, ox: view2d.ox, oy: view2d.oy };
 });
 plan.addEventListener("pointermove", (e) => {
@@ -1052,20 +1233,36 @@ plan.addEventListener("pointermove", (e) => {
   if (!drag) return;
   if (drag.pan) { view2d.ox = drag.ox + e.offsetX - drag.sx; view2d.oy = drag.oy + e.offsetY - drag.sy; if (Math.abs(e.offsetX - drag.sx) + Math.abs(e.offsetY - drag.sy) > 4) moved = true; drawPlan(); return; }
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
+  if (drag.handle) {
+    if (!drag.moved) { snapshot(); drag.moved = true; }
+    const tip = applyHandle(drag, wx, wy); drawPlan(); liveTip(tip, e.offsetX, e.offsetY); return;
+  }
   let nx = wx - drag.dx, ny = wy - drag.dy;
   if (snap) { nx = Math.round(nx); ny = Math.round(ny); }
   if (!drag.moved) { if (Math.hypot(nx - drag.item.x, ny - drag.item.y) * view2d.s < 4) return; snapshot(); drag.moved = true; }
-  drag.item.x = nx; drag.item.y = ny; drawPlan();
+  const it = drag.item;
+  if (it.type === "dim") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
+  it.x = nx; it.y = ny;
+  if (it.type === "unit" && snap) snapUnit(it);
+  drawPlan();
+  if (it.type === "unit" && it.z > 0.05) liveTip("course at +" + fmtLen(it.z), e.offsetX, e.offsetY);
 });
 function endPointer(e) {
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;
+  if (drag && drag.newDim && Math.hypot(drag.item.x2 - drag.item.x, drag.item.y2 - drag.item.y) < 1) { job.items = job.items.filter((i) => i !== drag.item); undoStack.pop(); selId = null; drawPlan(); drag = null; }
   if (drag && drag.item && drag.moved) commit();
   if (drag && drag.pan && !moved && selId) { selId = null; renderItemPane(); renderList(); drawPlan(); }
   if (pointers.size === 0) drag = null;
 }
 plan.addEventListener("pointerup", endPointer);
 plan.addEventListener("pointercancel", endPointer);
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Delete" || e.key === "Backspace") && selId && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+    e.preventDefault(); snapshot(); job.items = job.items.filter((i) => i.id !== selId); selId = null; commit();
+  }
+  if (e.key === "Escape" && tool !== "select") setTool("select");
+});
 plan.addEventListener("wheel", (e) => {
   e.preventDefault();
   const k = Math.exp(-e.deltaY * 0.0015), ns = clamp(view2d.s * k, 0.05, 40), r = ns / view2d.s;
@@ -1142,6 +1339,21 @@ function renderItemPane() {
     h += `<div class="grid2">${field("Width", "w", it)}${field("Length", "d", it)}${field("Rotation °", "rot", it, "deg")}<span></span>
       ${selectField("Surface", "surface", it, matOptions(["paver", "slab", "surface"]))}${selectField("Colour", "color", it, colorOptions(it.surface))}</div>
       <dl class="stats"><div><dt>Area</dt><dd>${num1(it.w * it.d / 144)} sq ft</dd></div><div><dt>Material</dt><dd>${escapeHtml(matName(mat(it.surface)))}</dd></div></dl>`;
+  } else if (t === "unit") {
+    const m = mat(it.block), cuts = [];
+    if (m && it.w < (m.L || it.w) - 0.05) cuts.push(`length ${fmtIn(m.L)} → ${fmtIn(it.w)}`);
+    if (m && it.d < (m.D || it.d) - 0.05) cuts.push(`depth ${fmtIn(m.D)} → ${fmtIn(it.d)}`);
+    if (m && it.h < m.H - 0.05) cuts.push(`height ${fmtIn(m.H)} → ${fmtIn(it.h)}`);
+    h += `<div class="grid2">${selectField("Material", "block", it, matOptions(["block", "solid", "cap", "slab", "paver"]))}${selectField("Colour", "color", it, colorOptions(it.block))}
+      ${field("Length", "w", it)}${field("Depth", "d", it)}${field("Height", "h", it)}${field("Sits at elevation", "z", it)}${field("Rotation °", "rot", it, "deg")}</div>
+      <p class="note">${cuts.length ? "Cut: " + cuts.join(", ") + "." : "Full block, no cuts."} The thick edge is the face. Drag the handles to cut it shorter.</p>
+      <div class="row"><button class="btn" id="unitNext">Add next in row</button><button class="btn" id="unitStack">Stack on top</button></div>
+      <div class="row"><label class="f" style="flex:1">Repeat along the row<input id="unitRepeat" inputmode="numeric" placeholder="e.g. 6"></label><button class="btn" id="unitRepeatGo" style="align-self:flex-end">Add</button></div>`;
+  } else if (t === "dim") {
+    h = `<h2>Measurement</h2><label class="f">Label (optional)<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}" placeholder="e.g. Porch to curb"></label>
+      <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))}</dd></div><div><dt>Angle</dt><dd>${Math.round(((Math.atan2(it.x2 - it.x, it.y2 - it.y) * 180 / Math.PI) + 360) % 360)}° from north</dd></div></dl>
+      <div class="grid2">${field("Line offset", "off", it)}<span></span></div>
+      <p class="note">Drag the round ends to move them. They snap to corners and block edges.</p>`;
   } else if (RECT_TYPES.has(t)) {
     h += `<div class="grid2">${field("Width", "w", it)}${field("Depth", "d", it)}${field(t === "house" ? "Wall height" : "Height above grade", "h", it)}${field("Rotation °", "rot", it, "deg")}</div>`;
   } else {
@@ -1157,6 +1369,15 @@ function renderItemPane() {
   $("rotR") && ($("rotR").onclick = () => rotBy(90));
   $("dupBtn").onclick = () => { snapshot(); const c = { ...it, id: newId(), x: it.x + 24, y: it.y - 24 }; job.items.push(c); selId = c.id; commit(); };
   $("delBtn").onclick = () => { snapshot(); job.items = job.items.filter((i) => i.id !== it.id); selId = null; commit(); toast("Deleted. Tap Undo to bring it back."); };
+  if (t === "unit") {
+    const copyAt = (lx, dz) => { const p = rotPt(it, lx, 0); return { ...it, id: newId(), x: Math.round(p.x * 8) / 8, y: Math.round(p.y * 8) / 8, z: (it.z || 0) + dz }; };
+    $("unitNext").onclick = () => { snapshot(); const c = copyAt(it.w, 0); job.items.push(c); selId = c.id; commit(); };
+    $("unitStack").onclick = () => { snapshot(); const c = copyAt(it.w / 2, it.h); job.items.push(c); selId = c.id; commit(); };
+    $("unitRepeatGo").onclick = () => {
+      const n = parseInt($("unitRepeat").value, 10); if (!(n > 0 && n <= 200)) { toast("Enter how many blocks to add, 1 to 200."); return; }
+      snapshot(); let last = it; for (let k = 1; k <= n; k++) { last = copyAt(it.w * k, 0); job.items.push(last); } selId = last.id; commit(); toast(`Added ${n} block${n > 1 ? "s" : ""} along the row.`);
+    };
+  }
 }
 function setItemField(it, inp) {
   const key = inp.dataset.k, kind = inp.dataset.kind;
@@ -1168,11 +1389,12 @@ function setItemField(it, inp) {
     if (key === "cap" && it.cap) it.capColor = validColor(it.cap, it.capColor);
     if (key === "surface") it.color = validColor(it.surface, it.color);
     if (key === "block" && it.type === "landing") it.blockColor = validColor(it.block, it.blockColor);
+    if (key === "block" && it.type === "unit") { const m = mat(it.block); if (m) { it.w = m.L || it.w; it.d = m.D || it.d; it.h = m.H; } }
     if (it.type === "steps" && (key === "block" || key === "cap")) { const P = build(it); it.tread = defaultTread(P); it.base = defaultBase(P); }
   } else if (kind === "deg") { const n = parseFloat(inp.value); if (isNaN(n)) { undoStack.pop(); inp.value = it[key] || 0; return; } it[key] = ((n % 360) + 360) % 360; }
   else {
     const n = parseLen(inp.value);
-    const signed = ["x", "y", "base", "elev", "capOver", "stepRise", "cheekAbove"].includes(key);
+    const signed = ["x", "y", "base", "elev", "capOver", "stepRise", "cheekAbove", "z", "off"].includes(key);
     if (isNaN(n) || (!signed && n <= 0)) { toast("Couldn't read that measurement. Try 4' 6\" or 54\"."); undoStack.pop(); inp.value = fmtLen(it[key]); return; }
     it[key] = n;
     if (it.type === "steps" && (key === "stepRise" || key === "capOver")) { const P = build(it); it.base = defaultBase(P); if (key === "capOver") it.tread = defaultTread(P); }
@@ -1182,6 +1404,7 @@ function setItemField(it, inp) {
 function describe(it) {
   if (it.type === "steps") { const c = stepCalc(it); return `${c.count} risers, ${fmtLen(it.w)} wide, ${matName(mat(it.block))}${it.cap ? " + " + matName(mat(it.cap)) : ""}${it.config !== "straight" ? ", " + CONFIGS.find((x) => x[0] === it.config)[1].toLowerCase() : ""}`; }
   if (it.type === "wall") return `${fmtLen(it.w)} long, ${fmtLen(wallCalc(it).top)} high, ${matName(mat(it.block))}`;
+  if (it.type === "unit") { const m = mat(it.block); return `${matName(m)} ${it.color || ""}${m && (it.w < (m.L || it.w) - 0.05 || it.h < m.H - 0.05) ? ", cut to " + fmtIn(it.w) + " × " + fmtIn(it.h) : ""}`; }
   if (it.type === "landing" || it.type === "path") return `${fmtLen(it.w)} × ${fmtLen(it.d)}, ${matName(mat(it.surface))} ${it.color || ""}`;
   return "";
 }
@@ -1359,6 +1582,12 @@ function takeoff() {
         surface(it.surface, it.color, lc.area, use);
       } else surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
+    } else if (it.type === "unit") {
+      const m = mat(it.block); if (!m) continue;
+      addM(it.block, it.color, perSqft(m) ? it.w * it.d / 144 : 1, "Placed blocks");
+      if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") w.paveSqft += it.w * it.d / 144;
+      else if (m.kind === "solid") w.stepBlocks++; else w.wallBlocks++;
+      if (it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
@@ -1621,7 +1850,7 @@ function sanitizeItem(raw, legacy) {
   const out = { ...d, id: typeof raw.id === "string" && raw.id ? raw.id.slice(0, 40) : d.id, label: String(raw.label ?? d.label).slice(0, 60) };
   for (const k of Object.keys(d)) {
     if (["id", "type", "label"].includes(k)) continue;
-    if (typeof d[k] === "number") { if (raw[k] != null) out[k] = num(raw[k], d[k], ["x", "y", "base", "elev"].includes(k) ? -1e5 : 0, 1e5); }
+    if (typeof d[k] === "number") { if (raw[k] != null) out[k] = num(raw[k], d[k], ["x", "y", "base", "elev", "z", "x2", "y2", "off"].includes(k) ? -1e5 : 0, 1e5); }
     else if (STR_OPTS[k]) out[k] = STR_OPTS[k].includes(raw[k]) ? raw[k] : d[k];
     else if (["block", "surface", "infill"].includes(k)) out[k] = mat(raw[k]) ? raw[k] : d[k];
     else if (k === "cap") out[k] = raw[k] === "" || raw[k] === null ? "" : mat(raw[k]) ? raw[k] : d[k];
@@ -1957,6 +2186,11 @@ function build3d() {
         g.position.set(it.x, gz, -it.y); world.add(g);
         break;
       }
+      case "unit": {
+        const m = mat(it.block), smooth = m && (m.kind === "cap" || m.kind === "slab");
+        const bx = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(bx, it, 0, 0, (it.z || 0) + it.h / 2);
+        break;
+      }
       case "rock": {
         const geo = new THREE.DodecahedronGeometry(it.canopy / 2, 1), pos = geo.attributes.position, seed = hashStr(it.id);
         for (let k = 0; k < pos.count; k++) { const j = 0.8 + 0.3 * rand(seed + Math.round(pos.getX(k) * 7 + pos.getY(k) * 13 + pos.getZ(k) * 17)); pos.setXYZ(k, pos.getX(k) * j, pos.getY(k) * j, pos.getZ(k) * j); }
@@ -1994,6 +2228,8 @@ Item types:
 - tree / evergreen: {"type":"tree","x","y","canopy": canopy diameter,"height","trunk": trunk diameter,"label": species}
 - shrub: {"type":"shrub","x","y","canopy","height","label"}
 - rock: {"type":"rock","x","y","canopy": size across,"height","label"}
+- unit: {"type":"unit","x","y","rot","block": material id,"color","w": length,"d": depth,"h": height,"z": elevation of its bottom} one individual block, cap, slab or step unit
+- dim: {"type":"dim","x","y","x2","y2","label"} a measurement line drawn on the blueprint between two points
 For L-shaped, U-turn or multi-flight stairs, use separate steps items joined by landings; each upper flight's "elev" equals the landing "h".
 Keep existing "id" values for items you keep; new items need no id.`;
 function aiPrompt(mode, text, nPhotos) {
