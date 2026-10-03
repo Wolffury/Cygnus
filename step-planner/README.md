@@ -28,6 +28,19 @@ stonework jobs: block steps, landings, retaining walls, walkways and patios.
   own line, so the totals match to the cent. The columns can be remapped for other apps.
 - **AI assistant**: describe the job in plain words or attach a photo of your sketch; Claude
   draws a new layout or revises the current one with the materials you name.
+- **AI conversation**: keep talking to the assistant to change the drawing a bit at a time
+  ("move the oak 3 ft left", "make the steps 6 ft wide", "switch to colour on white"). Every
+  change can be undone, and the conversation is saved with the job.
+- **Blueprint styles**: blue blueprint, colour on white, black on white, or sepia (Job tab).
+- **Print on regular paper**: **Print** makes a PDF on Letter, Legal, Tabloid or A4. It has a
+  cover page with a sheet map and taping instructions, a legend, and the plan split over sheets
+  at a true scale with overlap strips, alignment targets and a scale check bar. The side view
+  and step sections come last.
+- **Legend**: the **Legend** button on the blueprint explains every symbol and colour in plain
+  words. It is also printed on the sheet and in the PDF.
+- **Sync between devices**: inside the Claude app or claude.ai, the current job, saved jobs,
+  prices, materials and company details sync to every device signed in to your Claude
+  account. They are kept private to your account; your API key never leaves the device.
 - **Checks**: riser height, tread depth, width, first-riser match, cap/riser fit, handrails,
   and wall height.
 

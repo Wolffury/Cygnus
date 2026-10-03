@@ -68,6 +68,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .stage { position: relative; min-width: 0; min-height: 0; background: var(--sheet); overflow: hidden; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .stage-tools { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 2; }
+.legendbox { position: absolute; right: 12px; top: 64px; width: min(380px, calc(100% - 24px)); max-height: calc(100% - 80px); overflow: auto; z-index: 3; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.legendbox .lghead { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel); font-size: 14px; }
+.legendbox .lghead label { margin-left: auto; font-size: 13px; display: flex; gap: 4px; align-items: center; }
+.legendbox .lghead .btn { padding: 4px 10px; }
+.stage .legendbox canvas { position: static; display: block; width: 100%; touch-action: auto; }
+.modal { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modalbox { background: var(--panel); color: var(--fg); border-radius: 12px; padding: 16px 18px; width: min(560px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.modalbox h2 { margin: 0; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+#prPreview { width: 100%; height: 220px; border-radius: 8px; border: 1px solid var(--line); }
 .stage-tools .btn { background: color-mix(in srgb, var(--panel) 92%, transparent); }
 .hint { position: absolute; left: 12px; bottom: 12px; z-index: 2; font-size: 12px; color: #dce8f7; background: rgba(10, 30, 60, .55); padding: 4px 8px; border-radius: 6px; }
 
@@ -171,6 +181,20 @@ details > .grid2, details > label { margin-top: 8px; }
 .three-tools select { min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .blockbar select { min-height: 38px; max-width: 240px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 4px 6px; }
 .bbsize { font-family: var(--font-mono); color: var(--muted); font-weight: 500; }
+.sync { font-size: 12px; padding: 4px 9px; border-radius: 999px; background: var(--chip); white-space: nowrap; }
+.sync::before { content: "●"; margin-right: 5px; color: var(--good); }
+.sync.busy::before { color: var(--warn); }
+.sync.off::before { color: #c0392b; }
+.aistatus { margin: 0; padding: 8px 10px; border-radius: 8px; font-size: 13px; background: var(--chip); }
+.aistatus.ok { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--fg); }
+.aistatus.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--fg); }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; min-height: 120px; overflow-y: auto; padding: 4px 2px; }
+.msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 4px; }
+.msg.assistant { align-self: flex-start; background: var(--chip); border-bottom-left-radius: 4px; }
+.msg.pending { opacity: .75; }
+.msg small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.checkrow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .csvcols { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .csvrow { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: center; }
 .csvrow input, .csvrow select { min-width: 0; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 14px; }
@@ -189,8 +213,10 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <button id="v3d" aria-pressed="false">3D Render</button>
     </div>
     <div class="spacer"></div>
+    <span class="sync" id="syncState" hidden></span>
     <button class="btn" id="undoBtn" title="Undo">Undo</button>
     <button class="btn" id="exportBtn">Export sheet</button>
+    <button class="btn" id="printBtn">Print</button>
   </header>
 
   <div class="main">
@@ -213,6 +239,11 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <button class="btn" id="fitBtn">Fit</button>
         <button class="btn" id="secBtn">Section</button>
         <button class="btn" id="snapBtn" aria-pressed="true">Snap 1"</button>
+        <button class="btn" id="legendBtn" aria-pressed="false">Legend</button>
+      </div>
+      <div class="legendbox" id="legendBox" hidden>
+        <div class="lghead"><b>What the symbols mean</b><label><input type="checkbox" id="legendAll"> All symbols</label><button class="btn" id="legendClose" aria-label="Close legend">✕</button></div>
+        <canvas id="legendCanvas" aria-label="Legend of blueprint symbols and colours"></canvas>
       </div>
       <div class="three-tools" id="threeTools" hidden>
         <div class="row">
@@ -370,26 +401,29 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       </div>
 
       <div class="pane" id="pAi" role="tabpanel" hidden>
-        <h2>AI layout assistant</h2>
-        <p>Describe the job in plain words with your measurements and the materials you want. You can add a photo of a hand sketch or the site. The assistant draws or revises the plan.</p>
-        <label class="f">What you measured
-          <textarea id="aiText" rows="7" placeholder="e.g. Front entry, 4 ft wide SR Classic steps with Pro Cap Max treads going up 30 inches to the porch, wrap around both sides. Porch is 8 ft wide and 5 ft deep. Texada slab walkway 4 ft wide, 20 ft long to the driveway. Big oak 6 ft left of the steps, 20 ft canopy."></textarea>
+        <h2>AI assistant</h2>
+        <p class="aistatus" id="aiStatus">Connecting…</p>
+        <div class="chat" id="chatLog" aria-live="polite"></div>
+        <div class="thumbs" id="aiThumbs"></div>
+        <label class="f">Message
+          <textarea id="aiText" rows="3" placeholder="e.g. Add SR Classic steps 4 ft wide going up 30 inches to the porch, a Texada slab walk 20 ft to the driveway, and the big oak 6 ft left of the steps."></textarea>
         </label>
         <div class="row">
           <label class="btn" for="aiPhoto" id="aiPhotoLabel">Add sketch / photo</label>
           <input type="file" id="aiPhoto" accept="image/*" multiple hidden>
           <button class="btn" id="aiClearPhotos" hidden>Clear photos</button>
-        </div>
-        <div class="thumbs" id="aiThumbs"></div>
-        <div class="row">
-          <button class="btn primary" id="aiNew">Draw new layout</button>
-          <button class="btn" id="aiRevise">Revise current plan</button>
+          <span class="spacer"></span>
           <button class="btn" id="aiStop" hidden>Stop</button>
+          <button class="btn primary" id="aiSend">Send</button>
         </div>
-        <div class="aiout" id="aiOut" aria-live="polite">The assistant's notes will appear here.</div>
-        <div id="aiKeyBox">
+        <div class="row">
+          <label class="checkrow"><input type="checkbox" id="aiFast"> Quick replies for small edits</label>
+          <span class="spacer"></span>
+          <button class="btn small" id="aiClear">New conversation</button>
+        </div>
+        <div id="aiKeyBox" hidden>
           <h3>Claude API key</h3>
-          <p class="note">When this app runs outside claude.ai, it needs your own Anthropic API key. The key is stored only on this tablet.</p>
+          <p class="note">Only needed when this page can't reach your Claude account. The key is stored only on this tablet.</p>
           <label class="f">API key <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
         </div>
       </div>
@@ -401,6 +435,9 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Client <input id="jClient"></label>
         </div>
         <label class="f">Site address <input id="jAddr"></label>
+        <label class="f">Blueprint style
+          <select id="jTheme"><option value="blueprint">Blueprint (blue paper)</option><option value="white">Colour on white (best for printing)</option><option value="mono">Black on white</option><option value="sepia">Sepia</option></select>
+        </label>
         <h3>Defaults for new items</h3>
         <div class="grid2" id="defFields"></div>
         <h3>Site</h3>
@@ -410,6 +447,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         </div>
         <label class="f">Notes on the sheet <textarea id="jNotes" rows="3"></textarea></label>
         <p class="note">Measurements: type <code>4' 6"</code>, <code>4ft 6in</code>, <code>4.5'</code>, <code>54"</code> or <code>1.37m</code>. A plain number means inches.</p>
+        <h3>Sync between devices</h3>
+        <p class="note" id="syncNote">Sync works when the planner is open in the Claude app or claude.ai. Every device signed in to your Claude account sees the same job, saved jobs, prices, materials and company details, and changes show up on the others within a few seconds.</p>
         <h3>Saved jobs</h3>
         <div class="row">
           <button class="btn" id="saveJob">Save job</button>
@@ -424,6 +463,20 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
+  <div class="modalbox">
+    <h2 id="prTitle">Print on regular paper</h2>
+    <p class="note">Makes a PDF to print at home or the office. It has a cover page with taping instructions, the legend, and the plan split over several sheets at a true scale that you tape together. The side view and step sections come last.</p>
+    <div class="grid3">
+      <label class="f">Paper <select id="prPaper"><option value="letter">Letter 8½ × 11"</option><option value="legal">Legal 8½ × 14"</option><option value="tabloid">Tabloid 11 × 17"</option><option value="a4">A4</option></select></label>
+      <label class="f">Scale <select id="prScale"></select></label>
+      <label class="f">Style <select id="prTheme"><option value="white">Colour on white</option><option value="mono">Black on white (saves colour ink)</option><option value="blueprint">Blueprint (uses lots of ink)</option><option value="sepia">Sepia</option></select></label>
+    </div>
+    <canvas id="prPreview" aria-label="How the sheets fit together"></canvas>
+    <p class="note" id="prInfo"></p>
+    <div class="row"><button class="btn primary" id="prGo">Make PDF</button><button class="btn" id="prCancel">Cancel</button></div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js" defer></script>
@@ -590,7 +643,7 @@ function sampleJob() {
   const st = { ...stepDefaults(DEFAULTS) };
   return {
     v: 2, name: "Front entry steps", client: "Example client", address: "", notes: "Example layout. Replace with your measurements.",
-    defaults: { ...DEFAULTS }, est: { ...EST_DEFAULTS }, extras: [], custom: [], prices: {},
+    defaults: { ...DEFAULTS }, est: { ...EST_DEFAULTS }, extras: [], custom: [], prices: {}, style: { theme: "blueprint" }, chat: [],
     site: { w: 480, d: 420 },
     items: [
       { id: "h1", type: "house", x: 240, y: 360, w: 420, d: 120, rot: 0, h: 108, label: "House" },
@@ -617,6 +670,7 @@ function commit(opts = {}) {
   drawPlan();
   if (!opts.keepPanel) renderItemPane();
   renderList(); renderQuote(); $("jobTitle").textContent = job.name || "";
+  drawLegendBox();
   if (view === "side") drawSide();
   if (view === "3d") build3d();
 }
@@ -840,11 +894,33 @@ function landingCalc(it) {
   return { s, b, c, edged, capH, capD, courses, blocks, caps, inW, inD, area: inW * inD };
 }
 
+// ---------- blueprint styles: drawn in blueprint colours, restyled with a filter (cheap on screen, same for print) ----------
+// Paper styles other than blueprint are drawn on black paper and then inverted, so black paper turns white, white ink
+// turns black, and hue-rotate brings the colours back (yellow cuts, blue water and orange contours stay recognisable).
+const THEMES = {
+  blueprint: { label: "Blueprint", filter: "none" },
+  white: { label: "Colour on white", filter: "invert(1) hue-rotate(180deg) saturate(1.3)" },
+  mono: { label: "Black on white", filter: "grayscale(1) invert(1)" },
+  sepia: { label: "Sepia", filter: "invert(1) hue-rotate(180deg) sepia(0.6)" },
+};
+const PAPERS = { blue: { paper: "#173f73", panel: "#123a6b", band: "#0f2f58", box: "rgba(12,38,72,.92)" }, black: { paper: "#000000", panel: "#0b0b0b", band: "#121212", box: "rgba(6,6,6,.94)" } };
+function usePaper(theme) { Object.assign(BP, PAPERS[theme && theme !== "blueprint" && THEMES[theme] ? "black" : "blue"]); }
+// Draw with another style's paper (printing in a style other than the one on screen), then put the screen's back
+function withPaper(theme, fn) { usePaper(theme); try { return fn(); } finally { usePaper((job.style || {}).theme); } }
+function themeFilter() { return (THEMES[(job.style || {}).theme] || THEMES.blueprint).filter; }
+function applyTheme() { usePaper((job.style || {}).theme); const f = themeFilter(); try { drawPlan(); drawSide(); } catch {} if (typeof drawLegendBox === "function" && $("legendBox")) drawLegendBox(); $("plan").style.filter = f === "none" ? "" : f; $("side").style.filter = f === "none" ? "" : f; if ($("jTheme")) $("jTheme").value = (job.style || {}).theme || "blueprint"; }
+// Copy of a canvas with the current style applied (for saved pictures and printing)
+function themed(c, theme) {
+  const f = theme ? THEMES[theme].filter : themeFilter(); if (f === "none") return c;
+  const o = document.createElement("canvas"); o.width = c.width; o.height = c.height; const x = o.getContext("2d");
+  x.filter = f; x.drawImage(c, 0, 0); return o;
+}
+
 // ---------- 2D blueprint ----------
 const plan = $("plan"), pctx = plan.getContext("2d");
 const view2d = { s: 1, ox: 0, oy: 0 }; // screen = world*s + o (y flipped)
 let showSection = window.innerWidth > 700, snap = true;
-const BP = { paper: "#173f73", grid: "rgba(190,215,245,.10)", grid5: "rgba(190,215,245,.22)", ink: "#eaf2fc", ink2: "rgba(234,242,252,.7)", sel: "#ffc857", fill: "rgba(234,242,252,.07)" };
+const BP = { paper: "#173f73", panel: "#123a6b", band: "#0f2f58", box: "rgba(12,38,72,.92)", grid: "rgba(190,215,245,.10)", grid5: "rgba(190,215,245,.22)", ink: "#eaf2fc", ink2: "rgba(234,242,252,.7)", sel: "#ffc857", fill: "rgba(234,242,252,.07)" };
 
 function sizeCanvas(c) {
   const r = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -852,11 +928,15 @@ function sizeCanvas(c) {
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   return { w: r.width, h: r.height, dpr };
 }
-function fitView(W, H, v = view2d, pad = 60) {
+function planBounds() {
   let minX = 0, minY = 0, maxX = job.site.w, maxY = job.site.d;
   for (const it of job.items) {
     if (it.pts) { const [a, b, c, d] = bboxPts(it.pts); minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d); continue; }
     if (it.type === "cut" || it.type === "dim") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
+  return { minX, minY, maxX, maxY };
+}
+function fitView(W, H, v = view2d, pad = 60) {
+  const { minX, minY, maxX, maxY } = planBounds();
   v.s = Math.max(0.05, Math.min((W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY)));
   v.ox = W / 2 - (minX + maxX) / 2 * v.s;
   v.oy = H / 2 + (minY + maxY) / 2 * v.s;
@@ -894,6 +974,7 @@ function renderSheet(ctx, W, H, v, o) {
   for (const it of drawOrder()) drawItem(ctx, v, it, u, it.id === o.selId);
   if (o.screen && o.selId) { const it = job.items.find((i) => i.id === o.selId); if (it) drawHandles(ctx, v, it); }
 
+  if (o.noChrome) return;
   const nx = W - 46 * u, ny = (o.screen ? 70 : 60) * u;
   ctx.save(); ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u;
   ctx.beginPath(); ctx.arc(nx, ny, 20 * u, 0, Math.PI * 2); ctx.stroke();
@@ -929,10 +1010,15 @@ function drawElevationTint(ctx, v, W, H) {
   for (const [x, y, z] of cells) {
     const [sx, sy] = W2S(v, x, y + step); const sz = step * v.s + 0.6;
     if (sx > W || sy > H || sx + sz < 0 || sy + sz < 0) continue;
-    if (wl != null && z < wl) ctx.fillStyle = `rgba(70,150,230,${(0.22 + Math.min(0.25, (wl - z) / 120)).toFixed(3)})`;
-    else { const t = (z - lo) / span; ctx.fillStyle = `rgba(${Math.round(120 + 110 * t)},${Math.round(190 - 30 * t)},${Math.round(150 - 70 * t)},0.13)`; }
+    ctx.fillStyle = tintColor(wl != null && z < wl ? -1 : (z - lo) / span, wl != null ? (wl - z) / 120 : 0);
     ctx.fillRect(sx, sy, sz, sz);
   }
+}
+// t = 0 lowest ground … 1 highest, or -1 for under water (depth in feet / 10). Softer on white paper, where tints read stronger.
+function tintColor(t, depth = 0) {
+  const k = BP.paper === PAPERS.black.paper ? 0.5 : 1;
+  if (t < 0) return `rgba(70,150,230,${((0.22 + Math.min(0.25, depth)) * k).toFixed(3)})`;
+  return `rgba(${Math.round(120 + 110 * t)},${Math.round(190 - 30 * t)},${Math.round(150 - 70 * t)},${(0.13 * k).toFixed(3)})`;
 }
 function smoothPath(ctx, v, pts) {
   const sp = pts.map(([x, y]) => W2S(v, x, y));
@@ -1168,12 +1254,106 @@ function drawItem(ctx, v, it, u, sel) {
   ctx.restore();
 }
 function hashStr(s) { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; }
+// ---------- legend: every symbol and colour, explained in plain words ----------
+// Swatches are drawn with the same colours as the plan, so the blueprint style filter restyles them the same way.
+function swRect(ctx, x, y, w, h, fill, stroke, lw) { ctx.beginPath(); ctx.rect(x, y, w, h); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } }
+// A tiny view that fits a world box (inches) into the swatch, so real plan symbols can be drawn in it
+function swView(x, y, w, h, ww, wh) { const s = Math.min(w / ww, h / wh); return { s, ox: x + (w - ww * s) / 2, oy: y + h - (h - wh * s) / 2 }; }
+function swItem(ctx, x, y, w, h, u, it, ww, wh) { ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); drawItem(ctx, swView(x, y, w, h, ww, wh), { id: "legend", rot: 0, label: " ", ...it }, u, false); ctx.restore(); }
+const LEGEND = [
+  { k: "block", t: "Block", d: "One concrete block seen from above. Lighter blocks sit higher up.", when: (ts) => ts.has("steps") || ts.has("unit"),
+    draw(ctx, x, y, w, h, u) { const bw = w / 2.2; swRect(ctx, x + 2 * u, y + h * 0.25, bw, h * 0.5, "rgba(234,242,252,.14)", BP.ink, 1.2 * u); swRect(ctx, x + 4 * u + bw, y + h * 0.25, bw, h * 0.5, "rgba(234,242,252,.32)", BP.ink, 1.2 * u); } },
+  { k: "cut", t: "Cut piece", d: "Tinted piece (like the swatch) = block or slab cut to size on site.", when: (ts) => ts.has("steps") || ts.has("unit"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + w * 0.2, y + h * 0.25, w * 0.6, h * 0.5, "rgba(255,200,87,.20)", BP.ink, 1.2 * u); } },
+  { k: "cap", t: "Cap (the tread)", d: "The slab you step on. The dashed line under it is the face of the block below; the gap is the overhang.", when: (ts) => ts.has("steps"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + 4 * u, y + h * 0.2, w - 8 * u, h * 0.6, "rgba(234,242,252,.32)", BP.ink, 1.2 * u); ctx.save(); ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(x + 4 * u, y + h * 0.7); ctx.lineTo(x + w - 4 * u, y + h * 0.7); ctx.stroke(); ctx.restore(); } },
+  { k: "infill", t: "Gravel fill", d: "Faint box with thin lines = compacted gravel behind or inside the blocks.", when: (ts) => ts.has("steps"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + 6 * u, y + h * 0.2, w - 12 * u, h * 0.6, "rgba(234,242,252,.06)", BP.ink2, 0.8 * u); } },
+  { k: "up", t: "UP arrow", d: "Points uphill, the way you walk up. “UP 3R” = 3 risers (steps). R1, R2… number the steps from the bottom.", when: (ts) => ts.has("steps"),
+    draw(ctx, x, y, w, h, u) { const ax = x + w * 0.5, ay = y + h - 4 * u, by = y + 5 * u; ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.arc(ax, ay, 3 * u, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax, by); ctx.stroke(); ctx.beginPath(); ctx.moveTo(ax, by); ctx.lineTo(ax - 4 * u, by + 9 * u); ctx.lineTo(ax + 4 * u, by + 9 * u); ctx.closePath(); ctx.fill(); label(ctx, "UP", x + w * 0.22, y + h / 2, 10 * u, "center", BP.ink, 600); } },
+  { k: "landing", t: "Landing / platform", d: "A flat area between flights of steps. “TOP +1' 6”” is how high its top is.", when: (ts) => ts.has("landing"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + 3 * u, y + 3 * u, w - 6 * u, h - 6 * u, "rgba(234,242,252,.14)", BP.ink, 1.5 * u); swRect(ctx, x + 9 * u, y + 9 * u, w - 18 * u, h - 18 * u, null, BP.ink, 1 * u); } },
+  { k: "path", t: "Walkway or patio", d: "Paved area at ground level. Thin lines show the paver joints.", when: (ts) => ts.has("path") || ts.has("landing"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + 3 * u, y + 3 * u, w - 6 * u, h - 6 * u, BP.fill, BP.ink, 1.5 * u); ctx.strokeStyle = "rgba(234,242,252,.35)"; ctx.lineWidth = 0.8 * u; ctx.beginPath(); for (let r = 1; r < 3; r++) { const yy = y + 3 * u + (h - 6 * u) * r / 3; ctx.moveTo(x + 3 * u, yy); ctx.lineTo(x + w - 3 * u, yy); } for (let c = 1; c < 5; c++) for (let r = 0; r < 3; r++) { const xx = x + 3 * u + (w - 6 * u) * (c - (r % 2) * 0.5) / 5, y0 = y + 3 * u + (h - 6 * u) * r / 3; ctx.moveTo(xx, y0); ctx.lineTo(xx, y0 + (h - 6 * u) / 3); } ctx.stroke(); } },
+  { k: "wall", t: "Retaining wall", d: "A wall of stacked blocks. Cross lines mark each block. The label gives its height.", when: (ts) => ts.has("wall"),
+    draw(ctx, x, y, w, h, u) { swRect(ctx, x + 2 * u, y + h * 0.32, w - 4 * u, h * 0.36, "rgba(234,242,252,.14)", BP.ink, 1.5 * u); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.beginPath(); for (let c = 1; c < 4; c++) { const xx = x + 2 * u + (w - 4 * u) * c / 4; ctx.moveTo(xx, y + h * 0.32); ctx.lineTo(xx, y + h * 0.68); } ctx.stroke(); } },
+  { k: "house", t: "Building", d: "Thick outline with diagonal lines = a house, garage or other building.", when: (ts) => ts.has("house"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "house", x: 30, y: 15, w: 52, d: 24 }, 60, 30); } },
+  { k: "grade", t: "Upper ground level", d: "Dotted outline with light shading = the higher lawn or ground the steps climb up to.", when: (ts) => ts.has("grade"),
+    draw(ctx, x, y, w, h, u) { ctx.beginPath(); ctx.rect(x + 3 * u, y + 3 * u, w - 6 * u, h - 6 * u); ctx.fillStyle = "rgba(140,200,150,.18)"; ctx.fill(); ctx.setLineDash([3 * u, 4 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1.5 * u; ctx.stroke(); ctx.setLineDash([]); } },
+  { k: "tree", t: "Tree", d: "Leafy tree from above: the outline is the spread of the branches, the dot is the trunk.", when: (ts) => ts.has("tree"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "tree", x: 20, y: 20, canopy: 36, trunk: 4 }, 40, 40); } },
+  { k: "evergreen", t: "Evergreen", d: "Dashed, spiky outline = a pine, spruce or cedar.", when: (ts) => ts.has("evergreen"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "evergreen", x: 20, y: 20, canopy: 36, trunk: 4 }, 40, 40); } },
+  { k: "shrub", t: "Shrub", d: "Small bush or planting.", when: (ts) => ts.has("shrub"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "shrub", x: 20, y: 20, canopy: 30 }, 40, 40); } },
+  { k: "rock", t: "Boulder", d: "Large rock that stays in place.", when: (ts) => ts.has("rock"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "rock", x: 20, y: 20, canopy: 30 }, 40, 40); } },
+  { k: "shore", t: "Shoreline and water", d: "Thick line = the water's edge. The shaded band with ripples is the water side.", when: (ts) => ts.has("shore"),
+    draw(ctx, x, y, w, h, u) { ctx.fillStyle = "rgba(90,170,240,.28)"; ctx.fillRect(x + 2 * u, y + h * 0.45, w - 4 * u, h * 0.5); ctx.strokeStyle = "rgba(220,240,255,.45)"; ctx.lineWidth = 1 * u; ctx.beginPath(); for (let k = 0; k <= 20; k++) { const px = x + w * 0.2 + k * 1.6 * u, py = y + h * 0.75 + Math.sin(k / 1.6) * 2.2 * u; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke(); ctx.strokeStyle = "#8fd0ff"; ctx.lineWidth = 3 * u; ctx.beginPath(); ctx.moveTo(x + 2 * u, y + h * 0.45); ctx.quadraticCurveTo(x + w / 2, y + h * 0.3, x + w - 2 * u, y + h * 0.45); ctx.stroke(); } },
+  { k: "contour", t: "Ground contour", d: "Thin curved line with a height label: all the ground along the line is at that height.", when: (ts) => ts.has("contour"),
+    draw(ctx, x, y, w, h, u) { ctx.strokeStyle = "rgba(255,214,150,.75)"; ctx.lineWidth = 1.4 * u; ctx.beginPath(); ctx.moveTo(x + 2 * u, y + h * 0.7); ctx.bezierCurveTo(x + w * 0.35, y + h * 0.1, x + w * 0.65, y + h * 0.9, x + w - 2 * u, y + h * 0.3); ctx.stroke(); } },
+  { k: "spot", t: "Spot height", d: "Small cross with a height = a measured ground height at that exact point.", when: (ts) => ts.has("spot"),
+    draw(ctx, x, y, w, h, u) { const cx = x + w * 0.3, cy = y + h * 0.6; ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.6 * u; ctx.beginPath(); ctx.moveTo(cx - 6 * u, cy); ctx.lineTo(cx + 6 * u, cy); ctx.moveTo(cx, cy - 6 * u); ctx.lineTo(cx, cy + 6 * u); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, 3 * u, 0, 7); ctx.stroke(); label(ctx, "+1'", cx + 8 * u, cy - 9 * u, 10 * u, "left", "#ffd696", 600); } },
+  { k: "tint", t: "Ground shading", d: "Shading behind the plan shows how high the ground is. The swatch runs from under water (left) to the highest ground (right).", when: () => hasTerrain(),
+    draw(ctx, x, y, w, h, u) { const cs = [tintColor(-1, 0.1), tintColor(0), tintColor(0.5), tintColor(1)]; cs.forEach((c, k) => { ctx.fillStyle = c; ctx.fillRect(x + 2 * u + k * (w - 4 * u) / 4, y + h * 0.2, (w - 4 * u) / 4, h * 0.6); }); } },
+  { k: "cutline", t: "Section line", d: "Dash-dot line with a letter at each end = where the side view cuts through the ground. The arrows show which way you are looking.", when: (ts) => ts.has("cut"),
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "cut", x: 8, y: 12, x2: 52, y2: 12, label: "A" }, 60, 30); } },
+  { k: "dim", t: "Measurement", d: "Line with tick marks at both ends; the number is the distance between the ticks (feet ' and inches ”).", when: () => true,
+    draw(ctx, x, y, w, h, u) { swItem(ctx, x, y, w, h, u, { type: "dim", x: 4, y: 10, x2: 56, y2: 10, off: 0, label: "" }, 60, 30); } },
+  { k: "area", t: "Work area", d: "Dashed box = the edge of the job site that was measured.", when: () => true,
+    draw(ctx, x, y, w, h, u) { ctx.save(); ctx.setLineDash([10 * u, 6 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1.5 * u; ctx.strokeRect(x + 3 * u, y + 5 * u, w - 6 * u, h - 10 * u); ctx.restore(); } },
+  { k: "north", t: "North arrow", d: "The arrow points north.", when: () => true,
+    draw(ctx, x, y, w, h, u) { const nx = x + w / 2, ny = y + h / 2 + 2 * u, r = Math.min(h / 2 - 2 * u, 14 * u); ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.arc(nx, ny, r, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(nx, ny - r * 0.9); ctx.lineTo(nx + r * 0.35, ny + r * 0.4); ctx.lineTo(nx, ny + r * 0.15); ctx.closePath(); ctx.fill(); } },
+  { k: "scale", t: "Scale bar", d: "Each block of the bar is the same real distance; use it to measure anything on the drawing.", when: () => true,
+    draw(ctx, x, y, w, h, u) { ctx.fillStyle = BP.ink; ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; const sw = (w - 8 * u) / 4; for (let i = 0; i < 4; i++) ctx[i % 2 ? "strokeRect" : "fillRect"](x + 4 * u + i * sw, y + h / 2, sw, 6 * u); } },
+  { k: "grid", t: "Grid", d: "Faint squares are 1 ft; brighter lines every 5 ft.", when: () => true,
+    draw(ctx, x, y, w, h, u) { ctx.lineWidth = 1 * u; for (let k = 0; k <= 6; k++) { ctx.strokeStyle = k % 5 === 0 ? BP.grid5 : BP.grid; ctx.beginPath(); ctx.moveTo(x + 4 * u + k * 8 * u, y + 2 * u); ctx.lineTo(x + 4 * u + k * 8 * u, y + h - 2 * u); ctx.stroke(); } } },
+  { k: "sideground", t: "Side view: ground", d: "In the side view, the hatched band is the soil and its thick top line is the ground surface.", when: (ts) => ts.has("cut"),
+    draw(ctx, x, y, w, h, u) { ctx.fillStyle = "rgba(160,120,80,.35)"; ctx.fillRect(x + 2 * u, y + h * 0.5, w - 4 * u, h * 0.45); ctx.strokeStyle = "#e6c79c"; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(x + 2 * u, y + h * 0.5); ctx.lineTo(x + w - 2 * u, y + h * 0.5); ctx.stroke(); } },
+  { k: "sidebuilt", t: "Side view: steps and walls", d: "Solid shapes are blocks; the thin pieces on top are caps. Heights may be stretched to show slopes clearly (the view says how much).", when: (ts) => ts.has("cut") || ts.has("steps"),
+    draw(ctx, x, y, w, h, u) { const sw = (w - 4 * u) / 3; for (let i = 0; i < 3; i++) { const top = y + h * 0.75 - (i + 1) * h * 0.2; ctx.fillStyle = "rgba(234,242,252,.55)"; ctx.fillRect(x + 2 * u + i * sw, top + 3 * u, sw * (3 - i), h * 0.2 - 3 * u); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(x + 2 * u + i * sw, top, sw * (3 - i), 3 * u); } } },
+  { k: "heights", t: "Heights", d: "+ is above, − is below the bottom of the steps (the 0 mark). 4' 6” means 4 feet 6 inches.", when: () => true,
+    draw(ctx, x, y, w, h, u) { label(ctx, "+1' 6”", x + w / 2, y + h * 0.32, 11 * u, "center", BP.ink, 600); label(ctx, "−8”", x + w / 2, y + h * 0.72, 11 * u, "center", BP.ink, 600); } },
+];
+function drawLegendBox() {
+  const box = $("legendBox"); if (box.hidden) return;
+  const c = $("legendCanvas"), W = box.clientWidth, dpr = Math.min(window.devicePixelRatio || 1, 2), x = c.getContext("2d");
+  const ents = legendEntries($("legendAll").checked), H = drawLegend(x, 12, 12, W - 24, 1, ents, 1, false) + 20;
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); c.style.height = H + "px";
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = BP.paper; x.fillRect(0, 0, W, H);
+  drawLegend(x, 12, 12, W - 24, 1, ents, 1);
+  const f = themeFilter(); c.style.filter = f === "none" ? "" : f;
+}
+function legendEntries(all) { const ts = new Set(job.items.map((i) => i.type)); return all ? LEGEND : LEGEND.filter((e) => e.when(ts)); }
+function wrapLines(ctx, text, maxW, font) { ctx.save(); ctx.font = font; const out = []; let line = ""; for (const w of String(text).split(/\s+/)) { const t = line ? line + " " + w : w; if (line && ctx.measureText(t).width > maxW) { out.push(line); line = w; } else line = t; } if (line) out.push(line); ctx.restore(); return out; }
+// Draws the legend in `cols` columns starting at (x,y), width w. Returns the height used; measure only when draw is false.
+function drawLegend(ctx, x, y, w, u, entries, cols = 1, draw = true, compact = false) {
+  const gap = 14 * u, colW = (w - gap * (cols - 1)) / cols, sw = 58 * u, sh = 34 * u, tx = sw + 10 * u, tw = colW - tx;
+  const fT = `600 ${12 * u}px "IBM Plex Sans", system-ui, sans-serif`, fD = `400 ${11 * u}px "IBM Plex Sans", system-ui, sans-serif`;
+  const rows = entries.map((e) => { const lines = compact ? [] : wrapLines(ctx, e.d, tw, fD); return { e, lines, h: Math.max(sh, 16 * u + lines.length * 14 * u) + 8 * u }; });
+  const per = Math.ceil(rows.length / cols); let maxH = 0;
+  for (let c = 0; c < cols; c++) {
+    let cy = y; const cx = x + c * (colW + gap);
+    for (const r of rows.slice(c * per, (c + 1) * per)) {
+      if (draw) {
+        ctx.save(); ctx.fillStyle = "rgba(234,242,252,.04)"; ctx.fillRect(cx, cy, sw, sh); ctx.strokeStyle = "rgba(234,242,252,.18)"; ctx.lineWidth = 1 * u; ctx.strokeRect(cx, cy, sw, sh);
+        ctx.beginPath(); ctx.rect(cx, cy, sw, sh); ctx.clip(); r.e.draw(ctx, cx, cy, sw, sh, u); ctx.restore();
+        ctx.save(); ctx.textBaseline = "top"; ctx.fillStyle = BP.ink; ctx.font = fT; ctx.fillText(r.e.t, cx + tx, compact ? cy + sh / 2 - 7 * u : cy);
+        ctx.fillStyle = BP.ink2; ctx.font = fD; r.lines.forEach((l, k) => ctx.fillText(l, cx + tx, cy + 16 * u + k * 14 * u)); ctx.restore();
+      }
+      cy += r.h;
+    }
+    maxH = Math.max(maxH, cy - y);
+  }
+  return maxH;
+}
 function rand(n) { n = Math.imul(n ^ (n >>> 15), 2246822507); n = Math.imul(n ^ (n >>> 13), 3266489909); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
 
 function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
   const c = stepCalc(it);
   ctx.save();
-  ctx.fillStyle = "rgba(12,38,72,.92)"; ctx.fillRect(X, Y, W, H);
+  ctx.fillStyle = BP.box; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.strokeRect(X, Y, W, H);
   label(ctx, "SECTION " + letter + " · " + (it.label || "STEPS").toUpperCase(), X + 10 * u, Y + 14 * u, 11 * u, "left", BP.ink, 600);
   const baseDepth = job.est.baseDepth || 6;
@@ -1725,6 +1905,7 @@ function renderJobPane() {
   }));
   renderJobs();
 }
+$("jTheme").addEventListener("change", (e) => { snapshot(); job.style = { ...job.style, theme: e.target.value }; applyTheme(); commit(); });
 const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v]];
 jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot(); fn(e.target.value); commit(); }));
 [["jSW", "w"], ["jSD", "d"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
@@ -2093,6 +2274,8 @@ function sanitizeJob(j) {
     return {
       v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom,
+      style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint" },
+      chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
       site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
       items: (Array.isArray(j.items) ? j.items : []).map((r) => sanitizeItem(r, legacy)).filter(Boolean).slice(0, 300),
@@ -2122,38 +2305,254 @@ $("exportBtn").onclick = async () => {
   const u = 2.6, titleH = 190, colX = Math.round(W * 0.64);
   const v = {}; fitView(colX, H - titleH, v, 150);
   renderSheet(ctx, W, H, v, { unit: u, section: false, selId: null });
-  ctx.fillStyle = "#123a6b"; ctx.fillRect(colX, 14, W - colX - 14, H - titleH - 14);
+  ctx.fillStyle = BP.panel; ctx.fillRect(colX, 14, W - colX - 14, H - titleH - 14);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(colX, 14); ctx.lineTo(colX, H - titleH); ctx.stroke();
   const cutLine = job.items.find((i) => i.type === "cut");
-  const stairs = job.items.filter((i) => i.type === "steps").slice(0, cutLine ? 1 : 2);
   const cw = W - colX - 80; let cy = 60;
+  // compact key of the symbols on this plan, along the bottom of the right column
+  const ents = legendEntries(false), lu = 2.2, lh = drawLegend(ctx, 0, 0, cw, lu, ents, 3, false, true), legY = H - titleH - 30 - lh;
+  const limit = legY - 70;
+  const stairs = job.items.filter((i) => i.type === "steps").slice(0, cutLine ? 1 : 2).filter((_, k) => (cutLine ? 620 : 60) + (k + 1) * 540 < limit - 120);
   if (cutLine) { renderProfile(ctx, colX + 40, cy, cw, 520, cutLine, 2.2, sideVE); cy += 560; }
   stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 500, u, "SX"[k]); cy += 540; });
+  label(ctx, "LEGEND", colX + 40, legY - 30, 30, "left", BP.ink, 600);
+  drawLegend(ctx, colX + 40, legY, cw, lu, ents, 3, true, true);
   label(ctx, "MATERIAL SCHEDULE", colX + 40, cy + 20, 30, "left", BP.ink, 600);
   cy += 70;
   const q = estimate();
   for (const l of q.lines.filter((l) => l.cat === "Materials")) {
-    if (cy > H - titleH - 50) break;
+    if (cy > limit) break;
     label(ctx, `${num1(l.qty)} ${l.unit}`.padEnd(11) + l.desc.slice(0, 52), colX + 40, cy, 22, "left", BP.ink2); cy += 34;
   }
   for (const st of job.items.filter((i) => i.type === "steps")) {
     const cc = stepCalc(st);
-    if (cy > H - titleH - 50) break;
+    if (cy > limit) break;
     cy += 10; label(ctx, `${(st.label || "Steps").toUpperCase()}: ${cc.count} × ${fmtIn(cc.H)} RISERS, ${fmtIn(st.tread)} TREADS${cc.cutting ? `, BLOCKS CUT TO ${fmtIn(cc.bH)}` : ""}`, colX + 40, cy, 22, "left", BP.ink); cy += 34;
-    for (const [kind, msg] of cc.checks.filter(([kk]) => kk === "bad")) { if (cy > H - titleH - 50) break; label(ctx, "FIX: " + msg.slice(0, 70), colX + 40, cy, 20, "left", "#ffb4a8"); cy += 30; }
+    for (const [kind, msg] of cc.checks.filter(([kk]) => kk === "bad")) { if (cy > limit) break; label(ctx, "FIX: " + msg.slice(0, 70), colX + 40, cy, 20, "left", "#ffb4a8"); cy += 30; }
   }
-  ctx.fillStyle = "#0f2f58"; ctx.fillRect(0, H - titleH, W, titleH);
+  ctx.fillStyle = BP.band; ctx.fillRect(0, H - titleH, W, titleH);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.strokeRect(14, 14, W - 28, H - 28); ctx.beginPath(); ctx.moveTo(14, H - titleH); ctx.lineTo(W - 14, H - titleH); ctx.stroke();
   const co = company();
   const cols = [[40, "JOB", job.name], [760, "CLIENT", job.client], [1300, "SITE", job.address], [2000, "PREPARED BY", co.name || ""]];
   for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 46), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
   label(ctx, `QUOTE ${quoteNo()} · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
   if (job.notes) label(ctx, "NOTES: " + job.notes.slice(0, 120), 1300, H - titleH + 140, 24, "left", BP.ink2);
-  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(c));
+  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(themed(c)));
+};
+
+// ---------- tiled print: PDF of letter/legal/A4 sheets to tape together ----------
+const PAPER = { letter: [8.5, 11, "Letter"], legal: [8.5, 14, "Legal"], tabloid: [11, 17, "Tabloid"], a4: [8.27, 11.69, "A4"] };
+const PR_SCALES = [[0.125, '1/8" = 1 ft'], [0.1875, '3/16" = 1 ft'], [0.25, '1/4" = 1 ft'], [0.375, '3/8" = 1 ft'], [0.5, '1/2" = 1 ft'], [0.75, '3/4" = 1 ft'], [1, '1" = 1 ft']];
+const PR = { dpi: 150, m: 0.4, top: 0.6, ov: 0.5 }; // margins, label band at the top, overlap between neighbouring sheets (inches of paper)
+// How the plan splits into sheets for a paper size and scale (paper inches per foot)
+function tileLayout(paper, perFt) {
+  const [a, b] = PAPER[paper], k = perFt / 12, B = planBounds(), pad = 18;
+  const ext = { minX: B.minX - pad, maxX: B.maxX + pad, minY: B.minY - pad, maxY: B.maxY + pad };
+  const EW = (ext.maxX - ext.minX) * k, EH = (ext.maxY - ext.minY) * k;
+  let best = null;
+  for (const [PW, PH] of [[a, b], [b, a]]) {
+    const pw = PW - 2 * PR.m, ph = PH - PR.m - PR.top, sx = pw - PR.ov, sy = ph - PR.ov;
+    const nx = Math.max(1, Math.ceil((EW - PR.ov) / sx)), ny = Math.max(1, Math.ceil((EH - PR.ov) / sy));
+    if (!best || nx * ny < best.nx * best.ny) best = { PW, PH, pw, ph, sx, sy, nx, ny };
+  }
+  const L = { ...best, k, perFt, ext, paper };
+  L.totW = L.nx * L.sx + PR.ov; L.totH = L.ny * L.sy + PR.ov;
+  L.x0 = (ext.minX + ext.maxX) / 2 - L.totW / k / 2; // world x at the left edge of column A
+  L.y0 = (ext.minY + ext.maxY) / 2 + L.totH / k / 2; // world y at the top edge of row 1
+  return L;
+}
+const sheetName = (i, j) => String.fromCharCode(65 + i) + (j + 1);
+function prScaleText(perFt) { const s = PR_SCALES.find((x) => x[0] === perFt); return (s ? s[1] : perFt + '" = 1 ft') + ` (1:${Math.round(12 / perFt)})`; }
+// Tile grid drawn over a plan view (cover page and the dialog preview)
+function drawTileGrid(ctx, v, L, u) {
+  ctx.save(); ctx.strokeStyle = BP.sel; ctx.lineWidth = 1.5 * u; ctx.setLineDash([8 * u, 5 * u]);
+  for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
+    const wx = L.x0 + i * L.sx / L.k, wy = L.y0 - j * L.sy / L.k, [ax, ay] = W2S(v, wx, wy), [bx, by] = W2S(v, wx + L.sx / L.k, wy - L.sy / L.k);
+    ctx.strokeRect(ax, ay, bx - ax, by - ay);
+    label(ctx, sheetName(i, j), (ax + bx) / 2, (ay + by) / 2, Math.max(10 * u, Math.min(28 * u, (bx - ax) / 4)), "center", BP.sel, 700);
+  }
+  ctx.restore();
+}
+function prOpen() {
+  const sel = $("prScale");
+  sel.innerHTML = PR_SCALES.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  $("prTheme").value = !job.style || job.style.theme === "blueprint" || !THEMES[job.style.theme] ? "white" : job.style.theme;
+  // default: the largest scale that fits on six sheets or fewer
+  const paper = $("prPaper").value; let pick = PR_SCALES[0][0];
+  for (const [v] of PR_SCALES) { const L = tileLayout(paper, v); if (L.nx * L.ny <= 9) pick = v; }
+  sel.value = String(pick);
+  $("printDlg").hidden = false; $("prGo").disabled = false; prPreview();
+}
+function prPreview() {
+  const L = tileLayout($("prPaper").value, +$("prScale").value), c = $("prPreview"), { w, h, dpr } = sizeCanvas(c), ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const v = {}; const fakeW = L.totW / L.k, fakeH = L.totH / L.k;
+  v.s = Math.min((w - 20) / fakeW, (h - 20) / fakeH); v.ox = w / 2 - (L.x0 + fakeW / 2) * v.s; v.oy = h / 2 + (L.y0 - fakeH / 2) * v.s;
+  withPaper($("prTheme").value, () => { renderSheet(ctx, w, h, v, { unit: 0.7, section: false, selId: null, noChrome: true }); drawTileGrid(ctx, v, L, 1); });
+  const f = THEMES[$("prTheme").value].filter; c.style.filter = f === "none" ? "" : f;
+  const n = L.nx * L.ny, PWd = L.PW > L.PH ? "landscape" : "portrait";
+  $("prInfo").textContent = `${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}. Taped together the plan is about ${num1(L.totW)} × ${num1(L.totH)} in. Plus a cover, legend and sections pages.`;
+}
+// Text for the white margins (drawn after the style filter so it is always black)
+function marginText(ctx, t, x, y, size, align = "left", weight = 500) { ctx.save(); ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = "#111"; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); ctx.restore(); }
+function newPage(L) { const c = document.createElement("canvas"); c.width = Math.round(L.PW * PR.dpi); c.height = Math.round(L.PH * PR.dpi); const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); return [c, x]; }
+// The drawing area of a page, drawn in blueprint colours and then given the chosen style
+function pageBody(L, theme, draw) {
+  const W = Math.round(L.pw * PR.dpi), H = Math.round(L.ph * PR.dpi), c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d"); withPaper(theme, () => { x.fillStyle = BP.paper; x.fillRect(0, 0, W, H); draw(x, W, H); }); return themed(c, theme);
+}
+function pageFooter(ctx, L, text, n, total) {
+  const D = PR.dpi, y = (L.PH - PR.m / 2) * D;
+  marginText(ctx, text, PR.m * D, y, 0.12 * D);
+  marginText(ctx, `Page ${n} of ${total}`, (L.PW - PR.m) * D, y, 0.12 * D, "right");
+}
+function pageHeader(ctx, L, text) { marginText(ctx, text, PR.m * PR.dpi, PR.top / 2 * PR.dpi, 0.15 * PR.dpi, "left", 600); }
+async function makePrintPdf() {
+  const L = tileLayout($("prPaper").value, +$("prScale").value), theme = $("prTheme").value, D = PR.dpi, u = D / 96;
+  const pages = [], cuts = job.items.filter((i) => i.type === "cut"), stairs = job.items.filter((i) => i.type === "steps");
+  const secBlocks = cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = 2 + L.nx * L.ny + secPages;
+  const title = `${job.name || "Job"}${job.client ? " · " + job.client : ""}`, when = new Date().toLocaleDateString();
+  const step = async (msg) => { $("prInfo").textContent = msg; await new Promise((r) => setTimeout(r, 0)); };
+  const barFt = [1, 2, 4, 5, 10, 20, 40].find((f) => f * L.perFt >= 1.4) || 40, barIn = barFt * L.perFt;
+  const addPage = async (c) => { const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9)); pages.push({ w: L.PW, h: L.PH, px: c.width, py: c.height, jpg: new Uint8Array(await b.arrayBuffer()) }); };
+
+  // 1. cover: overview with the sheet map, and how to put it together
+  await step("Making the cover page…");
+  {
+    const [c, x] = newPage(L);
+    const body = pageBody(L, theme, (ctx, W, H) => {
+      const steps = [
+        `Print every page at "Actual size" or 100%. Turn OFF "Fit to page" / "Shrink to fit".`,
+        `Check the scale: the bar at the bottom of each plan sheet must measure exactly ${fmtIn(barIn)} (${barFt} ft on the job). If not, the printer changed the size.`,
+        `Lay the plan sheets out like the map above: letters go left to right (A, B, C…), numbers go top to bottom (1, 2, 3…).`,
+        `Cut the white margin off the LEFT edge of every sheet except column A, and off the TOP edge of every sheet except row 1.`,
+        `Slide each cut edge onto the dashed line of the sheet beside or above it, match the round + targets, and tape on the back.`,
+      ];
+      const instrW = W - 0.6 * D, fs = 0.125 * D, font = `400 ${fs}px "IBM Plex Sans", system-ui, sans-serif`, lines = steps.map((t) => wrapLines(ctx, t, instrW - 0.3 * D, font));
+      const instrH = 0.35 * D + lines.reduce((a, l) => a + l.length * fs * 1.35 + 0.06 * D, 0);
+      const mapY = 0.95 * D, mapH = H - mapY - instrH - 0.25 * D;
+      const v = {}, fw = L.totW / L.k, fh = L.totH / L.k; v.s = Math.min((W - 0.6 * D) / fw, mapH / fh); v.ox = W / 2 - (L.x0 + fw / 2) * v.s; v.oy = mapY + mapH / 2 + (L.y0 - fh / 2) * v.s;
+      ctx.save(); ctx.beginPath(); ctx.rect(0.3 * D, mapY, W - 0.6 * D, mapH); ctx.clip();
+      renderSheet(ctx, W, H, v, { unit: u * 0.8, section: false, selId: null, noChrome: true }); ctx.restore();
+      ctx.fillStyle = BP.paper; ctx.fillRect(0, 0, W, mapY - 2); ctx.fillRect(0, mapY + mapH, W, H - mapY - mapH);
+      label(ctx, (job.name || "Job").toUpperCase(), 0.3 * D, 0.35 * D, 0.28 * D, "left", BP.ink, 700, "IBM Plex Sans");
+      label(ctx, [job.client, job.address, when, "Quote " + quoteNo()].filter(Boolean).join("  ·  "), 0.3 * D, 0.7 * D, 0.13 * D, "left", BP.ink2, 500, "IBM Plex Sans");
+      drawTileGrid(ctx, v, L, u);
+      let y = mapY + mapH + 0.3 * D;
+      label(ctx, `HOW TO PUT THE PLAN TOGETHER  ·  ${L.nx * L.ny} SHEETS AT ${prScaleText(L.perFt).toUpperCase()}`, 0.3 * D, y, 0.14 * D, "left", BP.ink, 700, "IBM Plex Sans"); y += 0.25 * D;
+      lines.forEach((ls, k) => {
+        label(ctx, `${k + 1}.`, 0.3 * D, y + fs * 0.6, fs, "left", BP.ink, 700, "IBM Plex Sans");
+        ctx.save(); ctx.font = font; ctx.fillStyle = BP.ink; ctx.textBaseline = "middle"; ls.forEach((l, n) => ctx.fillText(l, 0.6 * D, y + fs * 0.6 + n * fs * 1.35)); ctx.restore();
+        y += ls.length * fs * 1.35 + 0.06 * D;
+      });
+    });
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Cover · sheet map and instructions"); pageFooter(x, L, title, 1, total); await addPage(c);
+  }
+  // 2. legend
+  await step("Making the legend…");
+  {
+    const [c, x] = newPage(L);
+    const body = pageBody(L, theme, (ctx, W, H) => {
+      label(ctx, "LEGEND · WHAT THE SYMBOLS AND COLOURS MEAN", 0.3 * D, 0.35 * D, 0.17 * D, "left", BP.ink, 700, "IBM Plex Sans");
+      const ents = legendEntries(false), cols = L.PW > L.PH ? 2 : 1;
+      let lu = u * 1.25; while (lu > u * 0.8 && drawLegend(ctx, 0.3 * D, 0.7 * D, W - 0.6 * D, lu, ents, cols, false) > H - 0.9 * D) lu *= 0.92;
+      drawLegend(ctx, 0.3 * D, 0.7 * D, W - 0.6 * D, lu, ents, cols);
+    });
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Legend"); pageFooter(x, L, title, 2, total); await addPage(c);
+  }
+  // 3. plan sheets at true scale
+  const v = { s: L.k * D }, tileW = Math.round(L.pw * D), tileH = Math.round(L.ph * D);
+  const targets = [];
+  for (let i = 0; i < L.nx - 1; i++) for (let j = 0; j < L.ny; j++) for (const f of [0.25, 0.75]) targets.push([L.x0 + ((i + 1) * L.sx + PR.ov / 2) / L.k, L.y0 - (j * L.sy + f * L.sy) / L.k]);
+  for (let j = 0; j < L.ny - 1; j++) for (let i = 0; i < L.nx; i++) for (const f of [0.25, 0.75]) targets.push([L.x0 + (i * L.sx + f * L.sx) / L.k, L.y0 - ((j + 1) * L.sy + PR.ov / 2) / L.k]);
+  let n = 2;
+  for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
+    n++; await step(`Making plan sheet ${sheetName(i, j)} (${n} of ${total})…`);
+    const [c, x] = newPage(L);
+    v.ox = -(L.x0 + i * L.sx / L.k) * v.s; v.oy = (L.y0 - j * L.sy / L.k) * v.s;
+    const body = pageBody(L, theme, (ctx, W, H) => {
+      renderSheet(ctx, W, H, v, { unit: u, section: false, selId: null, noChrome: true });
+      ctx.save(); ctx.strokeStyle = BP.sel; ctx.fillStyle = "rgba(255,200,87,.08)"; ctx.lineWidth = 1.5 * u; ctx.setLineDash([10 * u, 6 * u]);
+      const ovp = PR.ov * D;
+      if (i < L.nx - 1) { ctx.fillRect(W - ovp, 0, ovp, H); ctx.beginPath(); ctx.moveTo(W - ovp, 0); ctx.lineTo(W - ovp, H); ctx.stroke(); }
+      if (j < L.ny - 1) { ctx.fillRect(0, H - ovp, W, ovp); ctx.beginPath(); ctx.moveTo(0, H - ovp); ctx.lineTo(W, H - ovp); ctx.stroke(); }
+      ctx.setLineDash([]);
+      for (const [tx, ty] of targets) { const [sx, sy] = W2S(v, tx, ty); if (sx < -20 || sy < -20 || sx > W + 20 || sy > H + 20) continue; ctx.beginPath(); ctx.arc(sx, sy, 0.1 * D, 0, 7); ctx.moveTo(sx - 0.17 * D, sy); ctx.lineTo(sx + 0.17 * D, sy); ctx.moveTo(sx, sy - 0.17 * D); ctx.lineTo(sx, sy + 0.17 * D); ctx.stroke(); }
+      const tag = (t, x, y, rot) => { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.font = `700 ${11 * u}px "IBM Plex Sans", system-ui, sans-serif`; const tw = ctx.measureText(t).width + 10 * u; ctx.fillStyle = BP.paper; ctx.fillRect(-tw / 2, -9 * u, tw, 18 * u); label(ctx, t, 0, 0, 11 * u, "center", BP.sel, 700, "IBM Plex Sans"); ctx.restore(); };
+      if (i < L.nx - 1) tag(`SHEET ${sheetName(i + 1, j)} GOES OVER THIS STRIP`, W - ovp / 2, H / 2, Math.PI / 2);
+      if (j < L.ny - 1) tag(`SHEET ${sheetName(i, j + 1)} GOES OVER THIS STRIP`, W / 2, H - ovp / 2, 0);
+      ctx.restore();
+    });
+    x.drawImage(body, PR.m * D, PR.top * D);
+    pageHeader(x, L, `Sheet ${sheetName(i, j)}   ·   column ${String.fromCharCode(65 + i)} of ${L.nx}, row ${j + 1} of ${L.ny}   ·   ${prScaleText(L.perFt)}`);
+    { // north arrow in the top margin, so any sheet on its own still reads
+      const nx = (L.PW - PR.m - 0.2) * D, ny = PR.top / 2 * D, r = 0.17 * D;
+      x.save(); x.strokeStyle = "#111"; x.fillStyle = "#111"; x.lineWidth = 2; x.beginPath(); x.arc(nx, ny, r, 0, 7); x.stroke(); x.beginPath(); x.moveTo(nx, ny - r * 0.85); x.lineTo(nx + r * 0.35, ny + r * 0.4); x.lineTo(nx, ny + r * 0.15); x.closePath(); x.fill(); x.restore();
+      marginText(x, "N", nx - r - 0.06 * D, ny, 0.12 * D, "right", 700);
+    }
+    // neighbours, so a dropped sheet finds its place
+    const mid = (a) => a * D;
+    if (i > 0) marginText(x, `◂ ${sheetName(i - 1, j)}`, mid(0.04), mid(PR.top + L.ph / 2), 0.11 * D);
+    if (j > 0) marginText(x, `▴ ${sheetName(i, j - 1)}`, mid(L.PW / 2), mid(PR.top - 0.12), 0.11 * D, "center");
+    // scale check bar in the bottom margin
+    const bx = mid(L.PW / 2 - barIn / 2), by = mid(L.PH - PR.m / 2);
+    x.save(); x.fillStyle = "#111"; x.strokeStyle = "#111"; x.lineWidth = 2; const seg = barIn * D / 4;
+    for (let q = 0; q < 4; q++) x[q % 2 ? "strokeRect" : "fillRect"](bx + q * seg, by - 0.03 * D, seg, 0.06 * D); x.restore();
+    marginText(x, `${barFt} ft = ${fmtIn(barIn)} on paper`, bx + barIn * D + 0.1 * D, by, 0.1 * D);
+    marginText(x, `Page ${n} of ${total}`, (L.PW - PR.m) * D, by, 0.11 * D, "right");
+    await addPage(c);
+  }
+  // 4. side view and step sections, two per page (not to scale)
+  const blocks = [...cuts.map((ct) => ["cut", ct]), ...stairs.map((st) => ["steps", st])];
+  for (let p0 = 0; p0 < blocks.length; p0 += 2) {
+    n++; await step(`Making the sections page (${n} of ${total})…`);
+    const [c, x] = newPage(L);
+    const body = pageBody(L, theme, (ctx, W, H) => {
+      const bh = (H - 0.3 * D) / 2;
+      blocks.slice(p0, p0 + 2).forEach(([kind, it], k) => {
+        const y = 0.15 * D + k * bh;
+        if (kind === "cut") renderProfile(ctx, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, it, u, sideVE);
+        else drawSection(ctx, it, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, u * 1.2, String.fromCharCode(83 + Math.min(6, stairs.indexOf(it))));
+      });
+    });
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Side view and step sections (not to scale; read the measurements)"); pageFooter(x, L, title, n, total); await addPage(c);
+  }
+  await step("Saving the PDF…");
+  return pdfFromJpegs(pages);
+}
+// Minimal PDF writer: one full-page JPEG per page.
+function pdfFromJpegs(pages) {
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const put = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); len += b.length; };
+  const obj = (id, body) => { offs[id] = len; put(`${id} 0 obj\n`); body(); put("\nendobj\n"); };
+  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  const N = pages.length, kids = pages.map((_, k) => `${3 + k * 3} 0 R`).join(" ");
+  obj(1, () => put("<< /Type /Catalog /Pages 2 0 R >>"));
+  obj(2, () => put(`<< /Type /Pages /Kids [${kids}] /Count ${N} >>`));
+  pages.forEach((pg, k) => {
+    const id = 3 + k * 3, W = (pg.w * 72).toFixed(2), H = (pg.h * 72).toFixed(2), cs = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(id, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R >>`));
+    obj(id + 1, () => put(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
+    obj(id + 2, () => { put(`<< /Type /XObject /Subtype /Image /Width ${pg.px} /Height ${pg.py} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpg.length} >>\nstream\n`); put(pg.jpg); put("\nendstream"); });
+  });
+  const xref = len, count = 3 + N * 3;
+  put(`xref\n0 ${count}\n0000000000 65535 f \n` + offs.slice(1).map((o) => String(o).padStart(10, "0") + " 00000 n \n").join(""));
+  put(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+$("printBtn").onclick = prOpen;
+for (const id of ["prPaper", "prScale", "prTheme"]) $(id).onchange = prPreview;
+$("prCancel").onclick = () => { $("printDlg").hidden = true; };
+$("printDlg").addEventListener("click", (e) => { if (e.target.id === "printDlg") $("printDlg").hidden = true; });
+$("prGo").onclick = async () => {
+  $("prGo").disabled = true;
+  try { const pdf = await makePrintPdf(); await saveFile(slug(job.name || "plan") + "_print.pdf", pdf); $("printDlg").hidden = true; }
+  catch (e) { $("prInfo").textContent = "Couldn't make the PDF: " + ((e && e.message) || e); }
+  finally { $("prGo").disabled = false; }
 };
 
 // ---------- undo / toast / view ----------
-$("undoBtn").onclick = () => { const s = undoStack.pop(); if (!s) { toast("Nothing to undo."); return; } job = JSON.parse(s); if (!job.items.find((i) => i.id === selId)) selId = null; renderJobPane(); renderMaterials(); renderEstFields(); commit(); };
+$("undoBtn").onclick = () => { const s = undoStack.pop(); if (!s) { toast("Nothing to undo."); return; } const chat = job.chat; job = JSON.parse(s); job.chat = chat; job.style = job.style || { theme: "blueprint" }; applyTheme(); if (!job.items.find((i) => i.id === selId)) selId = null; renderJobPane(); renderMaterials(); renderEstFields(); commit(); };
 let toastT;
 function toast(m, actionLabel, action) {
   const t = $("toast"); t.textContent = m; t.hidden = false;
@@ -2163,6 +2562,9 @@ function toast(m, actionLabel, action) {
 $("fitBtn").onclick = () => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); };
 $("secBtn").setAttribute("aria-pressed", showSection);
 $("secBtn").onclick = (e) => { showSection = !showSection; e.target.setAttribute("aria-pressed", showSection); drawPlan(); };
+$("legendBtn").onclick = () => { const b = $("legendBox"); b.hidden = !b.hidden; $("legendBtn").setAttribute("aria-pressed", !b.hidden); drawLegendBox(); };
+$("legendClose").onclick = () => { $("legendBox").hidden = true; $("legendBtn").setAttribute("aria-pressed", false); };
+$("legendAll").onchange = drawLegendBox;
 $("snapBtn").onclick = (e) => { snap = !snap; e.target.setAttribute("aria-pressed", snap); e.target.textContent = snap ? 'Snap 1"' : "Snap off"; };
 
 let view = "plan";
@@ -2186,7 +2588,7 @@ $("sideCut").addEventListener("change", (e) => { sideCutId = e.target.value; dra
 $("sideSave").addEventListener("click", async () => {
   const c = document.createElement("canvas"); c.width = 3000; c.height = 1500; const cut = currentCut(); if (!cut) return;
   const ctx = c.getContext("2d"); renderProfile(ctx, 0, 0, 3000, 1500, cut, 2.4, sideVE);
-  saveFile(slug(job.name) + "_section_" + (cut.label || "A") + ".png", await canvasBlob(c));
+  saveFile(slug(job.name) + "_section_" + (cut.label || "A") + ".png", await canvasBlob(themed(c)));
 });
 function currentCut() { const cuts = job.items.filter((i) => i.type === "cut"); return cuts.find((c) => c.id === sideCutId) || cuts[0] || null; }
 // Height of anything built at a point: [top, kind] where kind is "block", "cap", "house", "fill" or null
@@ -2560,7 +2962,7 @@ function build3d() {
 
 // ---------- AI assistant ----------
 function aiCatalog() {
-  return allMats().map((m) => `${m.id}: ${m.brand} ${matName(m)} [${m.kind}${m.L ? `, ${m.L}×${m.D}×${m.H} in` : ""}] colours: ${(m.colors || []).join("/")}`).join("\n");
+  return allMats().map((m) => `${m.id}: ${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)} [${m.kind}${m.L ? ` ${m.L}x${m.D}x${m.H}` : ""}] ${(m.colors || []).join("/")}`).join("\n");
 }
 const SCHEMA_DOC = `JSON shape (all lengths in INCHES, numbers only):
 {
@@ -2592,29 +2994,35 @@ Item types:
 Elevations are inches from the job datum (0 = bottom of the steps); below the datum is negative.
 For L-shaped, U-turn or multi-flight stairs, use separate steps items joined by landings; each upper flight's "elev" equals the landing "h".
 Keep existing "id" values for items you keep; new items need no id.`;
-function aiPrompt(mode, text, nPhotos) {
-  const cur = JSON.stringify({ name: job.name, client: job.client, notes: job.notes, site: job.site, items: job.items });
+// The assistant answers with a short reply and a list of edits to apply, so small changes come back fast.
+const OPS_DOC = `Reply with ONLY one JSON object, no markdown fences:
+{"reply": "1-3 short sentences to the contractor: what you changed, what you assumed, or a question if something is unclear",
+ "ops": [ ...edits... ]}
+Edits (use as few as needed; an empty list is fine when you only answer or ask a question):
+- {"op":"add","item":{...one item...}}
+- {"op":"update","id":"<existing id>","set":{...only the fields that change...}}
+- {"op":"delete","id":"<existing id>"}
+- {"op":"replace","items":[...every item...],"site":{"w","d"}}   only for drawing a whole new layout
+- {"op":"job","set":{"name","client","address","notes","site":{"w","d"}}}
+- {"op":"style","set":{"theme":"blueprint"|"white"|"mono"|"sepia"}}   blueprint look: blue paper, colour on white (prints best), black on white, or sepia
+Moving an item is an update of x and y; turning it is an update of rot.`;
+function aiRules() {
   const d = job.defaults;
-  return `You are the layout assistant inside a tablet app that hardscape and stonework contractors use to draw blueprints, 3D renderings and quotes.
-${mode === "new" ? "Draw a NEW layout from the contractor's description." : "REVISE the current layout per the contractor's request. Change only what they ask for, keep everything else exactly as it is (same ids, same positions)."}
-Convert feet and inches carefully (1 ft = 12 in). Choose sensible positions when the contractor gives relative directions ("left of the steps" means left when standing at the bottom looking up). Include every tree, shrub, rock, building or other feature they mention, with realistic sizes when they don't give one. Size the work area to fit the job with a few feet of margin.
-Use the materials they name. When they don't name one, use the job defaults: steps ${d.block} ${d.color} with ${d.cap || "no cap"} ${d.capColor}, ${d.stepRise}" per step; walls ${d.wallBlock}; paving ${d.surface} ${d.surfaceColor}.
-${nPhotos ? `They attached ${nPhotos} photo(s) of a sketch or the site. Read any written measurements on them; prefer typed measurements when they conflict.` : ""}
+  return `You are the drawing assistant inside a tablet app that hardscape and stonework contractors use to draw blueprints, side views, 3D renderings and quotes. You work with the contractor over many messages, changing the drawing a bit at a time.
+Convert feet and inches carefully (1 ft = 12 in). Relative directions: "left of the steps" is left when standing at the bottom looking up. Include every tree, shrub, rock, building, shoreline or other feature mentioned, with realistic sizes when none are given.
+Use the materials named. Otherwise use the job defaults: steps ${d.block} ${d.color} with ${d.cap || "no cap"} ${d.capColor}, ${d.stepRise}" per step; walls ${d.wallBlock}; paving ${d.surface} ${d.surfaceColor}.
 
-${SCHEMA_DOC}
+${SCHEMA_DOC.replace(/^JSON shape[\s\S]*?\n}\n/, "")}
 
 Material list (id: description):
 ${aiCatalog()}
 
-Current job:
-${cur}
-
-Contractor's ${mode === "new" ? "description" : "requested change"}:
-"""${text}"""
-
-Reply with ONLY the JSON object, no markdown fences.`;
+${OPS_DOC}`;
 }
-
+const r2 = (k, v) => typeof v === "number" ? Math.round(v * 100) / 100 : v;
+function aiJobState() {
+  return JSON.stringify({ name: job.name, client: job.client, notes: job.notes, site: job.site, style: job.style, items: job.items }, r2);
+}
 let sampleCap = null, aiCtl = null, photos = [];
 function extractJson(t) { const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a < 0 || b < a) throw new Error("no json"); return JSON.parse(t.slice(a, b + 1)); }
 async function blobToB64(b) { const buf = new Uint8Array(await b.arrayBuffer()); let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000)); return btoa(s); }
@@ -2632,21 +3040,20 @@ function renderThumbs() {
   $("aiThumbs").innerHTML = ""; photos.forEach((p) => { const i = new Image(); i.src = URL.createObjectURL(p); i.alt = "Attached photo"; $("aiThumbs").appendChild(i); });
   $("aiClearPhotos").hidden = !photos.length;
 }
-async function askWithApiKey(prompt, signal, onText) {
+async function askWithApiKey(turns, signal, onText) {
   const key = $("apiKey").value.trim();
   if (!key) throw { code: "no_key", message: "Add your Anthropic API key below, or open this app inside claude.ai." };
   const { default: Anthropic } = await import("https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.131.0/+esm");
   const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
-  const content = [];
-  for (const p of photos) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: await blobToB64(p) } });
-  content.push({ type: "text", text: prompt });
+  const messages = turns.map((t) => ({ role: t.role, content: [{ type: "text", text: t.content }] }));
+  for (const p of photos) messages[messages.length - 1].content.unshift({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: await blobToB64(p) } });
   const stream = client.beta.messages.stream({
     model: "claude-opus-5-5",
-    max_tokens: 32000,
+    max_tokens: 16000,
     output_config: { effort: "medium" },
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    messages: [{ role: "user", content }],
+    messages,
   }, { signal });
   let text = "";
   stream.on("text", (d) => { text += d; onText(text); });
@@ -2655,55 +3062,207 @@ async function askWithApiKey(prompt, signal, onText) {
   if (msg.stop_reason === "max_tokens") throw { code: "too_long", message: "The answer was cut off. Try describing fewer items at once." };
   return msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
 }
-async function runAi(mode) {
+// Applies the assistant's edits as one undoable change. Returns a short description of what changed.
+function applyOps(ops) {
+  let added = 0, changed = 0, removed = 0, other = [];
+  const fresh = (raw) => { const it = sanitizeItem({ ...raw, id: raw.id && !job.items.some((i) => i.id === raw.id) ? raw.id : undefined }); return it; };
+  for (const o of Array.isArray(ops) ? ops : []) {
+    try {
+      if (o.op === "add" && o.item) { const it = fresh(o.item); if (it) { job.items.push(it); added++; } }
+      else if (o.op === "update" && o.id) {
+        const k = job.items.findIndex((i) => i.id === o.id); if (k < 0) continue;
+        const set = o.set || {}, merged = { ...job.items[k], ...set };
+        if (["block", "cap", "stepRise", "capOver"].some((f) => f in set) && merged.type === "steps" && !("tread" in set)) { delete merged.tread; delete merged.base; }
+        if (merged.type === "unit" && "block" in set && !("w" in set)) { const m = mat(set.block); if (m) { merged.w = m.L || merged.w; merged.d = m.D || merged.d; merged.h = m.H; } }
+        const it = sanitizeItem(merged); if (it) { it.id = o.id; job.items[k] = it; changed++; }
+      }
+      else if (o.op === "delete" && o.id) { const n = job.items.length; job.items = job.items.filter((i) => i.id !== o.id); removed += n - job.items.length; }
+      else if (o.op === "replace" && Array.isArray(o.items)) {
+        job.items = o.items.map((r) => sanitizeItem(r)).filter(Boolean); added += job.items.length;
+        if (o.site) job.site = { w: num(o.site.w, job.site.w, 48, 20000), d: num(o.site.d, job.site.d, 48, 20000) };
+        other.push("new layout");
+      }
+      else if (o.op === "job" && o.set) {
+        for (const f of ["name", "client", "address", "notes"]) if (typeof o.set[f] === "string") job[f] = o.set[f].slice(0, f === "notes" ? 600 : 120);
+        if (o.set.site) job.site = { w: num(o.set.site.w, job.site.w, 48, 20000), d: num(o.set.site.d, job.site.d, 48, 20000) };
+        other.push("job details");
+      }
+      else if (o.op === "style" && o.set && THEMES[o.set.theme]) { job.style = { ...job.style, theme: o.set.theme }; applyTheme(); other.push(THEMES[o.set.theme].label.toLowerCase() + " style"); }
+    } catch {}
+  }
+  const parts = [];
+  if (added) parts.push(`${added} added`); if (changed) parts.push(`${changed} changed`); if (removed) parts.push(`${removed} removed`);
+  return parts.concat(other).join(", ");
+}
+function renderChat(streaming) {
+  const log = $("chatLog"), chat = job.chat || [];
+  log.innerHTML = chat.map((m) => `<div class="msg ${m.role}"><div>${escapeHtml(m.text)}</div>${m.note ? `<small>${escapeHtml(m.note)}</small>` : ""}</div>`).join("")
+    + (streaming != null ? `<div class="msg assistant pending"><div>${escapeHtml(streaming || "Thinking…")}</div></div>` : "")
+    + (!chat.length && streaming == null ? `<p class="note">Tell the assistant what to draw, then keep going: "move the oak 3 ft left", "make the steps 6 ft wide", "add a contour at -2 ft along the beach", "switch to black on white". Every change can be undone.</p>` : "");
+  log.scrollTop = log.scrollHeight;
+}
+async function runAi() {
   const text = $("aiText").value.trim();
-  if (!text && !photos.length) { toast("Describe the job or attach a sketch first."); return; }
-  if (mode === "revise" && !job.items.length) mode = "new";
-  const prompt = aiPrompt(mode, text || "(see attached photo)", photos.length);
-  const out = $("aiOut"); out.textContent = "Thinking… this can take up to a minute.";
-  aiCtl = new AbortController(); $("aiStop").hidden = false; $("aiNew").disabled = $("aiRevise").disabled = true;
-  const onText = (t) => { const m = t.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)/); out.textContent = m ? m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"') : "Drawing the layout…"; };
+  if (!text && !photos.length) { toast("Type a message or add a photo first."); return; }
+  const chat = job.chat = (job.chat || []).slice(-30);
+  chat.push({ role: "user", text: text || "(see the attached photo)" });
+  $("aiText").value = ""; renderChat("");
+  // Earlier turns give context; the current drawing is always sent fresh with the newest message.
+  const history = chat.slice(-13, -1).map((m) => ({ role: m.role, content: m.text }));
+  const newest = `Current drawing (JSON):\n${aiJobState()}\n\n${photos.length ? `Attached: ${photos.length} photo(s) of a sketch or the site. Read any measurements written on them.\n\n` : ""}Contractor: ${text || "(see the attached photo)"}`;
+  const turns = [{ role: "user", content: aiRules() + "\n\nSay ready." }, { role: "assistant", content: "Ready." }, ...history, { role: "user", content: newest }];
+  for (let k = 2; k < turns.length - 1; k++) if (turns[k].role === turns[k - 1].role) turns[k - 1].content += "\n\n" + turns.splice(k--, 1)[0].content; // keep turns alternating
+  aiCtl = new AbortController(); $("aiStop").hidden = false; $("aiSend").disabled = true;
+  const onText = (t) => { const m = t.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/); renderChat(m ? m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"') : "Working on the drawing…"); };
+  const started = Date.now(), tick = setInterval(() => { const p = document.querySelector(".msg.pending div"); if (p && /^(Thinking|Working)/.test(p.textContent)) p.textContent = `Thinking… ${Math.round((Date.now() - started) / 1000)}s`; }, 1000);
   try {
     let raw;
     if (sampleCap) {
-      const opts = { signal: aiCtl.signal, modelTier: "complex", onText: ({ text }) => onText(text) };
+      const opts = { signal: aiCtl.signal, modelTier: $("aiFast").checked ? "quick" : "default", cache: false, onText: ({ text }) => onText(text) };
       if (photos.length) opts.images = photos;
-      raw = (await sampleCap(prompt, opts)).text;
-    } else raw = await askWithApiKey(prompt, aiCtl.signal, onText);
+      raw = (await sampleCap(turns, opts)).text;
+    } else raw = await askWithApiKey(turns, aiCtl.signal, onText);
     const res = extractJson(raw);
-    const next = sanitizeJob({ ...job, ...(res.job || {}), defaults: job.defaults, est: job.est, prices: job.prices, custom: job.custom, extras: job.extras, quoteNo: job.quoteNo, v: 2 });
-    if (!next.items.length) throw { code: "empty", message: "The assistant didn't return any items. Add more detail and try again." };
-    snapshot(); job = next; selId = null; afterLoad();
-    out.textContent = (res.summary || "Layout updated.") + "\n\nTap Undo to go back to the previous plan.";
+    snapshot();
+    const did = applyOps(res.ops);
+    if (!did) undoStack.pop();
+    chat.push({ role: "assistant", text: res.reply || (did ? "Done." : "No changes."), note: did ? `Drawing: ${did}. Undo goes back.` : "" });
+    photos = []; renderThumbs();
+    selId = null; renderJobPane(); renderMaterials(); commit();
+    if (did && view === "plan") fitView(plan.clientWidth, plan.clientHeight), drawPlan();
   } catch (e) {
     const code = e && e.code;
-    const msg = { cancelled: "Stopped.", not_granted: "Claude access wasn't allowed for this page.", rate_limited: "Too many requests right now. Wait a minute and try again.", images_unavailable: "Photos can't be sent from this view. Remove them and describe the sketch instead.", image_rejected: "One of the photos couldn't be used. Try a smaller JPG or PNG." }[code];
-    out.textContent = msg || (e && e.message && code ? e.message : e instanceof SyntaxError || (e && e.message === "no json") ? "The assistant's answer couldn't be read as a layout. Try again." : e && e.status === 401 ? "The API key was rejected. Check it and try again." : "Something went wrong: " + ((e && e.message) || e));
-  } finally { $("aiStop").hidden = true; $("aiNew").disabled = $("aiRevise").disabled = false; aiCtl = null; }
+    const msg = { cancelled: "Stopped.", not_granted: "Claude access wasn't allowed for this page. Reopen it and tap Allow when asked.", rate_limited: "Too many requests right now. Wait a minute and try again.", images_unavailable: "Photos can't be sent from this view. Remove them and describe the sketch instead.", image_rejected: "One of the photos couldn't be used. Try a smaller JPG or PNG." }[code];
+    chat.push({ role: "assistant", text: msg || (e && e.message && code ? e.message : e instanceof SyntaxError || (e && e.message === "no json") ? "I couldn't turn that into a drawing change. Try saying it another way." : e && e.status === 401 ? "The API key was rejected. Check it and try again." : "Something went wrong: " + ((e && e.message) || e)), note: "" });
+    store.set("bsp.current", job);
+  } finally { clearInterval(tick); $("aiStop").hidden = true; $("aiSend").disabled = false; aiCtl = null; renderChat(); }
 }
-$("aiNew").onclick = () => runAi("new");
-$("aiRevise").onclick = () => runAi("revise");
+$("aiSend").onclick = () => runAi();
+$("aiText").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runAi(); } });
+$("aiClear").onclick = () => { job.chat = []; store.set("bsp.current", job); renderChat(); };
 $("aiStop").onclick = () => aiCtl && aiCtl.abort();
+function setAiStatus(ok) {
+  $("aiStatus").textContent = ok ? "Connected through your Claude account." : (window.claude
+    ? "The AI isn't available in this view. Open the planner inside claude.ai or the Claude app, or add an API key below."
+    : "This page is open on its own (for example straight in Chrome), so it can't reach your Claude account. Open the planner from the Claude app or claude.ai to use the AI, or add an API key below.");
+  $("aiStatus").className = "aistatus " + (ok ? "ok" : "warn");
+  $("aiKeyBox").hidden = !!ok;
+}
 $("apiKey").value = store.get("bsp.apikey", "");
 $("apiKey").addEventListener("change", (e) => store.set("bsp.apikey", e.target.value.trim()));
+
+// ---------- sync between devices ----------
+// Each saved setting is mirrored to one private document per person (data/users/<id>/<key>), so every device
+// signed in to the same Claude account shares it. Last change wins per setting. The API key never leaves the device.
+const SYNC_KEYS = ["current", "jobs", "library", "prices", "company", "csvmap", "defaults", "est"];
+const sync = { db: null, uid: null, dev: Math.random().toString(36).slice(2, 10), at: store.get("bsp.syncAt", {}), timers: {}, busy: {}, again: {}, applying: false, pending: {}, state: "", ready: false };
+const rawSet = store.set;
+store.set = (k, v) => {
+  rawSet(k, v);
+  const key = k.startsWith("bsp.") ? k.slice(4) : "";
+  if (!SYNC_KEYS.includes(key) || sync.applying) return;
+  sync.at[key] = Date.now(); rawSet("bsp.syncAt", sync.at);
+  if (sync.db && sync.ready) { clearTimeout(sync.timers[key]); sync.timers[key] = setTimeout(() => { delete sync.timers[key]; syncPush(key); }, 900); setSync("busy"); }
+};
+function setSync(st, msg) {
+  sync.state = st; const el = $("syncState"); el.hidden = false;
+  el.className = "sync " + (st === "ok" ? "" : st);
+  el.textContent = st === "ok" ? "Synced" : st === "busy" ? "Syncing…" : "Not synced";
+  el.title = msg || (st === "ok" ? "Up to date on all your devices" : st === "busy" ? "Sending changes to your other devices" : "Changes are saved on this device only");
+  if (msg) $("syncNote").textContent = msg;
+}
+async function syncPush(key) {
+  if (sync.busy[key]) { sync.again[key] = true; return; }
+  sync.busy[key] = true;
+  try {
+    const json = localStorage.getItem("bsp." + key);
+    if (json == null) return;
+    if (json.length > 250000) { setSync("off", key === "jobs" ? "Saved jobs are too big to sync. Delete a few old saved jobs." : "This job is too big to sync. Clear the AI conversation or remove some items."); return; }
+    await sync.db.collection("data/users/" + sync.uid).doc(key).set({ json, at: sync.at[key] || Date.now(), by: sync.dev });
+  } catch (e) {
+    if (e && e.code === "unavailable") { setTimeout(() => syncPush(key), 1500 + Math.random() * 2000); return; }
+    setSync("off", e && e.code === "quota_exceeded" ? "Sync storage is full. Delete some saved jobs." : e && e.code === "revoked" ? "Sync stopped. Reopen the planner." : "Sync couldn't save the last change. It's kept on this device.");
+    return;
+  } finally {
+    sync.busy[key] = false;
+    if (sync.again[key]) { sync.again[key] = false; syncPush(key); }
+  }
+  if (!syncLocalPending()) setSync("ok");
+}
+// Apply a setting that changed on another device. A job change waits while you are dragging or typing.
+function syncApply(key, json) {
+  const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.id !== "aiText";
+  if (key === "current" && (drag || typing || aiCtl)) { sync.pending[key] = json; setTimeout(syncFlushPending, 1200); return; }
+  delete sync.pending[key];
+  if (localStorage.getItem("bsp." + key) === json) return;
+  sync.applying = true;
+  try {
+    localStorage.setItem("bsp." + key, json);
+    if (key === "current") {
+      snapshot();
+      const keepView = { ...view2d }; loadSavedJob();
+      if (!job.items.find((i) => i.id === selId)) selId = null;
+      applyTheme(); renderChat(); renderJobPane(); renderMaterials(); renderEstFields(); commit();
+      Object.assign(view2d, keepView); drawPlan();
+      toast("Updated from your other device. Undo goes back.");
+    } else {
+      if (key === "library") { const lib = store.get("bsp.library", []); for (const m of lib) if (!job.custom.some((c) => c.id === m.id)) job.custom.push(m); }
+      renderMaterials(); renderEstFields(); renderCompany(); renderCsvMap(); renderJobs(); renderQuote();
+    }
+  } finally { sync.applying = false; }
+}
+const syncLocalPending = (key) => key ? !!(sync.busy[key] || sync.timers[key]) : SYNC_KEYS.some((k) => sync.busy[k] || sync.timers[k]);
+function syncFlushPending() { for (const [k, j] of Object.entries(sync.pending)) syncApply(k, j); }
+async function startSync() {
+  if (!(window.claude && claude.use)) return;
+  const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+  const uid = user ? await user.id() : null;
+  if (!db || !uid) { $("syncNote").textContent = "Sync isn't available in this view. Open the planner from the Claude app or claude.ai while signed in."; return; }
+  sync.db = db; sync.uid = uid; setSync("busy");
+  db.collection("data/users/" + uid).onSnapshot((snap) => {
+    const seen = new Set(snap.docs.map((d) => d.id));
+    // A device that already had a job of its own before it ever synced keeps it in Saved jobs instead of losing it.
+    const mine = !sync.ready && !sync.at.current && seen.has("current") ? localStorage.getItem("bsp.current") : null;
+    for (const ch of sync.ready ? snap.docChanges() : snap.docs.map((doc) => ({ type: "added", doc }))) {
+      const key = ch.doc.id, b = ch.doc.data() || {};
+      if (ch.type === "removed" || !SYNC_KEYS.includes(key) || typeof b.json !== "string") continue;
+      if (b.by === sync.dev) continue; // our own write coming back
+      if (!sync.ready && (sync.at[key] || 0) > (b.at || 0)) { syncPush(key); continue; } // on opening: this device has the newer copy
+      if (syncLocalPending(key)) continue; // a newer change from this device is on its way and wins
+      sync.at[key] = b.at || Date.now(); rawSet("bsp.syncAt", sync.at); syncApply(key, b.json);
+    }
+    if (!sync.ready) { // first contact: upload what only this device has
+      sync.ready = true;
+      if (mine && mine !== localStorage.getItem("bsp.current")) {
+        try { const j = JSON.parse(mine); store.set("bsp.jobs", [{ name: (j.name || "Job") + " (from this device)", saved: Date.now(), job: j }, ...jobsSaved()].slice(0, 40)); renderJobs(); toast("Loaded your synced job. This device's earlier job is in Job › Saved jobs."); } catch {}
+      }
+      for (const key of SYNC_KEYS) if (!seen.has(key) && localStorage.getItem("bsp." + key) != null) syncPush(key);
+      if (!syncLocalPending()) setSync("ok");
+    }
+  }, (e) => { setSync("off", e && e.code === "revoked" ? "Sync stopped. Reopen the planner." : "Lost the connection for syncing. Reopen the planner to reconnect."); });
+}
+startSync();
 
 // ---------- boot ----------
 if (window.claude && claude.use) {
   claude.use("sample").then(async (s) => {
-    if (!s) return; sampleCap = s; $("aiKeyBox").hidden = true;
+    setAiStatus(!!s);
+    if (!s) return; sampleCap = s;
     try { const lim = await s.limits(); if (!lim || !lim.images) $("aiPhotoLabel").hidden = true; } catch { $("aiPhotoLabel").hidden = true; }
   });
   claude.use("downloads").then((d) => { downloadsCap = d; });
-}
+} else setAiStatus(false);
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) navigator.serviceWorker.register("sw.js").catch(() => {});
-{
+function loadSavedJob() {
   const saved = store.get("bsp.current", null);
-  if (saved) {
-    const legacy = !saved.v || saved.v < 2;
-    try { job = sanitizeJob({ custom: store.get("bsp.library", []), ...saved, prices: { ...store.get("bsp.prices", {}), ...(saved.prices || {}) } }); } catch { job = sampleJob(); }
-    if (legacy) setTimeout(() => toast("Updated to the new materials library. Steps use SR Classic cut to 3¾\" + Pro Cap Max for a 7½\" rise."), 600);
-  }
+  if (!saved) return false;
+  const legacy = !saved.v || saved.v < 2;
+  try { job = sanitizeJob({ custom: store.get("bsp.library", []), ...saved, prices: { ...store.get("bsp.prices", {}), ...(saved.prices || {}) } }); } catch { job = sampleJob(); }
+  if (legacy) setTimeout(() => toast("Updated to the new materials library. Steps use SR Classic cut to 3¾\" + Pro Cap Max for a 7½\" rise."), 600);
+  return true;
 }
+loadSavedJob();
+applyTheme(); renderChat();
 renderJobPane(); renderMaterials(); renderEstFields(); renderCompany(); renderCsvMap(); renderItemPane(); renderList(); renderQuote();
 $("jobTitle").textContent = job.name || "";
 requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); });
