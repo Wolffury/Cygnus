@@ -128,6 +128,40 @@ textarea { resize: vertical; }
   .hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* tabs scroll on narrow panels */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: 1 0 auto; padding: 12px 10px; }
+.main { grid-template-columns: 1fr 400px; }
+.banner { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--fg); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.mats { display: flex; flex-direction: column; gap: 6px; }
+.matrow { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.matrow .btn.small { grid-column: 1 / -1; justify-self: start; }
+.matinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.matinfo b { font-weight: 600; }
+.matinfo span { font-size: 12px; color: var(--muted); }
+.swatches { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.swatches i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; }
+.swatches em { font-style: normal; margin-left: 4px; }
+.price { display: flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 14px; }
+.price input { width: 76px; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); text-align: right; font-family: var(--font-mono); }
+.price small { color: var(--muted); }
+.btn.small { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+.stats.big dd { font-size: 17px; }
+table.qt { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+table.qt td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.qt td:last-child { text-align: right; white-space: nowrap; font-family: var(--font-mono); }
+table.qt tr.sub td { font-weight: 600; }
+table.qt tr.tot td { font-weight: 700; font-size: 16px; border-top: 2px solid var(--fg); }
+table.qt tr.cat td { background: var(--chip); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+table.qt.lines td:nth-child(2) { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; font-family: var(--font-mono); }
+table.qt small { display: block; color: var(--muted); font-size: 11px; }
+.tablewrap { overflow-x: auto; }
+details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+details > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+details[open] > summary { margin-bottom: 10px; }
+details > .grid2, details > label { margin-top: 8px; }
+@media (max-width: 860px) { .main { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -168,23 +202,35 @@ textarea { resize: vertical; }
 
     <aside class="panel">
       <div class="tabs" role="tablist">
-        <button role="tab" id="tItem" aria-selected="true" data-pane="pItem">Item</button>
-        <button role="tab" id="tAdd" aria-selected="false" data-pane="pAdd">Add</button>
-        <button role="tab" id="tAi" aria-selected="false" data-pane="pAi">AI</button>
-        <button role="tab" id="tJob" aria-selected="false" data-pane="pJob">Job</button>
+        <button role="tab" aria-selected="true" data-pane="pItem">Item</button>
+        <button role="tab" aria-selected="false" data-pane="pAdd">Add</button>
+        <button role="tab" aria-selected="false" data-pane="pMat">Materials</button>
+        <button role="tab" aria-selected="false" data-pane="pQuote">Quote</button>
+        <button role="tab" aria-selected="false" data-pane="pAi" id="tAi">AI</button>
+        <button role="tab" aria-selected="false" data-pane="pJob">Job</button>
       </div>
 
       <div class="pane" id="pItem" role="tabpanel"></div>
 
       <div class="pane" id="pAdd" role="tabpanel" hidden>
         <h2>Add to the plan</h2>
-        <p>New items drop in the middle of the view. Drag them into place, then type exact measurements on the Item tab.</p>
+        <p>New items drop in the middle of the view and use the defaults from the Job tab. Drag them into place, then set materials and exact measurements on the Item tab.</p>
+        <h3>Stair layouts</h3>
+        <div class="addgrid">
+          <button data-layout="straight"><b>Straight run</b><span>One flight</span></button>
+          <button data-layout="landing"><b>Two flights</b><span>Straight, landing between</span></button>
+          <button data-layout="lleft"><b>L-shape, turn left</b><span>Flight, landing, flight</span></button>
+          <button data-layout="lright"><b>L-shape, turn right</b><span>Flight, landing, flight</span></button>
+          <button data-layout="uturn"><b>U-turn</b><span>Switchback with landing</span></button>
+          <button data-layout="pyramid"><b>Wraparound</b><span>Steps on three sides</span></button>
+          <button data-layout="cheek"><b>Steps with cheek walls</b><span>Set into a slope</span></button>
+        </div>
         <h3>Hardscape</h3>
         <div class="addgrid">
-          <button data-add="steps"><b>Block steps</b><span>Stair run from measured rise</span></button>
-          <button data-add="landing"><b>Landing</b><span>Flat block platform</span></button>
-          <button data-add="path"><b>Walkway / patio</b><span>Flat surface at grade</span></button>
-          <button data-add="wall"><b>Retaining wall</b><span>Block wall run</span></button>
+          <button data-add="steps"><b>Steps</b><span>Single flight, any material</span></button>
+          <button data-add="landing"><b>Landing</b><span>Raised platform</span></button>
+          <button data-add="path"><b>Walkway / patio</b><span>Pavers, slabs, flagstone</span></button>
+          <button data-add="wall"><b>Retaining wall</b><span>Block wall with caps</span></button>
         </div>
         <h3>Site &amp; environment</h3>
         <div class="addgrid">
@@ -199,11 +245,79 @@ textarea { resize: vertical; }
         <div class="list" id="itemList"></div>
       </div>
 
+      <div class="pane" id="pMat" role="tabpanel" hidden>
+        <h2>Materials &amp; prices</h2>
+        <p id="priceBanner" class="banner">Prices shown are examples. Enter your supplier prices here and every estimate updates.</p>
+        <p class="note">Abbotsford sizes come from published specs. Check them against your supplier's current sheets.</p>
+        <div id="matList"></div>
+        <h3>Add your own material</h3>
+        <div class="grid2">
+          <label class="f">Type
+            <select id="cmKind">
+              <option value="block">Wall / riser block</option>
+              <option value="cap">Cap / tread</option>
+              <option value="solid">Solid step unit</option>
+              <option value="paver">Paver (priced per sq ft)</option>
+              <option value="slab">Slab (priced each)</option>
+              <option value="surface">Poured / loose surface (per sq ft)</option>
+            </select>
+          </label>
+          <label class="f">Brand <input id="cmBrand" placeholder="e.g. Abbotsford"></label>
+        </div>
+        <label class="f">Name <input id="cmName" placeholder="e.g. Rundle Stone step"></label>
+        <div class="grid2">
+          <label class="f">Length <input class="dim" id="cmL" placeholder='18"'></label>
+          <label class="f">Depth <input class="dim" id="cmD" placeholder='12"'></label>
+          <label class="f">Height <input class="dim" id="cmH" placeholder='6"'></label>
+          <label class="f">Setback ° <input id="cmSet" inputmode="decimal" placeholder="0"></label>
+          <label class="f">Price <input id="cmPrice" inputmode="decimal" placeholder="0.00"></label>
+          <label class="f">Colours <input id="cmColors" placeholder="Grey, Charcoal"></label>
+        </div>
+        <button class="btn primary" id="cmAdd">Add material</button>
+      </div>
+
+      <div class="pane" id="pQuote" role="tabpanel" hidden>
+        <h2>Estimate &amp; quote</h2>
+        <div id="quoteSummary"></div>
+        <div class="row">
+          <button class="btn primary" id="qHtml">Save quote</button>
+          <button class="btn" id="qCsv">Export CSV</button>
+          <button class="btn" id="qJson">Export JSON</button>
+        </div>
+        <p class="note">The quote is a page with the blueprint and rendering that opens in any browser and prints to PDF. CSV and JSON carry every line item for accounting or job-management apps.</p>
+        <h3>Extra line items</h3>
+        <div id="extraList" class="list"></div>
+        <div class="grid2">
+          <label class="f">Description <input id="exDesc" placeholder="e.g. Lighting in risers"></label>
+          <label class="f">Category
+            <select id="exCat"><option>Materials</option><option>Labour</option><option>Equipment &amp; disposal</option><option>Other</option></select>
+          </label>
+          <label class="f">Quantity <input id="exQty" inputmode="decimal" value="1"></label>
+          <label class="f">Unit price <input id="exPrice" inputmode="decimal" placeholder="0.00"></label>
+        </div>
+        <button class="btn" id="exAdd">Add line</button>
+        <details>
+          <summary>Rates, markup and tax</summary>
+          <div class="grid2" id="estFields"></div>
+        </details>
+        <details>
+          <summary>Your company on the quote</summary>
+          <label class="f">Company <input id="coName"></label>
+          <div class="grid2">
+            <label class="f">Phone <input id="coPhone"></label>
+            <label class="f">Email <input id="coEmail"></label>
+          </div>
+          <label class="f">Address <input id="coAddr"></label>
+          <label class="f">GST / business no. <input id="coTax"></label>
+          <label class="f">Terms <textarea id="coTerms" rows="4"></textarea></label>
+        </details>
+      </div>
+
       <div class="pane" id="pAi" role="tabpanel" hidden>
         <h2>AI layout assistant</h2>
-        <p>Describe the job in plain words with your measurements. You can add a photo of a hand sketch or the site. The assistant draws or revises the plan for you.</p>
+        <p>Describe the job in plain words with your measurements and the materials you want. You can add a photo of a hand sketch or the site. The assistant draws or revises the plan.</p>
         <label class="f">What you measured
-          <textarea id="aiText" rows="7" placeholder="e.g. Front entry, 4 ft wide steps going up 28 inches from the driveway to the porch. Porch is 8 ft wide and 5 ft deep, front of the house runs east-west. Big oak 6 ft left of the steps, about 20 ft canopy. Two boxwoods either side of the bottom step."></textarea>
+          <textarea id="aiText" rows="7" placeholder="e.g. Front entry, 4 ft wide SR Classic steps with Pro Cap Max treads going up 30 inches to the porch, wrap around both sides. Porch is 8 ft wide and 5 ft deep. Texada slab walkway 4 ft wide, 20 ft long to the driveway. Big oak 6 ft left of the steps, 20 ft canopy."></textarea>
         </label>
         <div class="row">
           <label class="btn" for="aiPhoto" id="aiPhotoLabel">Add sketch / photo</label>
@@ -219,7 +333,7 @@ textarea { resize: vertical; }
         <div class="aiout" id="aiOut" aria-live="polite">The assistant's notes will appear here.</div>
         <div id="aiKeyBox">
           <h3>Claude API key</h3>
-          <p class="note" id="aiKeyNote">When this app runs outside claude.ai, it needs your own Anthropic API key. The key is stored only on this tablet.</p>
+          <p class="note">When this app runs outside claude.ai, it needs your own Anthropic API key. The key is stored only on this tablet.</p>
           <label class="f">API key <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
         </div>
       </div>
@@ -231,26 +345,8 @@ textarea { resize: vertical; }
           <label class="f">Client <input id="jClient"></label>
         </div>
         <label class="f">Site address <input id="jAddr"></label>
-        <h3>Block product</h3>
-        <label class="f">Preset
-          <select id="jPreset"></select>
-        </label>
-        <label class="f">Product name <input id="jProduct"></label>
-        <div class="grid2">
-          <label class="f">Block length <input class="dim" id="jBL"></label>
-          <label class="f">Block depth <input class="dim" id="jBD"></label>
-          <label class="f">Block height (riser) <input class="dim" id="jBH"></label>
-          <label class="f">Wall setback ° <input id="jSet" inputmode="decimal"></label>
-          <label class="f">Cap length <input class="dim" id="jCL"></label>
-          <label class="f">Cap depth (tread) <input class="dim" id="jCD"></label>
-          <label class="f">Cap height <input class="dim" id="jCH"></label>
-          <label class="f">Cap overhang <input class="dim" id="jCO"></label>
-          <label class="f">Joint stagger
-            <select id="jStagger"><option value="half">Half block</option><option value="none">Stacked</option></select>
-          </label>
-        </div>
-        <p class="note">Cap height 0 means solid step blocks with no cap. Check the sizes against your supplier's spec sheet.</p>
-        <div class="swatch"><input type="color" id="jColor" aria-label="Block color"><span class="note">Block color in renderings</span></div>
+        <h3>Defaults for new items</h3>
+        <div class="grid2" id="defFields"></div>
         <h3>Site</h3>
         <div class="grid2">
           <label class="f">Site width (E–W) <input class="dim" id="jSW"></label>
@@ -258,8 +354,6 @@ textarea { resize: vertical; }
         </div>
         <label class="f">Notes on the sheet <textarea id="jNotes" rows="3"></textarea></label>
         <p class="note">Measurements: type <code>4' 6"</code>, <code>4ft 6in</code>, <code>4.5'</code>, <code>54"</code> or <code>1.37m</code>. A plain number means inches.</p>
-        <h3>Material order</h3>
-        <dl class="stats" id="orderStats"></dl>
         <h3>Saved jobs</h3>
         <div class="row">
           <button class="btn" id="saveJob">Save job</button>
@@ -291,6 +385,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 // ---------- measurement parsing / formatting ----------
 function parseLen(s) {
@@ -301,11 +396,11 @@ function parseLen(s) {
   if ((m = s.match(/^(-?[\d.]+)\s*(mm|cm|m)$/))) return parseFloat(m[1]) * { mm: 0.0393701, cm: 0.393701, m: 39.3701 }[m[2]];
   let ft = 0, inch = 0, hit = false;
   if ((m = s.match(/(-?[\d.]+)\s*(?:'|ft|feet|foot)/))) { ft = parseFloat(m[1]); hit = true; s = s.replace(m[0], " "); }
-  if ((m = s.match(/([\d.]+)(?:\s+(\d+)\/(\d+))?\s*(?:"|in|inch|inches)/))) { inch = parseFloat(m[1]) + (m[2] ? m[2] / m[3] : 0); hit = true; s = s.replace(m[0], " "); }
+  if ((m = s.match(/(-?[\d.]+)(?:\s+(\d+)\/(\d+))?\s*(?:"|in|inch|inches)/))) { inch = parseFloat(m[1]) + (m[2] ? m[2] / m[3] : 0) * Math.sign(parseFloat(m[1]) || 1); hit = true; s = s.replace(m[0], " "); }
   else if ((m = s.match(/(\d+)\/(\d+)\s*(?:"|in)?/))) { inch += m[1] / m[2]; hit = true; s = s.replace(m[0], " "); }
   s = s.trim();
   if (hit && s && /^[\d.]+$/.test(s)) inch += parseFloat(s); // 4' 6
-  if (hit) return ft * 12 + inch;
+  if (hit) return ft * 12 + (ft < 0 ? -Math.abs(inch) : inch);
   const n = parseFloat(s);
   return isNaN(n) ? NaN : n;
 }
@@ -319,36 +414,106 @@ function fmtLen(inches) {
   return (neg ? "-" : "") + (ft ? ft + "' " + inStr : inStr);
 }
 function fmtIn(v) { const q = Math.round(Math.abs(v) * 8), fr = EIGHTHS[q % 8], w = Math.floor(q / 8); return (v < 0 ? "-" : "") + (w || !fr ? w : "") + fr + '"'; }
+const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num1 = (n) => (Math.round(n * 10) / 10).toLocaleString("en-CA");
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// ---------- data ----------
-// Block + cap systems build each step from a riser course of wall block with caps as the tread.
-const PRESETS = [
-  { name: "Abbotsford SR Classic 6° Grey + 18\" Pro Cap Max Grey", L: 18, D: 12, H: 7.625, setback: 6, capL: 18, capD: 12, capH: 3.75, capOver: 1, color: "#9c9b97" },
-  { name: "Solid step block 48 × 14 × 6", L: 48, D: 14, H: 6, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
-  { name: "Solid step block 48 × 16 × 7", L: 48, D: 16, H: 7, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
-  { name: "Solid step block 72 × 18 × 7", L: 72, D: 18, H: 7, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
-  { name: "Custom", L: null },
+// ---------- material catalog ----------
+// Colours are rendering approximations of the named product colours.
+const HEX = {
+  Grey: "#9c9b97", Charcoal: "#5a5a5c", "Rocky Mountain": "#8d7f6e", Granite: "#8f8c88", Sandalwood: "#b8a58a", Teak: "#8b6c52",
+  "Moroccan Sunset": "#ad7a58", Natural: "#b9b3a8", Midnight: "#4a4b50", "Shaded Grey": "#8a8987", "Indian Summer": "#a37c5c",
+  "La Jolla Blend": "#a99c88", Tan: "#c2ad8c", "Desert Sand": "#cdb99a", Red: "#9a5a48", Brown: "#7a5e48", Green: "#7d8a72",
+  Sandstone: "#c9b28d", "Granite Grey": "#8e8e8c", "Light Grey": "#bdbbb6", Cedar: "#9c6b45", "Dark Brown": "#5b4433", "Grey Mix": "#9a9a96",
+};
+function hexOf(name) {
+  if (/^#[0-9a-f]{6}$/i.test(name || "")) return name;
+  if (HEX[name]) return HEX[name];
+  let h = 0; for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; // stable fallback for custom colour names
+  const g = 120 + (h % 70); return "#" + [g + 8, g, g - 10].map((v) => clamp(v, 0, 255).toString(16).padStart(2, "0")).join("");
+}
+const ABB = "Abbotsford";
+const SPEC = "Published size; verify with your supplier";
+const CATALOG = [
+  // Wall and riser blocks (Allan Block system made by Abbotsford; Garden WallScapes)
+  { id: "ab-classic", brand: ABB, line: "Allan Block", name: "SR Classic 6°", kind: "block", L: 18, D: 12, H: 7.625, setback: 6, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 9.5, note: SPEC },
+  { id: "ab-stones", brand: ABB, line: "Allan Block", name: "AB Stones 12°", kind: "block", L: 18, D: 12, H: 7.625, setback: 12, colors: ["Grey", "Charcoal"], price: 9.5, note: SPEC },
+  { id: "ab-rocks", brand: ABB, line: "Allan Block", name: "AB Rocks 12° (tri-face)", kind: "block", L: 18, D: 12, H: 7.625, setback: 12, colors: ["Grey", "Charcoal"], price: 10, note: SPEC },
+  { id: "ab-vertical", brand: ABB, line: "Allan Block", name: "AB Vertical 3°", kind: "block", L: 18, D: 12, H: 7.625, setback: 3, colors: ["Grey", "Charcoal"], price: 9.75, note: SPEC },
+  { id: "gws-face", brand: ABB, line: "Garden WallScapes", name: "Classic Face Block", kind: "block", L: 12, D: 7.5, H: 6, setback: 0, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 4.25, note: SPEC },
+  { id: "gws-corner", brand: ABB, line: "Garden WallScapes", name: "Corner Unit", kind: "block", L: 14, D: 8, H: 6, setback: 0, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 7.5, note: SPEC },
+  // Caps
+  { id: "pcm18", brand: ABB, line: "Allan Block", name: '18" Pro Cap Max', kind: "cap", L: 18, D: 12, H: 3.75, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 14, note: SPEC + '. Made for up to 3" overhang' },
+  { id: "pcm12", brand: ABB, line: "Allan Block", name: '12" Pro Cap Max', kind: "cap", L: 12, D: 12, H: 3.5, colors: ["Grey", "Charcoal"], price: 10, note: SPEC },
+  { id: "gws-cap", brand: ABB, line: "Garden WallScapes", name: "Cap", kind: "cap", L: 18, D: 9, H: 2.375, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset", "Charcoal"], price: 7, note: SPEC },
+  { id: "gws-tcap", brand: ABB, line: "Garden WallScapes", name: "Tumbled Cap", kind: "cap", L: 7.125, D: 9, H: 2.375, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 3.5, note: SPEC },
+  // Pavers (priced per sq ft)
+  { id: "cs-standard", brand: ABB, line: "Classic", name: "Standard 60mm", kind: "paver", L: 8.875, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
+  { id: "cs-half", brand: ABB, line: "Classic", name: "Half Standard 60mm", kind: "paver", L: 4.4375, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.5, note: SPEC },
+  { id: "cs-double", brand: ABB, line: "Classic", name: "Double Standard 60mm", kind: "paver", L: 8.875, D: 8.875, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
+  { id: "cs-california", brand: ABB, line: "Classic Standard", name: "California 60mm", kind: "paver", L: 11.875, D: 5.9375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.5, note: SPEC },
+  { id: "cs-nevada", brand: ABB, line: "Classic Standard", name: "Nevada 60mm", kind: "paver", L: 11.875, D: 11.875, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.75, note: SPEC },
+  { id: "cs-sierra", brand: ABB, line: "Classic Standard", name: "Sierra 60mm", kind: "paver", L: 15.75, D: 15.75, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 6, note: SPEC },
+  { id: "ocs-1", brand: ABB, line: "Old Country Stone", name: "Type 1 60mm", kind: "paver", L: 8.875, D: 7.125, H: 2.375, colors: ["La Jolla Blend", "Natural", "Charcoal"], price: 6.25, note: SPEC },
+  { id: "ocs-2", brand: ABB, line: "Old Country Stone", name: "Type 2 60mm", kind: "paver", L: 7.125, D: 5.9375, H: 2.375, colors: ["La Jolla Blend", "Natural", "Charcoal"], price: 6.25, note: SPEC },
+  { id: "ocs-3", brand: ABB, line: "Old Country Stone", name: "Type 3 60mm", kind: "paver", L: 7.125, D: 3, H: 2.375, colors: ["La Jolla Blend", "Natural", "Charcoal"], price: 6.25, note: SPEC },
+  // Hydrapressed slabs (priced each)
+  { id: "texada-2412", brand: ABB, line: "Texada HydraPressed", name: 'Slab 24×12×2"', kind: "slab", L: 24, D: 12, H: 2, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 11, note: SPEC },
+  { id: "texada-2424", brand: ABB, line: "Texada HydraPressed", name: 'Slab 24×24×2"', kind: "slab", L: 24, D: 24, H: 2, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 21, note: SPEC },
+  { id: "texada-1818", brand: ABB, line: "Texada HydraPressed", name: 'Slab 18×18×1⅝"', kind: "slab", L: 18, D: 18, H: 1.625, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 11.5, note: SPEC },
+  { id: "saturna-2412", brand: ABB, line: "Saturna HydraPressed", name: 'Slab 24×12×2"', kind: "slab", L: 24, D: 12, H: 2, colors: ["Natural", "Charcoal", "Tan", "Green", "Desert Sand", "Brown", "Red"], price: 12, note: SPEC },
+  { id: "saturna-2424", brand: ABB, line: "Saturna HydraPressed", name: 'Slab 24×24×2"', kind: "slab", L: 24, D: 24, H: 2, colors: ["Natural", "Charcoal", "Tan", "Green", "Desert Sand", "Brown", "Red"], price: 23, note: SPEC },
+  // Solid step units and natural stone
+  { id: "solid-48146", brand: "Generic", line: "Precast", name: "Solid step block 48×14×6", kind: "solid", L: 48, D: 14, H: 6, colors: ["Grey", "Charcoal", "Tan"], price: 95 },
+  { id: "solid-48167", brand: "Generic", line: "Precast", name: "Solid step block 48×16×7", kind: "solid", L: 48, D: 16, H: 7, colors: ["Grey", "Charcoal", "Tan"], price: 115 },
+  { id: "stone-step", brand: "Natural stone", line: "Slab steps", name: "Stone slab step 48×16×6", kind: "solid", L: 48, D: 16, H: 6, colors: ["Granite Grey", "Sandstone"], price: 260 },
+  { id: "flagstone", brand: "Natural stone", line: "Flagstone", name: 'Random flagstone 1½"', kind: "paver", L: 18, D: 14, H: 1.5, colors: ["Sandstone", "Grey Mix"], price: 9, pattern: "flag" },
+  // Poured and loose surfaces (per sq ft)
+  { id: "concrete", brand: "Generic", line: "Concrete", name: 'Broom-finish concrete 4"', kind: "surface", L: 0, D: 0, H: 4, colors: ["Light Grey"], price: 12, pattern: "concrete" },
+  { id: "gravel", brand: "Generic", line: "Aggregate", name: '¾" crushed gravel 3"', kind: "surface", L: 0, D: 0, H: 3, colors: ["Grey Mix"], price: 2.5, pattern: "gravel" },
+  { id: "deck", brand: "Generic", line: "Wood", name: "Deck boards", kind: "surface", L: 72, D: 5.5, H: 1, colors: ["Cedar", "Dark Brown"], price: 14, pattern: "wood" },
 ];
-const PRODUCT_KEYS = ["L", "D", "H", "setback", "capL", "capD", "capH", "capOver"];
-function presetProduct(p) { const o = { name: p.name, stagger: "half", color: p.color || "#a8a39a" }; for (const k of PRODUCT_KEYS) o[k] = p[k]; return o; }
+const KIND_LABEL = { block: "Wall / riser blocks", cap: "Caps & treads", solid: "Solid step units", paver: "Pavers (per sq ft)", slab: "Slabs (each)", surface: "Poured & loose (per sq ft)" };
+const perSqft = (m) => m.kind === "paver" || m.kind === "surface";
+
+let job; // set below
+function allMats() { return CATALOG.concat(job && job.custom ? job.custom : []); }
+function mat(id) { return allMats().find((m) => m.id === id) || null; }
+function matName(m) { return m ? `${m.line && m.brand !== "Generic" ? m.line + " " : ""}${m.name}` : "None"; }
+function priceOf(id) { const m = mat(id); const p = job.prices && job.prices[id]; return p != null ? p : m ? m.price || 0 : 0; }
+function matsOfKinds(kinds) { return allMats().filter((m) => kinds.includes(m.kind)); }
+function firstColor(id) { const m = mat(id); return m && m.colors && m.colors.length ? m.colors[0] : "Grey"; }
+function validColor(id, c) { const m = mat(id); return m && m.colors && m.colors.includes(c) ? c : firstColor(id); }
+
+// ---------- job model ----------
 const TYPE_INFO = {
-  steps: { label: "Block steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
+  steps: { label: "Steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
   house: { label: "House" }, grade: { label: "Upper grade" },
 };
 const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade"]);
+const BUILT_TYPES = new Set(["steps", "landing", "path", "wall"]);
 let uid = 1;
 const newId = () => "i" + Date.now().toString(36) + (uid++);
 
+const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
+const EST_DEFAULTS = {
+  labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
+};
+function stepDefaults(d) {
+  return { block: d.block, color: d.color, cap: d.cap, capColor: d.capColor, capOver: d.capOver, stepRise: d.stepRise, config: "straight", cheek: "none", cheekAbove: 8, elev: 0, infill: d.infill, stagger: "half" };
+}
 function defaults(type, x, y) {
-  const b = { id: newId(), type, x, y, rot: 0, label: "" };
+  const b = { id: newId(), type, x, y, rot: 0, label: "" }, d = (job && job.defaults) || DEFAULTS;
   switch (type) {
-    case "steps": return { ...b, w: 48, rise: 23, tread: defaultTread(job ? job.product : PRESETS[0]), base: defaultBase(job ? job.product : PRESETS[0]) };
-    case "landing": return { ...b, w: 60, d: 48, h: 23 };
-    case "path": return { ...b, w: 48, d: 120, material: "pavers" };
-    case "wall": return { ...b, w: 120, d: 12, h: 23 };
+    case "steps": { const it = { ...b, w: 48, rise: 30, ...stepDefaults(d) }; it.tread = defaultTread(build(it)); it.base = defaultBase(build(it)); return it; }
+    case "landing": return { ...b, w: 60, d: 48, h: 30, surface: d.surface, color: d.surfaceColor, block: d.wallBlock, blockColor: d.color, cap: d.wallCap, capColor: d.capColor, edge: "caps" };
+    case "path": return { ...b, w: 48, d: 120, surface: d.surface, color: d.surfaceColor };
+    case "wall": return { ...b, w: 120, d: 12, h: 30, block: d.wallBlock, color: d.color, cap: d.wallCap, capColor: d.capColor };
     case "house": return { ...b, w: 360, d: 240, h: 108, label: "House" };
-    case "grade": return { ...b, w: 240, d: 120, h: 23, label: "Upper lawn" };
+    case "grade": return { ...b, w: 240, d: 120, h: 30, label: "Upper lawn" };
     case "tree": return { ...b, canopy: 240, height: 300, trunk: 12, label: "Oak" };
     case "evergreen": return { ...b, canopy: 120, height: 300, trunk: 10, label: "Spruce" };
     case "shrub": return { ...b, canopy: 36, height: 30, label: "Shrub" };
@@ -358,16 +523,17 @@ function defaults(type, x, y) {
 }
 
 function sampleJob() {
+  const st = { ...stepDefaults(DEFAULTS) };
   return {
-    v: 1, name: "Front entry steps", client: "Example client", address: "", notes: "Example layout. Replace with your measurements.",
-    product: presetProduct(PRESETS[0]),
+    v: 2, name: "Front entry steps", client: "Example client", address: "", notes: "Example layout. Replace with your measurements.",
+    defaults: { ...DEFAULTS }, est: { ...EST_DEFAULTS }, extras: [], custom: [], prices: {},
     site: { w: 480, d: 420 },
     items: [
       { id: "h1", type: "house", x: 240, y: 360, w: 420, d: 120, rot: 0, h: 108, label: "House" },
-      { id: "g1", type: "grade", x: 240, y: 262, w: 480, d: 76, rot: 0, h: 22.875, label: "Front lawn (upper)" },
-      { id: "l1", type: "landing", x: 240, y: 252, w: 72, d: 56, rot: 0, h: 22.875, label: "Top landing" },
-      { id: "s1", type: "steps", x: 240, y: 207, w: 72, rise: 22.875, tread: 11, base: -3.75, rot: 0, label: "Entry steps" },
-      { id: "p1", type: "path", x: 240, y: 112, w: 48, d: 152, rot: 0, material: "pavers", label: "Walk to drive" },
+      { id: "g1", type: "grade", x: 240, y: 262, w: 480, d: 76, rot: 0, h: 22.5, label: "Front lawn (upper)" },
+      { id: "l1", type: "landing", x: 240, y: 252, w: 72, d: 56, rot: 0, h: 22.5, label: "Top landing", surface: "texada-2424", color: "Charcoal", block: "ab-classic", blockColor: "Grey", cap: "pcm18", capColor: "Grey", edge: "none" },
+      { id: "s1", type: "steps", x: 240, y: 207, w: 72, rise: 22.5, tread: 11, base: 0, rot: 0, label: "Entry steps", ...st },
+      { id: "p1", type: "path", x: 240, y: 112, w: 48, d: 152, rot: 0, surface: "cs-standard", color: "Shaded Grey", label: "Walk to drive" },
       { id: "t1", type: "tree", x: 92, y: 168, canopy: 216, height: 300, trunk: 14, rot: 0, label: "Red maple" },
       { id: "e1", type: "evergreen", x: 420, y: 60, canopy: 96, height: 240, trunk: 10, rot: 0, label: "Blue spruce" },
       { id: "b1", type: "shrub", x: 186, y: 200, canopy: 30, height: 28, rot: 0, label: "Boxwood" },
@@ -377,7 +543,7 @@ function sampleJob() {
   };
 }
 
-let job = sampleJob();
+job = sampleJob();
 let selId = null;
 const undoStack = [];
 function snapshot() { undoStack.push(JSON.stringify(job)); if (undoStack.length > 60) undoStack.shift(); }
@@ -386,62 +552,123 @@ function commit(opts = {}) {
   dirty3d = true;
   drawPlan();
   if (!opts.keepPanel) renderItemPane();
-  renderList(); renderOrder(); $("jobTitle").textContent = job.name || "";
+  renderList(); renderQuote(); $("jobTitle").textContent = job.name || "";
   if (view === "3d") build3d();
 }
 
 // ---------- step geometry ----------
-// Steps are riser courses of wall block. When the product has a cap, each riser gets a row of caps as its tread
-// and the next riser sits snug against the back of that cap, its bottom level with the top of the blocks below
-// (Allan Block style). Without a cap, each solid step block overlaps the one below.
+// A step is a riser of block with a tread on top. With a cap, the next riser sits snug against the back of the
+// cap below. Full-height blocks (Allan Block style): the next riser's bottom is level with the top of the blocks
+// below and the bottom course is buried by the cap height. Cut blocks: block + cap make the rise, and the next
+// riser sits on compacted base level with the cap top. Without a cap, solid step units overlap the one below.
 function segs(width, len, offset) {
   const out = []; let x = -width / 2, first = offset > 0.01 ? offset : len;
+  if (!(len > 0) || !(width > 0)) return out;
   while (x < width / 2 - 0.01) { const l = Math.min(out.length ? len : first, width / 2 - x); out.push([x, x + l, l < len - 0.01]); x += l; }
   return out;
 }
+const along = (a, b, len, off) => segs(b - a, len, off).map(([s0, s1, cut]) => [s0 + (a + b) / 2, s1 + (a + b) / 2, cut]);
+function build(it) {
+  const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
+  return {
+    L: b.L, D: b.D, H: b.H, setback: b.setback || 0, stagger: it.stagger || "half",
+    capL: c ? c.L : 0, capD: c ? c.D : 0, capH: c ? c.H : 0, capOver: c ? (it.capOver ?? 1) : 0, stepRise: c ? (it.stepRise || 0) : 0,
+  };
+}
 function hasCap(P) { return (P.capH || 0) > 0; }
-function defaultTread(P) { return hasCap(P) ? Math.max(10, (P.capD || 12) - (P.capOver || 0)) : 12; }
-function defaultBase(P) { return hasCap(P) ? -P.capH : 0; }
+function defaultTread(P) { return hasCap(P) ? Math.max(10, (P.capD || 12) - (P.capOver || 0)) : Math.min(12, P.D - 2); }
+function cutMode(P) { return hasCap(P) && (P.stepRise || 0) > P.capH; }
+// Rise per step and the installed height of each riser block (cut down when the block + cap make the rise).
+function riserDims(P) { const R = cutMode(P) ? P.stepRise : P.H; return { R, bH: cutMode(P) ? P.stepRise - P.capH : P.H }; }
+function defaultBase(P) { const { R, bH } = riserDims(P); return R - bH - (hasCap(P) ? P.capH : 0); }
+
 function stepCalc(it) {
-  const P = job.product, H = P.H, D = P.D, L = P.L, cap = hasCap(P);
-  const capH = cap ? P.capH : 0, capD = cap ? P.capD : 0, capL = cap ? P.capL : 0, over = cap ? (P.capOver || 0) : 0;
-  const base = it.base || 0, tread = it.tread;
-  const count = Math.max(1, Math.round(((it.rise || 0) - base - capH) / H));
-  const run = (count - 1) * tread + Math.max(capD, over + D);
-  const blocks = [], caps = [], infill = []; // local coords: x across, y up the run (nosing of bottom step at y = -run/2)
-  let full = 0, cuts = 0, capFull = 0, capCuts = 0, infillArea = 0;
+  const P = build(it), D = P.D, L = P.L, cap = hasCap(P), { R: H, bH } = riserDims(P), cutting = cutMode(P);
+  const capH = cap ? P.capH : 0, capD = cap ? P.capD : 0, capL = cap ? P.capL : 0, over = cap ? P.capOver : 0;
+  const E = it.elev || 0, base = it.base || 0, tread = it.tread;
+  const count = clamp(Math.round(((it.rise || 0) - base - bH - capH) / H) + 1, 1, 60);
+  const run = (count - 1) * tread + Math.max(capD, over + D), yEnd = run / 2;
+  const cheek = it.cheek || "none", cheekL = cheek === "left" || cheek === "both", cheekR = cheek === "right" || cheek === "both";
+  const cfg = it.config || "straight";
+  const wrapL = (cfg === "wrapL" || cfg === "wrapLR") && !cheekL, wrapR = (cfg === "wrapR" || cfg === "wrapLR") && !cheekR;
+  const pieces = [], fills = [];
+  const t = { blocks: 0, blockCuts: 0, caps: 0, capCuts: 0, cheekBlocks: 0, cheekCuts: 0, cheekCaps: 0 };
+  let infillArea = 0, minTopWidth = Infinity;
+  const add = (kind, step, x0, x1, y0, y1, z0, z1, cut) => {
+    if (x1 - x0 < 0.2 || y1 - y0 < 0.2) return;
+    pieces.push({ kind, step, x0, x1, y0, y1, z0: z0 + E, z1: z1 + E, cut });
+    if (kind === "block") { t.blocks++; if (cut) t.blockCuts++; }
+    else if (kind === "cap") { t.caps++; if (cut) t.capCuts++; }
+    else if (kind === "cheek") { t.cheekBlocks++; if (cut) t.cheekCuts++; }
+    else if (kind === "cheekcap") t.cheekCaps++;
+  };
+  const xs = [];
   for (let i = 0; i < count; i++) {
-    const Y = -run / 2 + i * tread, z0 = base + i * H, z1 = z0 + H;
+    const Y = -run / 2 + i * tread, z0 = base + i * H, z1 = z0 + bH;
+    const xl = -it.w / 2 + (wrapL ? i * tread : 0), xr = it.w / 2 - (wrapR ? i * tread : 0);
+    xs.push([xl, xr]); minTopWidth = Math.min(minTopWidth, xr - xl);
+    if (xr - xl < 6) break;
     const off = P.stagger === "half" && i % 2 ? L / 2 : 0;
-    for (const [x0, x1, cut] of segs(it.w, L, off)) { cut ? cuts++ : full++; blocks.push({ step: i, x0, x1, y0: Y + over, y1: Y + over + D, z0, z1, cut }); }
+    for (const [x0, x1, cut] of along(xl, xr, L, off)) add("block", i, x0, x1, Y + over, Y + over + D, z0, z1, cut);
+    if (wrapL) for (const [y0, y1, cut] of along(Y + over + D, yEnd, L, 0)) add("block", i, xl + over, xl + over + D, y0, y1, z0, z1, cut);
+    if (wrapR) for (const [y0, y1, cut] of along(Y + over + D, yEnd, L, 0)) add("block", i, xr - over - D, xr - over, y0, y1, z0, z1, cut);
     if (cap) {
-      for (const [x0, x1, cut] of segs(it.w, capL, (off + capL / 2) % capL)) { cut ? capCuts++ : capFull++; caps.push({ step: i, x0, x1, y0: Y, y1: Y + capD, z0: z1, z1: z1 + capH, cut }); }
-      const gap = i < count - 1 ? (Y + tread + over) - (Y + capD) : 0;
-      if (gap > 0.1) { infill.push({ step: i, x0: -it.w / 2, x1: it.w / 2, y0: Y + capD, y1: Y + capD + gap, z0: z1, z1: z1 + capH }); infillArea += gap * it.w; }
+      for (const [x0, x1, cut] of along(xl, xr, capL, (off + capL / 2) % capL)) add("cap", i, x0, x1, Y, Y + capD, z1, z1 + capH, cut);
+      if (wrapL) for (const [y0, y1, cut] of along(Y + capD, yEnd, capL, 0)) add("cap", i, xl, xl + capD, y0, y1, z1, z1 + capH, cut);
+      if (wrapR) for (const [y0, y1, cut] of along(Y + capD, yEnd, capL, 0)) add("cap", i, xr - capD, xr, y0, y1, z1, z1 + capH, cut);
+      const gap = i < count - 1 ? tread + over - capD : 0;
+      if (gap > 0.1) { pieces.push({ kind: "infill", step: i, x0: xl + (wrapL ? capD : 0), x1: xr - (wrapR ? capD : 0), y0: Y + capD, y1: Y + capD + gap, z0: z1 + E, z1: z1 + capH + E }); infillArea += gap * (xr - xl); }
+    }
+    // compacted fill under the next steps, behind this riser
+    if (i > 0 && z0 > Math.min(0, base)) fills.push({ x0: xl + 0.4, x1: xr - 0.4, y0: Y + over + 0.4, y1: yEnd - 0.4, z0: Math.min(0, base) + E, z1: z0 + E });
+  }
+  if (E > 0) fills.push({ x0: -it.w / 2, x1: it.w / 2, y0: -run / 2 + over, y1: yEnd, z0: 0, z1: E + Math.min(0, base) });
+  // cheek walls: block courses beside the stair, stepping up with it, topped with caps
+  const cw = D, above = it.cheekAbove ?? 8;
+  for (const side of [cheekL ? -1 : 0, cheekR ? 1 : 0].filter(Boolean)) {
+    const x0 = side < 0 ? -it.w / 2 - cw : it.w / 2, x1 = x0 + cw;
+    for (let i = 0; i < count; i++) {
+      const y0 = i === 0 ? -run / 2 + over : -run / 2 + i * tread + over, y1 = i === count - 1 ? yEnd : -run / 2 + (i + 1) * tread + over;
+      const topZ = base + i * H + bH + capH + above, blockTop = topZ - capH, bottom = Math.min(0, base) - E; // down to grade even when the flight starts higher
+      for (let z = bottom, k = 0; z < blockTop - 0.1; z += P.H, k++) {
+        const zt = Math.min(z + P.H, blockTop), cutH = zt - z < P.H - 0.05;
+        for (const [a, b, cut] of along(y0, y1, L, k % 2 ? L / 2 : 0)) add("cheek", i, x0, x1, a, b, z, zt, cut || cutH);
+      }
+      if (cap) for (const [a, b] of along(y0, y1, capL, 0)) add("cheekcap", i, x0 - (side < 0 ? over : 0), x1 + (side > 0 ? over : 0), a, b, blockTop, topZ);
     }
   }
-  const top = base + count * H + capH, firstRise = base + H + capH;
+  const top = E + base + (count - 1) * H + bH + capH, firstRise = base + bH + capH;
   const checks = [];
   checks.push([H <= 7.75 && H >= 4 ? "ok" : "bad", `Riser ${fmtIn(H)} ${H > 7.75 ? "is over the 7¾\" max" : H < 4 ? "is under 4\"" : "(4\"–7¾\")"}`]);
-  if (Math.abs(firstRise - H) > 0.25) checks.push(["bad", `First step is ${fmtIn(firstRise)} high, the rest are ${fmtIn(H)}. Set the bottom course at ${fmtIn(-(capH))} (bury it ${fmtIn(capH)}) so all risers match`]);
+  if (Math.abs(firstRise - H) > 0.25) checks.push(["bad", `First step is ${fmtIn(firstRise)} high, the rest are ${fmtIn(H)}. Set the bottom course at ${fmtIn(H - bH - capH)} so all risers match`]);
+  if (cutting) {
+    checks.push([bH > 0 && bH <= P.H ? "ok" : "bad", bH > 0 && bH <= P.H ? `Cut each riser block to ${fmtIn(bH)} high (from ${fmtIn(P.H)}). With the ${fmtIn(capH)} cap that makes a ${fmtIn(H)} rise` : `A ${fmtIn(H)} rise needs a block taller than ${fmtIn(P.H)} under this cap`]);
+    if (count > 1) checks.push(["warn", "Each riser above the first sits on compacted base behind the cap below. Compact the fill in lifts"]);
+  }
   checks.push([tread >= 11 ? "ok" : tread >= 10 ? "warn" : "bad", `Tread ${fmtIn(tread)} ${tread >= 11 ? "(11\"+ recommended)" : tread >= 10 ? "meets the 10\" min, 11\"+ is easier" : "is under the 10\" min"}`]);
-  checks.push([it.w >= 36 ? "ok" : "bad", `Width ${fmtLen(it.w)} ${it.w >= 36 ? "(36\" min)" : "is under 36\""}`]);
-  const err = top - (it.rise || 0);
-  checks.push([Math.abs(err) <= 0.75 ? "ok" : "warn", Math.abs(err) <= 0.75 ? `${count} risers reach ${fmtLen(top)}, matching the ${fmtLen(it.rise)} rise` : `${count} risers reach ${fmtLen(top)}, measured rise is ${fmtLen(it.rise)}. Adjust the grade by ${fmtIn(Math.abs(err))}`]);
+  checks.push([minTopWidth >= 36 ? "ok" : "bad", minTopWidth >= 36 ? `Width ${fmtLen(it.w)}${wrapL || wrapR ? `, top step ${fmtLen(minTopWidth)}` : ""} (36" min)` : `${wrapL || wrapR ? "Top step" : "Width"} is ${fmtLen(Math.max(0, minTopWidth))}, under 36". ${wrapL || wrapR ? "Widen the bottom step or use fewer wrapped sides" : ""}`]);
+  const err = top - E - (it.rise || 0);
+  checks.push([Math.abs(err) <= 0.75 ? "ok" : "warn", Math.abs(err) <= 0.75 ? `${count} risers reach ${fmtLen(top - E)}, matching the ${fmtLen(it.rise)} rise` : `${count} risers reach ${fmtLen(top - E)}, measured rise is ${fmtLen(it.rise)}. Adjust the grade by ${fmtIn(Math.abs(err))}`]);
   if (cap) {
     const minT = capD - over;
     if (tread < minT - 0.01) checks.push(["bad", `Tread can't be less than ${fmtIn(minT)}: the next riser has to sit behind the ${fmtIn(capD)} cap`]);
-    else if (infill.length) checks.push(["warn", `${fmtIn(tread - minT)} strip behind each cap needs paver or concrete infill`]);
-    else checks.push(["ok", `Each riser sits snug against the cap below (${fmtIn(over)} cap overhang)`]);
-  } else if (tread > D) checks.push(["bad", `Tread is deeper than the block (${fmtIn(D)}); steps will not overlap`]);
+    else if (infillArea > 0) checks.push(["warn", `${fmtIn(tread - minT)} strip behind each cap needs infill (${matName(mat(it.infill))})`]);
+    else checks.push(["ok", `Each riser sits snug against the cap below (${fmtIn(over)} overhang)`]);
+  } else if (tread > D) checks.push(["bad", `Tread is deeper than the step unit (${fmtIn(D)}); steps will not overlap`]);
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
-  return { count, H, D, L, cap, capH, capD, over, run, top, base, blocks, caps, infill, full, cuts, capFull, capCuts, infillArea, checks };
+  const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
+  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
+}
+function wallCalc(it) {
+  const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
+  const capH = c ? c.H : 0, courses = Math.max(1, Math.round((it.h - capH) / b.H));
+  return { b, c, courses, perCourse: Math.ceil(it.w / b.L), blocks: Math.ceil(it.w / b.L) * courses, caps: c ? Math.ceil(it.w / c.L) : 0, step: b.H * Math.tan((b.setback || 0) * Math.PI / 180), top: courses * b.H + capH };
 }
 function itemSize(it) {
-  if (it.type === "steps") { const c = stepCalc(it); return { w: it.w, d: c.run }; }
-  if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d };
-  return { w: it.canopy, d: it.canopy };
+  if (it.type === "steps") { const c = stepCalc(it); return { w: c.xw, d: c.run, xc: c.xc }; }
+  if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d, xc: 0 };
+  return { w: it.canopy, d: it.canopy, xc: 0 };
 }
 // rot is clockwise from north: rotate local by -rot in standard math orientation
 function rotPt(it, lx, ly) { const a = -it.rot * Math.PI / 180; return { x: it.x + lx * Math.cos(a) - ly * Math.sin(a), y: it.y + lx * Math.sin(a) + ly * Math.cos(a) }; }
@@ -451,19 +678,18 @@ function hitTest(px, py) {
   for (const it of order) {
     if (RECT_TYPES.has(it.type)) {
       const s = itemSize(it), l = localOf(it, px, py);
-      if (Math.abs(l.x) <= s.w / 2 && Math.abs(l.y) <= s.d / 2) return it;
+      if (Math.abs(l.x - s.xc) <= s.w / 2 && Math.abs(l.y) <= s.d / 2) return it;
     } else {
       const r = Math.max(it.type === "tree" || it.type === "evergreen" ? Math.max(it.trunk * 2, 30) : it.canopy / 2, 14 / view2d.s);
       if (Math.hypot(px - it.x, py - it.y) <= r) return it;
     }
   }
-  // tree canopies last (big, under everything else)
   for (const it of order) if ((it.type === "tree" || it.type === "evergreen") && Math.hypot(px - it.x, py - it.y) <= it.canopy / 2) return it;
   return null;
 }
 function drawOrder() {
   const rank = { grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9 };
-  return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type]);
+  return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type] || (a.elev || 0) - (b.elev || 0));
 }
 function groundAt(x, y, exceptId) {
   let h = 0;
@@ -473,6 +699,18 @@ function groundAt(x, y, exceptId) {
     if (Math.abs(l.x) <= it.w / 2 && Math.abs(l.y) <= it.d / 2) h = Math.max(h, it.h);
   }
   return h;
+}
+
+// ---------- landing geometry (raised landing: block perimeter, cap border, surface inside) ----------
+function landingCalc(it) {
+  const s = mat(it.surface), edged = it.edge === "caps";
+  const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
+  const capH = edged && c ? c.H : 0, capD = edged && c ? c.D : 0;
+  const courses = edged ? Math.max(1, Math.ceil((it.h - capH) / b.H)) : 0;
+  const perim = 2 * (it.w + it.d);
+  const blocks = edged ? Math.ceil(perim / b.L) * courses : 0, caps = edged && c ? Math.ceil(perim / c.L) : 0;
+  const inW = Math.max(0, it.w - 2 * capD), inD = Math.max(0, it.d - 2 * capD);
+  return { s, b, c, edged, capH, capD, courses, blocks, caps, inW, inD, area: inW * inD };
 }
 
 // ---------- 2D blueprint ----------
@@ -488,10 +726,9 @@ function sizeCanvas(c) {
   return { w: r.width, h: r.height, dpr };
 }
 function fitView(W, H, v = view2d, pad = 60) {
-  const sw = job.site.w, sd = job.site.d;
-  let minX = 0, minY = 0, maxX = sw, maxY = sd;
+  let minX = 0, minY = 0, maxX = job.site.w, maxY = job.site.d;
   for (const it of job.items) { const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
-  v.s = Math.min((W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY));
+  v.s = Math.max(0.05, Math.min((W - pad * 2) / (maxX - minX), (H - pad * 2) / (maxY - minY)));
   v.ox = W / 2 - (minX + maxX) / 2 * v.s;
   v.oy = H / 2 + (minY + maxY) / 2 * v.s;
 }
@@ -508,7 +745,6 @@ function drawPlan() {
 function renderSheet(ctx, W, H, v, o) {
   const u = o.unit || 1; // line-width multiplier for export
   ctx.fillStyle = BP.paper; ctx.fillRect(0, 0, W, H);
-  // grid: 1 ft, bold every 5 ft
   const [x0w, y1w] = S2W(v, 0, 0), [x1w, y0w] = S2W(v, W, H);
   const step = v.s * 12 < 6 ? 60 : 12;
   ctx.lineWidth = 1 * u;
@@ -520,7 +756,6 @@ function renderSheet(ctx, W, H, v, o) {
     ctx.strokeStyle = gy % 60 === 0 ? BP.grid5 : BP.grid;
     const [, sy] = W2S(v, 0, gy); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
   }
-  // property / work area
   ctx.save(); ctx.setLineDash([10 * u, 6 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1.5 * u;
   const [a1, b1] = W2S(v, 0, 0), [a2, b2] = W2S(v, job.site.w, job.site.d);
   ctx.strokeRect(a1, b2, a2 - a1, b1 - b2); ctx.restore();
@@ -528,14 +763,12 @@ function renderSheet(ctx, W, H, v, o) {
 
   for (const it of drawOrder()) drawItem(ctx, v, it, u, it.id === o.selId);
 
-  // north arrow
   const nx = W - 46 * u, ny = (o.screen ? 70 : 60) * u;
   ctx.save(); ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u;
   ctx.beginPath(); ctx.arc(nx, ny, 20 * u, 0, Math.PI * 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(nx, ny - 18 * u); ctx.lineTo(nx + 7 * u, ny + 8 * u); ctx.lineTo(nx, ny + 3 * u); ctx.closePath(); ctx.fill();
   label(ctx, "N", nx, ny - 26 * u, 13 * u, "center", BP.ink); ctx.restore();
 
-  // scale bar
   const ftPx = v.s * 12; let barFt = [1, 2, 5, 10, 20, 50].find((f) => f * ftPx > 90 * u) || 50;
   const sbx = 20 * u, sby = H - (o.screen ? 44 : 30) * u;
   ctx.fillStyle = BP.ink; ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u;
@@ -545,7 +778,7 @@ function renderSheet(ctx, W, H, v, o) {
   if (o.section) {
     const st = job.items.find((i) => i.id === o.selId && i.type === "steps") || job.items.find((i) => i.type === "steps");
     if (st) {
-      const bw = Math.min(360 * u, W * 0.42), bh = Math.min(220 * u, H * 0.4);
+      const bw = Math.min(380 * u, W * 0.44), bh = Math.min(230 * u, H * 0.42);
       drawSection(ctx, st, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u);
     }
   }
@@ -564,8 +797,24 @@ function hatch(ctx, gap, color, u) {
   const c = ctx.canvas; for (let k = -c.height; k < c.width + c.height; k += gap) { ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k - c.height, c.height); ctx.stroke(); }
   ctx.restore();
 }
+function lineL(ctx, v, it, ax, ay, bx, by) { const a = rotPt(it, ax, ay), b = rotPt(it, bx, by); const [sx, sy] = W2S(v, a.x, a.y), [ex, ey] = W2S(v, b.x, b.y); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); }
+// Unit joints for pavers and slabs (running bond), drawn when the units are big enough on screen
+function surfaceJoints(ctx, v, it, m, x0, y0, x1, y1, u) {
+  if (!m || !(m.L > 0) || v.s * Math.min(m.L, m.D) < 5 * u) return;
+  ctx.save(); polyRect(ctx, v, it, x0, y0, x1, y1); ctx.clip();
+  ctx.strokeStyle = "rgba(234,242,252,.22)"; ctx.lineWidth = 0.8 * u;
+  if (m.pattern === "flag") {
+    const seed = hashStr(it.id);
+    for (let y = y0, r = 0; y < y1; y += m.D * (0.7 + 0.5 * rand(seed + r)), r++) for (let x = x0 + rand(seed + r * 3) * m.L; x < x1; x += m.L * (0.6 + 0.6 * rand(seed + x))) lineL(ctx, v, it, x, y, x + 3, y + m.D * 0.8);
+  } else {
+    for (let y = y0, r = 0; y < y1 - 0.5; y += m.D, r++) {
+      lineL(ctx, v, it, x0, y, x1, y);
+      for (let x = x0 + (r % 2 ? m.L / 2 : m.L); x < x1 - 0.5; x += m.L) lineL(ctx, v, it, x, y, x, Math.min(y + m.D, y1));
+    }
+  }
+  ctx.restore();
+}
 function dimLine(ctx, v, it, ax, ay, bx, by, off, text, u) {
-  // dimension in local coords, offset perpendicular by off (local units)
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
   const p1 = rotPt(it, ax + nx * off, ay + ny * off), p2 = rotPt(it, bx + nx * off, by + ny * off);
   const e1 = rotPt(it, ax + nx * 2, ay + ny * 2), e2 = rotPt(it, bx + nx * 2, by + ny * 2);
@@ -599,8 +848,9 @@ function drawItem(ctx, v, it, u, sel) {
     }
     case "path": {
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fill(); ctx.stroke();
-      ctx.save(); polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); hatch(ctx, 7 * u, "rgba(234,242,252,.12)", u); ctx.restore();
+      surfaceJoints(ctx, v, it, mat(it.surface), -it.w / 2, -it.d / 2, it.w / 2, it.d / 2, u);
       label(ctx, (tag || "WALKWAY").toUpperCase(), cx, cy, 11 * u, "center", BP.ink);
+      if (sel || u > 1) label(ctx, matName(mat(it.surface)).toUpperCase(), cx, cy + 14 * u, 9 * u, "center", BP.ink2);
       break;
     }
     case "house": {
@@ -610,44 +860,44 @@ function drawItem(ctx, v, it, u, sel) {
       label(ctx, (tag || "HOUSE").toUpperCase(), cx, cy, 13 * u, "center", BP.ink, 600);
       break;
     }
-    case "landing": case "wall": {
+    case "landing": {
+      const lc = landingCalc(it);
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(234,242,252,.14)"; ctx.fill(); ctx.stroke();
-      if (it.type === "wall") { // block joints
-        const L = job.product.L; ctx.lineWidth = 1 * u; ctx.strokeStyle = BP.ink2;
-        for (let x = -it.w / 2 + L; x < it.w / 2 - 0.5; x += L) { const a = rotPt(it, x, -it.d / 2), b = rotPt(it, x, it.d / 2); const [ax, ay] = W2S(v, a.x, a.y), [bx, by] = W2S(v, b.x, b.y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
-      }
-      label(ctx, `${(tag || TYPE_INFO[it.type].label).toUpperCase()} · TOP +${fmtLen(it.h)}`, cx, cy, 11 * u, "center", BP.ink);
+      if (lc.edged && lc.capD) { ctx.lineWidth = 1 * u; polyRect(ctx, v, it, -it.w / 2 + lc.capD, -it.d / 2 + lc.capD, it.w / 2 - lc.capD, it.d / 2 - lc.capD); ctx.stroke(); }
+      surfaceJoints(ctx, v, it, lc.s, -lc.inW / 2, -lc.inD / 2, lc.inW / 2, lc.inD / 2, u);
+      label(ctx, `${(tag || "LANDING").toUpperCase()} · TOP +${fmtLen(it.h)}`, cx, cy, 11 * u, "center", BP.ink);
       if (sel) dimLine(ctx, v, it, -it.w / 2, it.d / 2, it.w / 2, it.d / 2, 16, fmtLen(it.w), u);
+      break;
+    }
+    case "wall": {
+      const wc = wallCalc(it);
+      polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(234,242,252,.14)"; ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 1 * u; ctx.strokeStyle = BP.ink2;
+      for (let x = -it.w / 2 + wc.b.L; x < it.w / 2 - 0.5; x += wc.b.L) lineL(ctx, v, it, x, -it.d / 2, x, it.d / 2);
+      label(ctx, `${(tag || "WALL").toUpperCase()} · ${fmtLen(wc.top)} HIGH`, cx, cy - 14 * u, 11 * u, "center", BP.ink);
+      if (sel) dimLine(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, -it.d / 2, -16, fmtLen(it.w), u);
       break;
     }
     case "steps": {
       const c = stepCalc(it);
-      // Plan shows what you see from above: the caps (or block tops), infill strips, and the riser block faces between them.
-      for (let i = c.count - 1; i >= 0; i--) {
-        const nextY = i < c.count - 1 ? -c.run / 2 + (i + 1) * it.tread : Infinity;
-        const tops = c.cap ? c.caps.filter((q) => q.step === i) : c.blocks.filter((q) => q.step === i);
-        for (const q of tops) {
-          polyRect(ctx, v, it, q.x0, q.y0, q.x1, Math.min(q.y1, nextY));
-          ctx.fillStyle = q.cut ? "rgba(255,200,87,.16)" : `rgba(234,242,252,${0.10 + i * 0.05})`; ctx.fill();
-          ctx.lineWidth = 1.2 * u; ctx.strokeStyle = BP.ink; ctx.stroke();
-        }
-        for (const q of c.infill.filter((q) => q.step === i)) {
-          polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1); ctx.fillStyle = "rgba(234,242,252,.06)"; ctx.fill(); ctx.lineWidth = 1 * u; ctx.strokeStyle = BP.ink2; ctx.stroke();
-          ctx.save(); polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1); hatch(ctx, 5 * u, "rgba(234,242,252,.18)", u); ctx.restore();
-        }
+      // Plan shows what you see from above, so pieces are drawn lowest first and higher ones cover them.
+      const ps = c.pieces.slice().sort((a, b) => a.z1 - b.z1 || (a.kind === "block") - (b.kind === "block"));
+      for (const q of ps) {
+        polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1);
+        const lift = clamp((q.z1 - c.E) / Math.max(1, c.top - c.E), 0, 1);
+        ctx.fillStyle = q.kind === "infill" ? "rgba(234,242,252,.06)" : q.cut ? "rgba(255,200,87,.18)" : `rgba(234,242,252,${(0.10 + lift * 0.22).toFixed(3)})`;
+        ctx.fill(); ctx.lineWidth = (q.kind === "infill" ? 0.8 : 1.2) * u; ctx.strokeStyle = q.kind === "infill" ? BP.ink2 : BP.ink; ctx.stroke();
       }
       if (c.cap && c.over > 0) { // dashed riser face under each cap nosing
         ctx.save(); ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u;
-        for (let i = 0; i < c.count; i++) { const y = -c.run / 2 + i * it.tread + c.over; const a = rotPt(it, -it.w / 2, y), b = rotPt(it, it.w / 2, y); const [ax, ay] = W2S(v, a.x, a.y), [bx, by] = W2S(v, b.x, b.y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
+        c.xs.forEach(([xl, xr], i) => { const y = -c.run / 2 + i * it.tread + c.over; lineL(ctx, v, it, xl, y, xr, y); });
         ctx.restore();
       }
-      // nosing lines + step numbers
       for (let i = 0; i < c.count; i++) {
-        const y = -c.run / 2 + i * it.tread + it.tread / 2;
-        const p = rotPt(it, it.w / 2 - 8, y); const [sx, sy] = W2S(v, p.x, p.y);
+        const y = -c.run / 2 + i * it.tread + it.tread / 2, xr = c.xs[i] ? c.xs[i][1] : it.w / 2;
+        const p = rotPt(it, xr - 10, y); const [sx, sy] = W2S(v, p.x, p.y);
         if (v.s * it.tread > 14 * u) label(ctx, "R" + (i + 1), sx, sy, 10 * u, "center", BP.ink2);
       }
-      // UP arrow
       const a = rotPt(it, 0, -c.run / 2 + 4), bpt = rotPt(it, 0, c.run / 2 - 4);
       const [ax, ay] = W2S(v, a.x, a.y), [bx, by] = W2S(v, bpt.x, bpt.y);
       ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u;
@@ -658,8 +908,9 @@ function drawItem(ctx, v, it, u, sel) {
       const lp = rotPt(it, -it.w / 4, 0); const [lx, ly] = W2S(v, lp.x, lp.y);
       label(ctx, "UP " + c.count + "R", lx, ly, 11 * u, "center", BP.ink, 600);
       dimLine(ctx, v, it, -it.w / 2, -c.run / 2, it.w / 2, -c.run / 2, -18, fmtLen(it.w), u);
-      dimLine(ctx, v, it, it.w / 2, -c.run / 2, it.w / 2, c.run / 2, -18, "RUN " + fmtLen(c.run), u);
-      if (tag) { const tp = rotPt(it, 0, -c.run / 2 - 38); const [tx, ty] = W2S(v, tp.x, tp.y); label(ctx, tag.toUpperCase(), tx, ty, 11 * u, "center", BP.ink, 600); }
+      const rx = it.w / 2 + (c.cheekR ? c.D : 0);
+      dimLine(ctx, v, it, rx, -c.run / 2, rx, c.run / 2, -18, "RUN " + fmtLen(c.run), u);
+      if (tag) { const tp = rotPt(it, 0, -c.run / 2 - 38); const [tx, ty] = W2S(v, tp.x, tp.y); label(ctx, tag.toUpperCase() + (c.E ? ` · FROM +${fmtLen(c.E)}` : ""), tx, ty, 11 * u, "center", BP.ink, 600); }
       break;
     }
     case "tree": case "evergreen": {
@@ -673,7 +924,6 @@ function drawItem(ctx, v, it, u, sel) {
         const px = cx + rr * Math.cos(t), py = cy + rr * Math.sin(t); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
       }
       ctx.closePath(); ctx.fillStyle = "rgba(140,200,150,.08)"; ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      // branches
       ctx.lineWidth = 1 * u; ctx.beginPath();
       for (let k = 0; k < 6; k++) { const t = k / 6 * Math.PI * 2 + 0.3; ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.55 * Math.cos(t), cy + r * 0.55 * Math.sin(t)); }
       ctx.stroke();
@@ -700,7 +950,7 @@ function drawItem(ctx, v, it, u, sel) {
   }
   if (sel) {
     ctx.strokeStyle = BP.sel; ctx.lineWidth = 2 * u; ctx.setLineDash([6 * u, 4 * u]);
-    if (RECT_TYPES.has(it.type)) { const s = itemSize(it); polyRect(ctx, v, it, -s.w / 2 - 4, -s.d / 2 - 4, s.w / 2 + 4, s.d / 2 + 4); ctx.stroke(); }
+    if (RECT_TYPES.has(it.type)) { const s = itemSize(it); polyRect(ctx, v, it, s.xc - s.w / 2 - 4, -s.d / 2 - 4, s.xc + s.w / 2 + 4, s.d / 2 + 4); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(cx, cy, it.canopy / 2 * v.s + 6, 0, Math.PI * 2); ctx.stroke(); }
   }
   ctx.restore();
@@ -714,35 +964,36 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
   ctx.fillStyle = "rgba(12,38,72,.92)"; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.strokeRect(X, Y, W, H);
   label(ctx, "SECTION " + letter + " · " + (it.label || "STEPS").toUpperCase(), X + 10 * u, Y + 14 * u, 11 * u, "left", BP.ink, 600);
-  const baseDepth = 6; // compacted base under the bottom course
-  const lo = Math.min(0, c.base) - baseDepth, top = c.top, spanY = c.run + 30, spanZ = top - lo + 10;
+  const baseDepth = job.est.baseDepth || 6;
+  const lo = Math.min(0, c.base) - baseDepth, top = c.top - c.E, spanY = c.run + 30, spanZ = top - lo + 12;
   const s = Math.min((W - 80 * u) / spanY, (H - 64 * u) / spanZ);
   const ox = X + 40 * u, oz = Y + H - 26 * u + lo * s;
   const P = (y, z) => [ox + (y + 12) * s, oz - z * s];
-  // lower grade, compacted base
   ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(X + 6 * u, P(0, 0)[1]); ctx.lineTo(P(c.over, 0)[0], P(0, 0)[1]); ctx.stroke();
-  label(ctx, "GRADE", X + 8 * u, P(0, 0)[1] - 8 * u, 9 * u, "left", BP.ink2);
+  label(ctx, c.E ? `+${fmtLen(c.E)}` : "GRADE", X + 8 * u, P(0, 0)[1] - 8 * u, 9 * u, "left", BP.ink2);
   const [b1x, b1y] = P(c.over - 3, c.base), [b2x] = P(c.run + 3, c.base);
   ctx.fillStyle = "rgba(234,242,252,.10)"; ctx.fillRect(b1x, b1y, b2x - b1x, baseDepth * s);
   ctx.save(); ctx.beginPath(); ctx.rect(b1x, b1y, b2x - b1x, baseDepth * s); ctx.clip();
   ctx.fillStyle = BP.ink2; for (let k = 0; k < 90; k++) { ctx.beginPath(); ctx.arc(b1x + rand(k * 7) * (b2x - b1x), b1y + rand(k * 13) * baseDepth * s, 1 * u, 0, 7); ctx.fill(); }
   ctx.restore();
-  // backfill behind the risers
   ctx.beginPath(); ctx.moveTo(...P(c.over + c.D, c.base));
-  for (let i = 1; i < c.count; i++) { ctx.lineTo(...P(i * it.tread + c.over, c.base + i * c.H)); }
+  for (let i = 1; i < c.count; i++) ctx.lineTo(...P(i * it.tread + c.over, c.base + i * c.H));
   ctx.lineTo(...P(c.run + 18, top)); ctx.lineTo(...P(c.run + 18, c.base)); ctx.closePath();
   ctx.fillStyle = "rgba(140,200,150,.08)"; ctx.fill();
+  if (c.cheekL || c.cheekR) { // cheek wall profile beyond
+    ctx.save(); ctx.setLineDash([5 * u, 4 * u]); ctx.strokeStyle = BP.ink2; ctx.beginPath();
+    for (let i = 0; i < c.count; i++) { const zt = c.base + i * c.H + c.bH + c.capH + (it.cheekAbove ?? 8); const y0 = i * it.tread + (i ? c.over : c.over), y1 = i === c.count - 1 ? c.run : (i + 1) * it.tread + c.over; i ? ctx.lineTo(...P(y0, zt)) : ctx.moveTo(...P(y0, zt)); ctx.lineTo(...P(y1, zt)); }
+    ctx.stroke(); ctx.restore();
+  }
   const rect = (y0, z0, y1, z1, fill, lw = 1.4) => { const [ax, ay] = P(y0, z1), [bx, by] = P(y1, z0); ctx.fillStyle = fill; ctx.fillRect(ax, ay, bx - ax, by - ay); ctx.strokeStyle = BP.ink; ctx.lineWidth = lw * u; ctx.strokeRect(ax, ay, bx - ax, by - ay); };
   for (let i = 0; i < c.count; i++) {
     const Yn = i * it.tread, z0 = c.base + i * c.H;
-    rect(Yn + c.over, z0, Yn + c.over + c.D, z0 + c.H, "rgba(234,242,252,.22)");
-    if (c.cap) rect(Yn, z0 + c.H, Yn + c.capD, z0 + c.H + c.capH, "rgba(234,242,252,.36)");
-    const inf = c.infill.find((q) => q.step === i); if (inf) rect(Yn + c.capD, z0 + c.H, Yn + it.tread + c.over, z0 + c.H + c.capH, "rgba(234,242,252,.08)", 0.8);
+    rect(Yn + c.over, z0, Yn + c.over + c.D, z0 + c.bH, "rgba(234,242,252,.22)");
+    if (c.cap) rect(Yn, z0 + c.bH, Yn + c.capD, z0 + c.bH + c.capH, "rgba(234,242,252,.36)");
+    if (c.cap && i < c.count - 1 && it.tread + c.over - c.capD > 0.1) rect(Yn + c.capD, z0 + c.bH, Yn + it.tread + c.over, z0 + c.bH + c.capH, "rgba(234,242,252,.08)", 0.8);
   }
-  // upper grade
   ctx.strokeStyle = BP.ink2; ctx.beginPath(); ctx.moveTo(...P(c.run, top)); ctx.lineTo(X + W - 6 * u, P(0, top)[1]); ctx.stroke();
-  // dims: riser and tread
-  const z1 = c.base + c.H + c.capH, z2 = z1 + c.H;
+  const z1 = c.base + c.bH + c.capH, z2 = z1 + c.H;
   if (c.count > 1) {
     const [rx, ry0] = P(it.tread - 4, z1), [, ry1] = P(0, z2);
     ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(rx, ry0); ctx.lineTo(rx, ry1); ctx.stroke();
@@ -751,10 +1002,11 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
     ctx.beginPath(); ctx.moveTo(tx0, ty - 4 * u); ctx.lineTo(tx1, ty - 4 * u); ctx.stroke();
     label(ctx, fmtIn(it.tread), (tx0 + tx1) / 2, ty - 13 * u, 10 * u, "center", BP.ink);
   }
-  label(ctx, "TOP +" + fmtLen(top), X + W - 8 * u, P(0, top)[1] - 9 * u, 10 * u, "right", BP.ink);
+  label(ctx, "TOP +" + fmtLen(c.top), X + W - 8 * u, P(0, top)[1] - 9 * u, 10 * u, "right", BP.ink);
   if (c.base < 0) label(ctx, "BOTTOM COURSE " + fmtIn(-c.base) + " BELOW GRADE", P(c.run, 0)[0] + 8 * u, P(0, c.base)[1] - 4 * u, 9 * u, "left", BP.ink2);
-  const prod = c.cap ? `${fmtIn(c.H)} BLOCK RISERS · ${fmtIn(c.capH)} CAP TREADS` : `${fmtIn(c.D)} SOLID STEP BLOCKS`;
-  label(ctx, `${c.count} RISERS · ${prod} · ${fmtIn(baseDepth)} COMPACTED BASE`, X + 10 * u, Y + H - 10 * u, 10 * u, "left", BP.ink2);
+  const bm = mat(it.block), cm = mat(it.cap);
+  const prod = c.cap ? `${fmtIn(c.bH)}${c.cutting ? " CUT" : ""} ${matName(bm).toUpperCase()} + ${fmtIn(c.capH)} ${matName(cm).toUpperCase()}` : `${matName(bm).toUpperCase()}`;
+  label(ctx, `${c.count} × ${fmtIn(c.H)} RISERS · ${prod}`, X + 10 * u, Y + H - 10 * u, 9 * u, "left", BP.ink2);
   ctx.restore();
 }
 
@@ -776,7 +1028,7 @@ plan.addEventListener("pointermove", (e) => {
   pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
   if (pinch && pointers.size >= 2) {
     const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-    const k = d / pinch.d; view2d.s = clamp(pinch.s * k, 0.05, 40);
+    view2d.s = clamp(pinch.s * d / pinch.d, 0.05, 40);
     const r = view2d.s / pinch.s;
     view2d.ox = cx - (pinch.cx - pinch.ox) * r; view2d.oy = cy - (pinch.cy - pinch.oy) * r; drawPlan(); return;
   }
@@ -802,7 +1054,6 @@ plan.addEventListener("wheel", (e) => {
   const k = Math.exp(-e.deltaY * 0.0015), ns = clamp(view2d.s * k, 0.05, 40), r = ns / view2d.s;
   view2d.ox = e.offsetX - (e.offsetX - view2d.ox) * r; view2d.oy = e.offsetY - (e.offsetY - view2d.oy) * r; view2d.s = ns; drawPlan();
 }, { passive: false });
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 // ---------- panels ----------
 function showPane(id) {
@@ -811,36 +1062,71 @@ function showPane(id) {
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
 
 function field(lbl, key, it, kind = "dim") {
-  const id = "f_" + key;
-  const val = kind === "dim" ? fmtLen(it[key]) : kind === "deg" ? (it[key] || 0) : (it[key] ?? "");
-  const input = kind === "select" ? "" : `<input id="${id}" class="${kind === "dim" ? "dim" : ""}" value="${escapeHtml(String(val))}" ${kind === "deg" ? 'inputmode="decimal"' : ""}>`;
-  return `<label class="f">${lbl}${input}</label>`;
+  const val = kind === "dim" ? fmtLen(it[key]) : (it[key] ?? "");
+  return `<label class="f">${lbl}<input data-k="${key}" data-kind="${kind}" class="${kind === "dim" ? "dim" : ""}" value="${escapeHtml(String(val))}" ${kind !== "dim" && kind !== "text" ? 'inputmode="decimal"' : ""}></label>`;
 }
-function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function selectField(lbl, key, it, options) {
+  return `<label class="f">${lbl}<select data-k="${key}" data-kind="select">${options.map(([v, t]) => `<option value="${escapeHtml(v)}"${String(it[key] ?? "") === v ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>`;
+}
+const matOptions = (kinds, none) => (none ? [["", none]] : []).concat(matsOfKinds(kinds).map((m) => [m.id, `${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)}`]));
+const colorOptions = (id) => ((mat(id) && mat(id).colors) || ["Grey"]).map((c) => [c, c]);
+const CONFIGS = [["straight", "Straight"], ["wrapL", "Wrap left side"], ["wrapR", "Wrap right side"], ["wrapLR", "Wrap both sides (pyramid)"]];
+const CHEEKS = [["none", "None"], ["left", "Left"], ["right", "Right"], ["both", "Both sides"]];
+const STAGGER = [["half", "Half-block stagger"], ["none", "Stacked joints"]];
+const EDGES = [["caps", "Block walls with cap border"], ["none", "Surface only (on grade or fill)"]];
 
+function checksHtml(list) {
+  return `<ul class="checks">${list.map(([k, m]) => `<li><span class="pill ${k}">${k === "ok" ? "OK" : k === "warn" ? "Check" : "Fix"}</span><span>${escapeHtml(m)}</span></li>`).join("")}</ul>`;
+}
 function renderItemPane() {
   const pane = $("pItem");
   const it = job.items.find((i) => i.id === selId);
   if (!it) {
-    pane.innerHTML = `<h2>Nothing selected</h2><p>Tap an item on the blueprint to edit its measurements, or use the Add tab to place steps, trees, shrubs, a house and more.</p>
-      <h3>Steps on this job</h3>${job.items.filter((i) => i.type === "steps").map((s) => { const c = stepCalc(s); return `<p>${escapeHtml(s.label || "Steps")}: ${c.count} risers, ${fmtLen(s.w)} wide, ${c.full + c.cuts} blocks</p>`; }).join("") || "<p>No steps yet.</p>"}`;
+    const q = estimate();
+    pane.innerHTML = `<h2>Nothing selected</h2><p>Tap an item on the blueprint to edit it, or use the Add tab to place steps, landings, walls, walkways, trees and more.</p>
+      <dl class="stats"><div><dt>Items</dt><dd>${job.items.length}</dd></div><div><dt>Quote total</dt><dd>${money(q.total)}</dd></div></dl>
+      <h3>Hardscape on this job</h3>${job.items.filter((i) => BUILT_TYPES.has(i.type)).map((s) => `<p>${escapeHtml(s.label || TYPE_INFO[s.type].label)}: ${escapeHtml(describe(s))}</p>`).join("") || "<p>None yet.</p>"}`;
     return;
   }
   const t = it.type;
-  let h = `<h2>${escapeHtml(TYPE_INFO[t].label)}</h2>` + `<label class="f">Label<input id="f_label" value="${escapeHtml(it.label || "")}"></label>`;
+  let h = `<h2>${escapeHtml(TYPE_INFO[t].label)}</h2><label class="f">Label<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>`;
   h += `<div class="grid2">${field("Center east (x)", "x", it)}${field("Center north (y)", "y", it)}</div>`;
   if (t === "steps") {
     const c = stepCalc(it);
-    h += `<div class="grid2">${field("Step width", "w", it)}${field("Total rise", "rise", it)}${field("Tread depth", "tread", it)}${field("Rotation °", "rot", it, "deg")}${field("Bottom course at", "base", it)}</div>`;
+    h += `<div class="grid2">${field("Step width", "w", it)}${field("Total rise", "rise", it)}${field("Tread depth", "tread", it)}${field("Rotation °", "rot", it, "deg")}${field("Starts at elevation", "elev", it)}${field("Bottom course at", "base", it)}</div>`;
+    h += `<h3>Build</h3><div class="grid2">
+      ${selectField("Riser block / step unit", "block", it, matOptions(["block", "solid"]))}${selectField("Colour", "color", it, colorOptions(it.block))}
+      ${selectField("Cap / tread", "cap", it, matOptions(["cap", "slab"], "No cap"))}${it.cap ? selectField("Cap colour", "capColor", it, colorOptions(it.cap)) : "<span></span>"}
+      ${it.cap ? field("Cap overhang", "capOver", it) + field("Rise per step (cut block + cap, 0 = full block)", "stepRise", it) : ""}
+      ${selectField("Joints", "stagger", it, STAGGER)}${it.cap ? selectField("Tread infill (if any)", "infill", it, matOptions(["paver", "slab", "surface"])) : "<span></span>"}
+      </div>`;
+    h += `<h3>Configuration</h3><div class="grid2">${selectField("Shape", "config", it, CONFIGS)}${selectField("Cheek walls", "cheek", it, CHEEKS)}${it.cheek && it.cheek !== "none" ? field("Cheek wall above tread", "cheekAbove", it) : ""}</div>`;
     h += `<dl class="stats"><div><dt>Risers</dt><dd>${c.count} × ${fmtIn(c.H)}</dd></div><div><dt>Total run</dt><dd>${fmtLen(c.run)}</dd></div>
-      <div><dt>Blocks</dt><dd>${c.full + c.cuts} (${c.cuts} cut)</dd></div><div><dt>Caps</dt><dd>${c.cap ? (c.capFull + c.capCuts) + " (" + c.capCuts + " cut)" : "–"}</dd></div>
-      <div><dt>Top of steps</dt><dd>${fmtLen(c.top)}</dd></div><div><dt>Bottom course</dt><dd>${c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
-    h += `<h3>Checks</h3><ul class="checks">${c.checks.map(([k, m]) => `<li><span class="pill ${k}">${k === "ok" ? "OK" : k === "warn" ? "Check" : "Fix"}</span><span>${escapeHtml(m)}</span></li>`).join("")}</ul>
-      <p class="note">Based on common residential limits (IRC). Your local code decides.</p>`;
+      <div><dt>Blocks</dt><dd>${c.t.blocks} (${c.cutting ? "all cut" : c.t.blockCuts + " cut"})</dd></div><div><dt>Caps</dt><dd>${c.cap ? c.t.caps + " (" + c.t.capCuts + " cut)" : "–"}</dd></div>
+      ${c.cheekL || c.cheekR ? `<div><dt>Cheek wall blocks</dt><dd>${c.t.cheekBlocks}</dd></div><div><dt>Cheek wall caps</dt><dd>${c.t.cheekCaps}</dd></div>` : ""}
+      <div><dt>Top of steps</dt><dd>+${fmtLen(c.top)}</dd></div><div><dt>${c.cutting ? "Riser block cut to" : "Bottom course"}</dt><dd>${c.cutting ? fmtIn(c.bH) + " high" : c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
+    h += `<h3>Checks</h3>${checksHtml(c.checks)}<p class="note">Based on common residential limits (IRC / BC Building Code). Your local code decides.</p>`;
+  } else if (t === "wall") {
+    const wc = wallCalc(it);
+    h += `<div class="grid2">${field("Length", "w", it)}${field("Height", "h", it)}${field("Rotation °", "rot", it, "deg")}<span></span>
+      ${selectField("Block", "block", it, matOptions(["block"]))}${selectField("Colour", "color", it, colorOptions(it.block))}
+      ${selectField("Cap", "cap", it, matOptions(["cap", "slab"], "No cap"))}${it.cap ? selectField("Cap colour", "capColor", it, colorOptions(it.cap)) : ""}</div>
+      <dl class="stats"><div><dt>Courses</dt><dd>${wc.courses}</dd></div><div><dt>Built height</dt><dd>${fmtLen(wc.top)}</dd></div>
+      <div><dt>Blocks</dt><dd>${wc.blocks}</dd></div><div><dt>Caps</dt><dd>${wc.caps || "–"}</dd></div></dl>
+      ${checksHtml([[wc.top <= 48 ? "ok" : "warn", wc.top <= 48 ? "Under 4 ft: gravity wall" : "Over 4 ft usually needs an engineered design and geogrid"], [wc.b.setback ? "ok" : "warn", `${wc.b.setback || 0}° setback, about ${fmtIn(wc.step)} per course`]])}`;
+  } else if (t === "landing") {
+    const lc = landingCalc(it);
+    h += `<div class="grid2">${field("Width", "w", it)}${field("Depth", "d", it)}${field("Top elevation", "h", it)}${field("Rotation °", "rot", it, "deg")}
+      ${selectField("Surface", "surface", it, matOptions(["paver", "slab", "surface"]))}${selectField("Surface colour", "color", it, colorOptions(it.surface))}
+      ${selectField("Edge", "edge", it, EDGES)}<span></span>
+      ${it.edge === "caps" ? selectField("Wall block", "block", it, matOptions(["block"])) + selectField("Block colour", "blockColor", it, colorOptions(it.block)) + selectField("Border cap", "cap", it, matOptions(["cap", "slab"])) + selectField("Cap colour", "capColor", it, colorOptions(it.cap)) : ""}</div>
+      <dl class="stats"><div><dt>Surface</dt><dd>${num1(lc.area / 144)} sq ft</dd></div><div><dt>Perimeter blocks</dt><dd>${lc.blocks || "–"}</dd></div><div><dt>Border caps</dt><dd>${lc.caps || "–"}</dd></div><div><dt>Courses</dt><dd>${lc.courses || "–"}</dd></div></dl>`;
+  } else if (t === "path") {
+    h += `<div class="grid2">${field("Width", "w", it)}${field("Length", "d", it)}${field("Rotation °", "rot", it, "deg")}<span></span>
+      ${selectField("Surface", "surface", it, matOptions(["paver", "slab", "surface"]))}${selectField("Colour", "color", it, colorOptions(it.surface))}</div>
+      <dl class="stats"><div><dt>Area</dt><dd>${num1(it.w * it.d / 144)} sq ft</dd></div><div><dt>Material</dt><dd>${escapeHtml(matName(mat(it.surface)))}</dd></div></dl>`;
   } else if (RECT_TYPES.has(t)) {
-    h += `<div class="grid2">${field("Width", "w", it)}${field("Depth", "d", it)}`;
-    if (t !== "path") h += field(t === "house" ? "Wall height" : t === "wall" ? "Wall height" : "Height above grade", "h", it);
-    h += `${field("Rotation °", "rot", it, "deg")}</div>`;
+    h += `<div class="grid2">${field("Width", "w", it)}${field("Depth", "d", it)}${field(t === "house" ? "Wall height" : "Height above grade", "h", it)}${field("Rotation °", "rot", it, "deg")}</div>`;
   } else {
     h += `<div class="grid2">${field(t === "rock" ? "Size across" : "Canopy / spread", "canopy", it)}${field("Height", "height", it)}`;
     if (t === "tree" || t === "evergreen") h += field("Trunk diameter", "trunk", it);
@@ -848,23 +1134,39 @@ function renderItemPane() {
   }
   h += `<div class="row">${RECT_TYPES.has(t) ? '<button class="btn" id="rotL">Rotate −90°</button><button class="btn" id="rotR">Rotate +90°</button>' : ""}<button class="btn" id="dupBtn">Duplicate</button><button class="btn danger" id="delBtn">Delete</button></div>`;
   pane.innerHTML = h;
-  pane.querySelectorAll("input").forEach((inp) => inp.addEventListener("change", () => {
-    const key = inp.id.slice(2);
-    snapshot();
-    if (key === "label") it.label = inp.value;
-    else if (key === "rot") { const n = parseFloat(inp.value); if (!isNaN(n)) it.rot = ((n % 360) + 360) % 360; }
-    else {
-      const n = parseLen(inp.value);
-      if (isNaN(n) || (n <= 0 && !["x", "y", "base", "h"].includes(key))) { toast("Couldn't read that measurement. Try 4' 6\" or 54\"."); undoStack.pop(); inp.value = fmtLen(it[key]); return; }
-      it[key] = n;
-    }
-    commit();
-  }));
+  pane.querySelectorAll("[data-k]").forEach((inp) => inp.addEventListener("change", () => setItemField(it, inp)));
   const rotBy = (d) => { snapshot(); it.rot = ((it.rot || 0) + d + 360) % 360; commit(); };
   $("rotL") && ($("rotL").onclick = () => rotBy(-90));
   $("rotR") && ($("rotR").onclick = () => rotBy(90));
   $("dupBtn").onclick = () => { snapshot(); const c = { ...it, id: newId(), x: it.x + 24, y: it.y - 24 }; job.items.push(c); selId = c.id; commit(); };
   $("delBtn").onclick = () => { snapshot(); job.items = job.items.filter((i) => i.id !== it.id); selId = null; commit(); toast("Deleted. Tap Undo to bring it back."); };
+}
+function setItemField(it, inp) {
+  const key = inp.dataset.k, kind = inp.dataset.kind;
+  snapshot();
+  if (kind === "text") it[key] = inp.value;
+  else if (kind === "select") {
+    it[key] = inp.value;
+    if (key === "block") it.color = validColor(it.block, it.color);
+    if (key === "cap" && it.cap) it.capColor = validColor(it.cap, it.capColor);
+    if (key === "surface") it.color = validColor(it.surface, it.color);
+    if (key === "block" && it.type === "landing") it.blockColor = validColor(it.block, it.blockColor);
+    if (it.type === "steps" && (key === "block" || key === "cap")) { const P = build(it); it.tread = defaultTread(P); it.base = defaultBase(P); }
+  } else if (kind === "deg") { const n = parseFloat(inp.value); if (isNaN(n)) { undoStack.pop(); inp.value = it[key] || 0; return; } it[key] = ((n % 360) + 360) % 360; }
+  else {
+    const n = parseLen(inp.value);
+    const signed = ["x", "y", "base", "elev", "capOver", "stepRise", "cheekAbove"].includes(key);
+    if (isNaN(n) || (!signed && n <= 0)) { toast("Couldn't read that measurement. Try 4' 6\" or 54\"."); undoStack.pop(); inp.value = fmtLen(it[key]); return; }
+    it[key] = n;
+    if (it.type === "steps" && (key === "stepRise" || key === "capOver")) { const P = build(it); it.base = defaultBase(P); if (key === "capOver") it.tread = defaultTread(P); }
+  }
+  commit();
+}
+function describe(it) {
+  if (it.type === "steps") { const c = stepCalc(it); return `${c.count} risers, ${fmtLen(it.w)} wide, ${matName(mat(it.block))}${it.cap ? " + " + matName(mat(it.cap)) : ""}${it.config !== "straight" ? ", " + CONFIGS.find((x) => x[0] === it.config)[1].toLowerCase() : ""}`; }
+  if (it.type === "wall") return `${fmtLen(it.w)} long, ${fmtLen(wallCalc(it).top)} high, ${matName(mat(it.block))}`;
+  if (it.type === "landing" || it.type === "path") return `${fmtLen(it.w)} × ${fmtLen(it.d)}, ${matName(mat(it.surface))} ${it.color || ""}`;
+  return "";
 }
 
 function renderList() {
@@ -875,117 +1177,405 @@ function renderList() {
   $("itemList").querySelectorAll("button").forEach((b) => b.onclick = () => { selId = b.dataset.id; renderItemPane(); renderList(); drawPlan(); showPane("pItem"); });
 }
 
+function viewCenter() { return view === "plan" ? S2W(view2d, plan.clientWidth / 2, plan.clientHeight / 2).map(Math.round) : [Math.round(job.site.w / 2), Math.round(job.site.d / 2)]; }
 document.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => {
   snapshot();
-  let [x, y] = view === "plan" ? S2W(view2d, plan.clientWidth / 2, plan.clientHeight / 2) : [job.site.w / 2, job.site.d / 2];
-  const it = defaults(b.dataset.add, Math.round(x), Math.round(y));
+  const [x, y] = viewCenter();
+  const it = defaults(b.dataset.add, x, y);
   job.items.push(it); selId = it.id; commit(); showPane("pItem");
 }));
 
-// Job pane
+// Stair layouts: groups of flights and landings placed together. Flights are 48" wide with a 30" total rise each.
+document.querySelectorAll("[data-layout]").forEach((b) => b.addEventListener("click", () => {
+  snapshot();
+  const [x, y] = viewCenter(), kind = b.dataset.layout, W = 48;
+  const flight = (fx, fy, rot, elev, rise, extra = {}) => { const it = defaults("steps", 0, 0); Object.assign(it, { x: fx, y: fy, rot, elev, rise, w: W, ...extra }); return it; };
+  const landing = (lx, ly, w, d, h) => { const it = defaults("landing", lx, ly); Object.assign(it, { w, d, h, edge: "caps" }); return it; };
+  const add = [];
+  if (kind === "straight") add.push(flight(x, y, 0, 0, 30, { label: "Steps" }));
+  else if (kind === "pyramid") add.push(flight(x, y, 0, 0, 22.5, { w: 120, config: "wrapLR", label: "Wraparound steps" }));
+  else if (kind === "cheek") add.push(flight(x, y, 0, 0, 30, { cheek: "both", label: "Steps with cheek walls" }));
+  else {
+    const f1 = flight(x, y, 0, 0, 22.5, { label: "Lower flight" }), c1 = stepCalc(f1), h1 = c1.top;
+    const ly = y + c1.run / 2 + W / 2, L = landing(x, ly, W, W, h1); L.label = "Landing";
+    add.push(f1, L);
+    let f2;
+    if (kind === "landing") { L.d = 48; L.y = y + c1.run / 2 + 24; f2 = flight(x, 0, 0, h1, 22.5, { label: "Upper flight", cheek: "both" }); f2.y = L.y + 24 + stepCalc(f2).run / 2; }
+    else if (kind === "lright") { f2 = flight(0, ly, 90, h1, 22.5, { label: "Upper flight", cheek: "both" }); f2.x = x + W / 2 + stepCalc(f2).run / 2; }
+    else if (kind === "lleft") { f2 = flight(0, ly, 270, h1, 22.5, { label: "Upper flight", cheek: "both" }); f2.x = x - W / 2 - stepCalc(f2).run / 2; }
+    else if (kind === "uturn") { L.w = 2 * W + 24; L.x = x + W / 2 + 12; f2 = flight(x + W + 24, 0, 180, h1, 22.5, { label: "Upper flight", cheek: "both" }); f2.y = ly - W / 2 - stepCalc(f2).run / 2; }
+    add.push(f2);
+  }
+  job.items.push(...add); selId = add[0].id; commit(); showPane("pItem");
+  toast(add.length > 1 ? "Placed " + add.length + " pieces. Set each flight's rise on the Item tab." : "Placed. Set the measured rise on the Item tab.");
+}));
+
+// ---------- materials pane ----------
+function renderMaterials() {
+  const priced = Object.keys(job.prices || {}).length > 0;
+  $("priceBanner").hidden = priced;
+  let h = "";
+  for (const kind of Object.keys(KIND_LABEL)) {
+    const list = matsOfKinds([kind]);
+    if (!list.length) continue;
+    h += `<h3>${KIND_LABEL[kind]}</h3><div class="mats">`;
+    for (const m of list) {
+      const custom = m.id.startsWith("c-");
+      h += `<div class="matrow"><div class="matinfo"><b>${escapeHtml(matName(m))}</b><span>${escapeHtml(m.brand)}${m.L ? ` · ${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : m.H ? ` · ${fmtIn(m.H)} thick` : ""}${m.setback ? ` · ${m.setback}°` : ""}</span>
+        <span class="swatches">${(m.colors || []).map((c) => `<i style="background:${hexOf(c)}" title="${escapeHtml(c)}"></i>`).join("")}<em>${escapeHtml((m.colors || []).join(", "))}</em></span></div>
+        <label class="price">$<input data-price="${m.id}" inputmode="decimal" value="${priceOf(m.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"><small>/${perSqft(m) ? "sq ft" : "ea"}</small></label>
+        ${custom ? `<button class="btn danger small" data-delmat="${m.id}" aria-label="Delete ${escapeHtml(m.name)}">Delete</button>` : ""}</div>`;
+    }
+    h += `</div>`;
+  }
+  $("matList").innerHTML = h;
+  $("matList").querySelectorAll("[data-price]").forEach((inp) => inp.addEventListener("change", () => {
+    const n = parseFloat(inp.value.replace(/[$,]/g, ""));
+    if (!(n >= 0)) { toast("Enter a price like 12.50"); inp.value = priceOf(inp.dataset.price).toFixed(2); return; }
+    snapshot(); job.prices = { ...job.prices, [inp.dataset.price]: n };
+    store.set("bsp.prices", { ...store.get("bsp.prices", {}), [inp.dataset.price]: n });
+    commit(); renderMaterials();
+  }));
+  $("matList").querySelectorAll("[data-delmat]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.delmat;
+    if (job.items.some((i) => [i.block, i.cap, i.surface, i.infill].includes(id))) { toast("That material is used on the plan. Change those items first."); return; }
+    snapshot(); job.custom = job.custom.filter((m) => m.id !== id);
+    store.set("bsp.library", store.get("bsp.library", []).filter((m) => m.id !== id));
+    commit(); renderMaterials(); renderJobPane();
+  });
+}
+$("cmAdd").onclick = () => {
+  const kind = $("cmKind").value, name = $("cmName").value.trim();
+  const L = parseLen($("cmL").value), D = parseLen($("cmD").value), H = parseLen($("cmH").value);
+  const needsSize = kind !== "surface";
+  if (!name) { toast("Give the material a name."); return; }
+  if (needsSize && !(L > 0 && D > 0 && H > 0)) { toast("Enter length, depth and height."); return; }
+  if (!needsSize && !(H > 0)) { toast("Enter the thickness as the height."); return; }
+  const colors = $("cmColors").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const m = { id: "c-" + Date.now().toString(36), brand: $("cmBrand").value.trim() || "Custom", line: "", name, kind, L: needsSize ? L : 0, D: needsSize ? D : 0, H, setback: parseFloat($("cmSet").value) || 0, colors: colors.length ? colors : ["Grey"], price: parseFloat($("cmPrice").value) || 0, pattern: kind === "surface" ? "concrete" : undefined };
+  snapshot(); job.custom = [...(job.custom || []), m];
+  store.set("bsp.library", [...store.get("bsp.library", []), m]);
+  ["cmName", "cmL", "cmD", "cmH", "cmSet", "cmPrice", "cmColors"].forEach((id) => $(id).value = "");
+  commit(); renderMaterials(); renderJobPane(); toast("Added " + name + ". It's in the material lists now.");
+};
+
+// ---------- job pane ----------
 function renderJobPane() {
   $("jName").value = job.name || ""; $("jClient").value = job.client || ""; $("jAddr").value = job.address || ""; $("jNotes").value = job.notes || "";
-  const P = job.product;
-  $("jPreset").innerHTML = PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join("");
-  const pi = PRESETS.findIndex((p) => p.L && PRODUCT_KEYS.every((k) => Math.abs((p[k] || 0) - (P[k] || 0)) < 0.01));
-  $("jPreset").value = pi >= 0 ? pi : PRESETS.length - 1;
-  $("jProduct").value = P.name || ""; $("jBL").value = fmtLen(P.L); $("jBD").value = fmtLen(P.D); $("jBH").value = fmtLen(P.H);
-  $("jSet").value = P.setback || 0; $("jCL").value = fmtLen(P.capL || 0); $("jCD").value = fmtLen(P.capD || 0); $("jCH").value = fmtLen(P.capH || 0); $("jCO").value = fmtLen(P.capOver || 0);
-  $("jStagger").value = P.stagger || "half"; $("jColor").value = P.color || "#a8a39a";
   $("jSW").value = fmtLen(job.site.w); $("jSD").value = fmtLen(job.site.d);
+  const d = job.defaults;
+  $("defFields").innerHTML = [
+    selectField("Step riser block", "block", d, matOptions(["block", "solid"])), selectField("Block colour", "color", d, colorOptions(d.block)),
+    selectField("Step cap / tread", "cap", d, matOptions(["cap", "slab"], "No cap")), d.cap ? selectField("Cap colour", "capColor", d, colorOptions(d.cap)) : "<span></span>",
+    field("Cap overhang", "capOver", d), field("Rise per step (0 = full block)", "stepRise", d),
+    selectField("Wall block", "wallBlock", d, matOptions(["block"])), selectField("Wall cap", "wallCap", d, matOptions(["cap", "slab"], "No cap")),
+    selectField("Paving surface", "surface", d, matOptions(["paver", "slab", "surface"])), selectField("Paving colour", "surfaceColor", d, colorOptions(d.surface)),
+  ].join("");
+  $("defFields").querySelectorAll("[data-k]").forEach((inp) => inp.addEventListener("change", () => {
+    const k = inp.dataset.k;
+    if (inp.dataset.kind === "select") {
+      d[k] = inp.value;
+      if (k === "block") d.color = validColor(d.block, d.color);
+      if (k === "cap" && d.cap) d.capColor = validColor(d.cap, d.capColor);
+      if (k === "surface") d.surfaceColor = validColor(d.surface, d.surfaceColor);
+    } else { const n = parseLen(inp.value); if (!(n >= 0)) { toast("Couldn't read that measurement."); inp.value = fmtLen(d[k]); return; } d[k] = n; }
+    store.set("bsp.current", job); store.set("bsp.defaults", d); renderJobPane(); toast("New items will use these defaults.");
+  }));
   renderJobs();
 }
-const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v],
-  ["jProduct", (v) => job.product.name = v], ["jStagger", (v) => job.product.stagger = v], ["jColor", (v) => job.product.color = v]];
+const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v]];
 jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot(); fn(e.target.value); commit(); }));
-[["jBL", "L"], ["jBD", "D"], ["jBH", "H"], ["jCL", "capL", 1], ["jCD", "capD", 1], ["jCH", "capH", 1], ["jCO", "capOver", 1]].forEach(([id, k, zeroOk]) => $(id).addEventListener("change", (e) => {
-  const n = parseLen(e.target.value); if (!(n > 0 || (zeroOk && n === 0))) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.product[k]); return; }
-  snapshot(); job.product[k] = n;
-  if (hasCap(job.product) && !(job.product.capL > 0 && job.product.capD > 0)) { job.product.capL = job.product.capL || job.product.L; job.product.capD = job.product.capD || job.product.D; }
-  commit(); renderJobPane();
-}));
-$("jSet").addEventListener("change", (e) => { const n = parseFloat(e.target.value); if (!(n >= 0 && n < 30)) { toast("Setback is in degrees, 0 to 30."); e.target.value = job.product.setback || 0; return; } snapshot(); job.product.setback = n; commit(); });
 [["jSW", "w"], ["jSD", "d"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
   const n = parseLen(e.target.value); if (!(n > 0)) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.site[k]); return; }
   snapshot(); job.site[k] = n; commit();
 }));
-$("jPreset").addEventListener("change", (e) => {
-  const p = PRESETS[+e.target.value]; if (!p.L) return;
-  snapshot(); Object.assign(job.product, presetProduct(p), { stagger: job.product.stagger, color: p.color || job.product.color });
-  for (const it of job.items) if (it.type === "steps") { it.tread = defaultTread(job.product); it.base = defaultBase(job.product); }
-  commit(); renderJobPane(); toast("Steps updated for " + p.name);
-});
-function materials() {
-  const P = job.product, m = { blocks: 0, blockCuts: 0, caps: 0, capCuts: 0, infill: 0, wallBlocks: 0, wallCaps: 0 };
+
+// ---------- takeoff, estimate and quote ----------
+const yd3 = (cuIn) => cuIn / 46656;          // cubic inches to cubic yards
+const TON_PER_YD = 1.5;                      // compacted road base
+const round2 = (n) => Math.round(n * 100) / 100;
+const ceilTo = (n, step) => Math.ceil(n / step - 1e-9) * step;
+function takeoff() {
+  const E = { ...EST_DEFAULTS, ...job.est }, mats = new Map();
+  const w = { stepBlocks: 0, cutPieces: 0, caps: 0, wallBlocks: 0, paveSqft: 0, slabs: 0, surfSqft: 0, excavYd: 0, baseTon: 0, drainYd: 0, sandYd: 0, polySqft: 0, adhesiveCaps: 0 };
+  const addM = (id, color, qty, use) => {
+    if (!id || !(qty > 0) || !mat(id)) return;
+    const k = id + "|" + (color || ""); const o = mats.get(k) || { id, color, qty: 0, uses: new Set() };
+    o.qty += qty; o.uses.add(use); mats.set(k, o);
+  };
+  const surface = (id, color, area, use) => {
+    const m = mat(id); if (!m || !(area > 0)) return;
+    if (perSqft(m)) addM(id, color, area / 144, use); else addM(id, color, Math.ceil(area / (m.L * m.D)), use);
+    if (m.kind === "paver") { w.paveSqft += area / 144; w.sandYd += yd3(area * 1); w.polySqft += area / 144; }
+    else if (m.kind === "slab") { w.slabs += Math.ceil(area / (m.L * m.D)); w.sandYd += yd3(area * 1); }
+    else w.surfSqft += area / 144;
+  };
+  const base = (area, extraDepth = 0) => { w.baseTon += yd3(area * E.baseDepth) * TON_PER_YD; w.excavYd += yd3(area * (E.baseDepth + extraDepth)); };
   for (const it of job.items) {
-    if (it.type === "steps") { const c = stepCalc(it); m.blocks += c.full + c.cuts; m.blockCuts += c.cuts; m.caps += c.capFull + c.capCuts; m.capCuts += c.capCuts; m.infill += c.infillArea; }
-    if (it.type === "wall") { const w = wallCalc(it); m.wallBlocks += w.blocks; m.wallCaps += w.caps; }
+    const use = it.label || TYPE_INFO[it.type].label;
+    if (it.type === "steps") {
+      const c = stepCalc(it);
+      addM(it.block, it.color, c.t.blocks + c.t.cheekBlocks, use);
+      if (c.cap) { addM(it.cap, it.capColor, c.t.caps + c.t.cheekCaps, use); w.adhesiveCaps += c.t.caps + c.t.cheekCaps; }
+      w.stepBlocks += c.t.blocks; w.wallBlocks += c.t.cheekBlocks; w.caps += c.t.caps + c.t.cheekCaps;
+      w.cutPieces += (c.cutting ? c.t.blocks : c.t.blockCuts) + c.t.capCuts + c.t.cheekCuts;
+      if (c.infillArea > 0) surface(it.infill, firstColor(it.infill), c.infillArea, use);
+      base(c.xw * c.run, Math.max(0, -c.base));
+      // compacted fill behind each riser above the first, plus fill under a flight that starts above grade
+      let fill = 0; c.xs.forEach(([xl, xr], i) => { if (i > 0) fill += (xr - xl) * (c.run / 2 - (-c.run / 2 + i * it.tread + c.over)) * c.H; });
+      if (c.E > 0) fill += it.w * c.run * c.E;
+      w.baseTon += yd3(fill) * TON_PER_YD;
+      if (c.cheekL || c.cheekR) w.drainYd += yd3(((c.cheekL ? 1 : 0) + (c.cheekR ? 1 : 0)) * c.run * 12 * (c.top - c.E));
+    } else if (it.type === "wall") {
+      const wc = wallCalc(it);
+      addM(it.block, it.color, wc.blocks, use); w.wallBlocks += wc.blocks;
+      if (wc.c) { addM(it.cap, it.capColor, wc.caps, use); w.caps += wc.caps; w.adhesiveCaps += wc.caps; }
+      base(it.w * (wc.b.D + 12), wc.b.H);
+      w.drainYd += yd3(it.w * 12 * wc.top);
+    } else if (it.type === "landing") {
+      const lc = landingCalc(it);
+      if (lc.edged) {
+        addM(it.block, it.blockColor, lc.blocks, use); w.wallBlocks += lc.blocks;
+        if (lc.c) { addM(it.cap, it.capColor, lc.caps, use); w.caps += lc.caps; w.adhesiveCaps += lc.caps; }
+        const sH = lc.s ? lc.s.H : 2.375;
+        w.baseTon += yd3(lc.inW * lc.inD * Math.max(0, it.h - sH - 1)) * TON_PER_YD;
+        surface(it.surface, it.color, lc.area, use);
+      } else surface(it.surface, it.color, it.w * it.d, use);
+      base(it.w * it.d);
+    } else if (it.type === "path") {
+      surface(it.surface, it.color, it.w * it.d, use);
+      base(it.w * it.d);
+    }
   }
-  m.orderBlocks = Math.ceil((m.blocks + m.wallBlocks) * 1.05); m.orderCaps = Math.ceil((m.caps + m.wallCaps) * 1.05);
-  return m;
-}
-function wallCalc(it) {
-  const P = job.product, cap = hasCap(P), courses = Math.max(1, Math.round((it.h - (cap ? P.capH : 0)) / P.H));
-  const per = Math.ceil(it.w / P.L), capsPer = cap ? Math.ceil(it.w / P.capL) : 0;
-  return { courses, blocks: per * courses, caps: capsPer, step: P.H * Math.tan((P.setback || 0) * Math.PI / 180) };
-}
-function renderOrder() {
-  const m = materials(), cap = hasCap(job.product);
-  $("orderStats").innerHTML = `<div><dt>Step blocks</dt><dd>${m.blocks} (${m.blockCuts} cut)</dd></div><div><dt>Step caps</dt><dd>${cap ? m.caps + " (" + m.capCuts + " cut)" : "–"}</dd></div>
-    <div><dt>Wall blocks</dt><dd>${m.wallBlocks}</dd></div><div><dt>Wall caps</dt><dd>${cap ? m.wallCaps : "–"}</dd></div>
-    <div><dt>Order blocks +5%</dt><dd>${m.orderBlocks}</dd></div><div><dt>Order caps +5%</dt><dd>${cap ? m.orderCaps : "–"}</dd></div>
-    ${m.infill > 1 ? `<div><dt>Tread infill</dt><dd>${(m.infill / 144).toFixed(1)} sq ft</dd></div><div><dt></dt><dd></dd></div>` : ""}`;
+  return { mats, w, E };
 }
 
+function estimate() {
+  const { mats, w, E } = takeoff(), waste = 1 + E.waste / 100;
+  const lines = [];
+  const L = (cat, desc, qty, unit, price, note = "") => { if (qty > 0) lines.push({ cat, desc, qty, unit, price, total: round2(qty * price), note }); };
+  for (const o of mats.values()) {
+    const m = mat(o.id), sq = perSqft(m);
+    L("Materials", `${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)}${o.color ? " – " + o.color : ""}`, sq ? Math.ceil(o.qty * waste) : Math.ceil(o.qty * waste), sq ? "sq ft" : "ea", priceOf(o.id), `${[...o.uses].join(", ")} · incl. ${E.waste}% waste`);
+  }
+  L("Materials", '¾" road base / structural fill, compacted', ceilTo(w.baseTon, 0.5), "ton", E.basePerTon);
+  L("Materials", '¾" clear drain rock behind walls', ceilTo(w.drainYd, 0.25), "yd³", E.drainPerYd);
+  L("Materials", "Bedding sand", ceilTo(w.sandYd, 0.25), "yd³", E.sandPerYd);
+  L("Materials", "Polymeric joint sand", Math.ceil(w.polySqft / 60), "bag", E.polyBag);
+  L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
+  const hrs = (n) => ceilTo(n, 0.5);
+  L("Labour", "Excavation and grading", hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
+  L("Labour", "Base and fill placement, compaction in lifts", hrs(w.baseTon * E.hrBaseTon), "hr", E.labourRate);
+  L("Labour", "Step riser and cap installation", hrs(w.stepBlocks * E.hrStepBlock + w.caps * E.hrCap), "hr", E.labourRate);
+  L("Labour", "Block and cap cutting", hrs(w.cutPieces * E.hrCut), "hr", E.labourRate);
+  L("Labour", "Wall block installation", hrs(w.wallBlocks * E.hrWallBlock), "hr", E.labourRate);
+  L("Labour", "Paving installation and jointing", hrs(w.paveSqft * E.hrPaveSqft + w.slabs * E.hrSlab + w.surfSqft * E.hrSurfSqft), "hr", E.labourRate);
+  if (lines.length) {
+    L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
+    L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
+    L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
+  }
+  for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
+  const cats = {}; for (const l of lines) cats[l.cat] = round2((cats[l.cat] || 0) + l.total);
+  const subtotal = round2(lines.reduce((s, l) => s + l.total, 0));
+  const contingency = round2(subtotal * E.contingency / 100), markup = round2((subtotal + contingency) * E.markup / 100);
+  const beforeTax = round2(subtotal + contingency + markup), factor = subtotal ? beforeTax / subtotal : 1;
+  const pst = round2((cats.Materials || 0) * factor * E.pst / 100), gst = round2(beforeTax * E.gst / 100);
+  const total = round2(beforeTax + gst + pst), hours = lines.filter((l) => l.unit === "hr").reduce((s, l) => s + l.qty, 0);
+  // client prices fold contingency and markup into each line so the quote reads as finished prices
+  for (const l of lines) { l.clientPrice = round2(l.price * factor); l.clientTotal = round2(l.total * factor); }
+  return { lines, cats, subtotal, contingency, markup, beforeTax, factor, gst, pst, total, deposit: round2(total * E.deposit / 100), hours, E, w };
+}
+
+function quoteNo() { if (!job.quoteNo) { const d = new Date(); job.quoteNo = `Q-${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(Math.floor(Math.random() * 90) + 10)}`; } return job.quoteNo; }
+const EST_FIELDS = [
+  ["labourRate", "Labour rate $/hr"], ["markup", "Overhead & profit %"], ["contingency", "Contingency %"], ["waste", "Material waste %"],
+  ["gst", "GST %"], ["pst", "PST on materials %"], ["deposit", "Deposit %"], ["validDays", "Quote valid (days)"],
+  ["baseDepth", 'Base depth (in)'], ["basePerTon", "Road base $/ton"], ["drainPerYd", "Drain rock $/yd³"], ["sandPerYd", "Bedding sand $/yd³"],
+  ["polyBag", "Polymeric sand $/bag"], ["adhesive", "Adhesive $/tube"], ["capsPerTube", "Caps per tube"], ["equipment", "Equipment $ (lot)"],
+  ["delivery", "Delivery $ (lot)"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
+  ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrBaseTon", "Hours per ton base"],
+];
+function renderEstFields() {
+  $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
+  $("estFields").querySelectorAll("[data-est]").forEach((inp) => inp.addEventListener("change", () => {
+    const n = parseFloat(inp.value); if (!(n >= 0)) { toast("Enter a number."); inp.value = job.est[inp.dataset.est]; return; }
+    snapshot(); job.est[inp.dataset.est] = n; store.set("bsp.est", { ...store.get("bsp.est", {}), [inp.dataset.est]: n }); commit();
+  }));
+}
+function renderQuote() {
+  const q = estimate();
+  const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
+  const catRows = order.filter((c) => q.cats[c]).map((c) => `<tr><td>${c}</td><td>${money(q.cats[c])}</td></tr>`).join("");
+  const detail = order.filter((c) => q.cats[c]).map((c) => `<tr class="cat"><td colspan="3">${c}</td></tr>` + q.lines.filter((l) => l.cat === c).map((l) => `<tr><td>${escapeHtml(l.desc)}<small>${escapeHtml(l.note)}</small></td><td>${num1(l.qty)} ${l.unit} × ${money(l.price)}</td><td>${money(l.total)}</td></tr>`).join("")).join("");
+  $("quoteSummary").innerHTML = `
+    <dl class="stats big"><div><dt>Quote total</dt><dd>${money(q.total)}</dd></div><div><dt>Deposit ${q.E.deposit}%</dt><dd>${money(q.deposit)}</dd></div>
+      <div><dt>Your cost</dt><dd>${money(q.subtotal)}</dd></div><div><dt>Overhead &amp; profit</dt><dd>${money(q.markup)}</dd></div>
+      <div><dt>Labour</dt><dd>${num1(q.hours)} hrs</dd></div><div><dt>Quote no.</dt><dd>${quoteNo()}</dd></div></dl>
+    <table class="qt"><tbody>${catRows}
+      <tr><td>Contingency ${q.E.contingency}%</td><td>${money(q.contingency)}</td></tr>
+      <tr><td>Overhead &amp; profit ${q.E.markup}%</td><td>${money(q.markup)}</td></tr>
+      <tr class="sub"><td>Before tax</td><td>${money(q.beforeTax)}</td></tr>
+      <tr><td>GST ${q.E.gst}%</td><td>${money(q.gst)}</td></tr>
+      <tr><td>PST ${q.E.pst}% on materials</td><td>${money(q.pst)}</td></tr>
+      <tr class="tot"><td>Total</td><td>${money(q.total)}</td></tr></tbody></table>
+    <details><summary>Line items (your cost)</summary><div class="tablewrap"><table class="qt lines"><tbody>${detail || '<tr><td colspan="3">Add steps, walls or paving to build an estimate.</td></tr>'}</tbody></table></div></details>`;
+  $("extraList").innerHTML = (job.extras || []).map((x, i) => `<button data-ex="${i}"><span>${escapeHtml(x.desc)}</span><span>${num1(x.qty)} × ${money(x.price)} · remove</span></button>`).join("") || '<p class="note">None yet.</p>';
+  $("extraList").querySelectorAll("[data-ex]").forEach((b) => b.onclick = () => { snapshot(); job.extras.splice(+b.dataset.ex, 1); commit(); });
+}
+$("exAdd").onclick = () => {
+  const desc = $("exDesc").value.trim(), qty = parseFloat($("exQty").value), price = parseFloat($("exPrice").value.replace(/[$,]/g, ""));
+  if (!desc || !(qty > 0) || !(price >= 0)) { toast("Enter a description, quantity and price."); return; }
+  snapshot(); job.extras = [...(job.extras || []), { desc, cat: $("exCat").value, qty, unit: "ea", price }];
+  $("exDesc").value = ""; $("exPrice").value = ""; $("exQty").value = "1"; commit();
+};
+const COMPANY_KEYS = [["coName", "name"], ["coPhone", "phone"], ["coEmail", "email"], ["coAddr", "address"], ["coTax", "taxNo"], ["coTerms", "terms"]];
+const DEFAULT_TERMS = "Price includes materials, labour, equipment and disposal as listed. Deposit due on acceptance; balance on completion. Changes to the scope are quoted separately. Work is guaranteed for 2 years on workmanship; manufacturer warranties apply to materials.";
+function company() { return { terms: DEFAULT_TERMS, ...store.get("bsp.company", {}) }; }
+function renderCompany() { const c = company(); for (const [id, k] of COMPANY_KEYS) $(id).value = c[k] || ""; }
+for (const [id, k] of COMPANY_KEYS) $(id).addEventListener("change", (e) => store.set("bsp.company", { ...company(), [k]: e.target.value }));
+
+function slug(s) { return (s || "job").replace(/[^\w-]+/g, "_"); }
+function quoteData() {
+  const q = estimate(), c = company(), d = new Date(), valid = new Date(d.getTime() + q.E.validDays * 864e5);
+  return {
+    format: "block-step-planner.quote", version: 1, currency: "CAD", quoteNumber: quoteNo(), date: d.toISOString().slice(0, 10), validUntil: valid.toISOString().slice(0, 10),
+    company: { name: c.name || "", phone: c.phone || "", email: c.email || "", address: c.address || "", taxNumber: c.taxNo || "" },
+    client: { name: job.client || "", siteAddress: job.address || "" }, job: { name: job.name || "", notes: job.notes || "" },
+    scope: job.items.filter((i) => BUILT_TYPES.has(i.type)).map((i) => ({ item: i.label || TYPE_INFO[i.type].label, type: i.type, description: describe(i) })),
+    lines: q.lines.map((l) => ({ category: l.cat, description: l.desc, quantity: l.qty, unit: l.unit, unitCost: l.price, costTotal: l.total, unitPrice: l.clientPrice, lineTotal: l.clientTotal, note: l.note })),
+    totals: { cost: q.subtotal, contingency: q.contingency, overheadProfit: q.markup, beforeTax: q.beforeTax, gst: q.gst, pst: q.pst, total: q.total, deposit: q.deposit, labourHours: q.hours },
+    rates: { gstPercent: q.E.gst, pstPercent: q.E.pst, markupPercent: q.E.markup, contingencyPercent: q.E.contingency, depositPercent: q.E.deposit },
+    terms: c.terms,
+  };
+}
+$("qJson").onclick = () => saveFile(`${slug(job.name)}_${quoteNo()}.json`, new Blob([JSON.stringify(quoteData(), null, 2)], { type: "application/json" }));
+$("qCsv").onclick = () => {
+  const qd = quoteData(), esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [["Quote", qd.quoteNumber], ["Date", qd.date], ["Client", qd.client.name], ["Site", qd.client.siteAddress], ["Job", qd.job.name], [],
+    ["Category", "Description", "Quantity", "Unit", "Unit cost", "Cost total", "Unit price", "Line total", "Note"],
+    ...qd.lines.map((l) => [l.category, l.description, l.quantity, l.unit, l.unitCost, l.costTotal, l.unitPrice, l.lineTotal, l.note]), [],
+    ["Cost", qd.totals.cost], ["Contingency", qd.totals.contingency], ["Overhead & profit", qd.totals.overheadProfit], ["Before tax", qd.totals.beforeTax],
+    ["GST", qd.totals.gst], ["PST", qd.totals.pst], ["Total", qd.totals.total], ["Deposit", qd.totals.deposit]];
+  saveFile(`${slug(job.name)}_${quoteNo()}.csv`, new Blob([rows.map((r) => r.map(esc).join(",")).join("\r\n")], { type: "text/csv" }));
+};
+async function blueprintImage(W, H) {
+  const c = document.createElement("canvas"); c.width = W; c.height = H; const ctx = c.getContext("2d");
+  const v = {}; fitView(W, H, v, 60);
+  renderSheet(ctx, W, H, v, { unit: W / 1300, section: true, selId: null });
+  return c.toDataURL("image/jpeg", 0.85);
+}
+function renderImage() {
+  if (!R3 || dirty3d) return null;
+  R3.renderer.render(R3.scene, R3.camera);
+  try { return $("three").toDataURL("image/jpeg", 0.85); } catch { return null; }
+}
+$("qHtml").onclick = async () => {
+  const qd = quoteData(), bp = await blueprintImage(1600, 1000), r3 = renderImage();
+  const order = ["Materials", "Labour", "Equipment & disposal", "Other"], e = escapeHtml;
+  const rows = order.filter((c) => qd.lines.some((l) => l.category === c)).map((c) => `<tr class="cat"><td colspan="4">${c}</td></tr>` + qd.lines.filter((l) => l.category === c).map((l) => `<tr><td>${e(l.description)}</td><td class="n">${num1(l.quantity)} ${l.unit}</td><td class="n">${money(l.unitPrice)}</td><td class="n">${money(l.lineTotal)}</td></tr>`).join("")).join("");
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quote ${e(qd.quoteNumber)} · ${e(qd.job.name)}</title>
+<style>body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1c2530;background:#fff;margin:0}main{max-width:900px;margin:0 auto;padding:32px 24px}
+header{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:3px solid #173f73;padding-bottom:16px}h1{font-size:28px;margin:0;color:#173f73;letter-spacing:.02em}
+.muted{color:#5d6b7a}table{width:100%;border-collapse:collapse;margin:16px 0}td,th{padding:7px 8px;border-bottom:1px solid #dde3ea;text-align:left;vertical-align:top}.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.cat td{background:#eef2f7;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.05em}.tot td{font-weight:700;font-size:18px;border-top:2px solid #173f73}
+img{width:100%;border-radius:6px;border:1px solid #dde3ea;margin:8px 0}h2{font-size:16px;text-transform:uppercase;letter-spacing:.06em;color:#173f73;margin:28px 0 8px}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px}.sign div{border-top:1px solid #1c2530;padding-top:6px;font-size:13px}@media print{main{padding:0}}</style></head>
+<body><main><header><div><h1>${e(qd.company.name || "Quote")}</h1><div class="muted">${[qd.company.address, qd.company.phone, qd.company.email].filter(Boolean).map(e).join(" · ")}</div>${qd.company.taxNumber ? `<div class="muted">GST/BN ${e(qd.company.taxNumber)}</div>` : ""}</div>
+<div><b>Quote ${e(qd.quoteNumber)}</b><div class="muted">Date ${qd.date}<br>Valid until ${qd.validUntil}</div></div></header>
+<h2>Prepared for</h2><div>${e(qd.client.name || "")}<br><span class="muted">${e(qd.client.siteAddress || "")}</span></div>
+<h2>Project: ${e(qd.job.name)}</h2><ul>${qd.scope.map((s) => `<li><b>${e(s.item)}</b>: ${e(s.description)}</li>`).join("")}</ul>${qd.job.notes ? `<p class="muted">${e(qd.job.notes)}</p>` : ""}
+${r3 ? `<h2>Rendering</h2><img src="${r3}" alt="3D rendering of the project">` : ""}<h2>Plan</h2><img src="${bp}" alt="Blueprint plan and section">
+<h2>Price</h2><table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit price</th><th class="n">Amount</th></tr></thead><tbody>${rows}
+<tr><td colspan="3" class="n">Subtotal</td><td class="n">${money(qd.totals.beforeTax)}</td></tr><tr><td colspan="3" class="n">GST ${qd.rates.gstPercent}%</td><td class="n">${money(qd.totals.gst)}</td></tr>
+<tr><td colspan="3" class="n">PST ${qd.rates.pstPercent}% (materials)</td><td class="n">${money(qd.totals.pst)}</td></tr><tr class="tot"><td colspan="3" class="n">Total (CAD)</td><td class="n">${money(qd.totals.total)}</td></tr>
+<tr><td colspan="3" class="n">Deposit ${qd.rates.depositPercent}% due on acceptance</td><td class="n">${money(qd.totals.deposit)}</td></tr></tbody></table>
+<h2>Terms</h2><p>${e(qd.terms)}</p><div class="sign"><div>Accepted by (client) &amp; date</div><div>${e(qd.company.name || "Contractor")} &amp; date</div></div></main></body></html>`;
+  saveFile(`${slug(job.name)}_${quoteNo()}.html`, new Blob([html], { type: "text/html" }));
+};
+
+// ---------- saved jobs and files ----------
 function jobsSaved() { return store.get("bsp.jobs", []); }
 function renderJobs() {
   const list = jobsSaved();
   $("jobList").innerHTML = list.length ? list.map((j, i) => `<button data-i="${i}"><span>${escapeHtml(j.name || "Untitled")}</span><span>${new Date(j.saved).toLocaleDateString()}</span></button>`).join("") : '<p class="note">No saved jobs on this tablet yet.</p>';
-  $("jobList").querySelectorAll("button").forEach((b) => b.onclick = () => { snapshot(); job = JSON.parse(JSON.stringify(list[+b.dataset.i].job)); selId = null; afterLoad(); toast("Opened " + (job.name || "job")); });
+  $("jobList").querySelectorAll("button").forEach((b) => b.onclick = () => { snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(list[+b.dataset.i].job))); selId = null; afterLoad(); toast("Opened " + (job.name || "job")); });
 }
 $("saveJob").onclick = () => {
   const list = jobsSaved().filter((j) => j.name !== job.name);
   list.unshift({ name: job.name, saved: Date.now(), job }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); toast("Saved " + (job.name || "job"));
 };
-$("newJob").onclick = () => {
-  snapshot(); job = { ...sampleJob(), name: "New job", client: "", notes: "", items: [] }; selId = null; afterLoad(); toast("Started a new job. Tap Undo to go back.");
-};
-$("exportJson").onclick = () => saveFile((job.name || "job").replace(/[^\w-]+/g, "_") + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
+function freshJob() {
+  const j = { ...sampleJob(), name: "New job", client: "", notes: "", items: [], quoteNo: "" };
+  j.defaults = { ...DEFAULTS, ...store.get("bsp.defaults", {}) }; j.est = { ...EST_DEFAULTS, ...store.get("bsp.est", {}) };
+  j.prices = { ...store.get("bsp.prices", {}) }; j.custom = store.get("bsp.library", []);
+  return j;
+}
+$("newJob").onclick = () => { snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); toast("Started a new job. Tap Undo to go back."); };
+$("exportJson").onclick = () => saveFile(slug(job.name) + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
 $("importJson").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
   try { const j = sanitizeJob(JSON.parse(await f.text())); snapshot(); job = j; selId = null; afterLoad(); toast("Opened " + (job.name || f.name)); }
   catch { toast("That file isn't a Block Step Planner job."); }
   e.target.value = "";
 };
-function afterLoad() { renderJobPane(); requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); commit(); }); }
+function afterLoad() { renderJobPane(); renderMaterials(); renderEstFields(); requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); commit(); }); }
 
 function num(v, d, min = -1e6, max = 1e6) { v = typeof v === "string" ? parseLen(v) : +v; return isFinite(v) ? clamp(v, min, max) : d; }
-function sanitizeItem(raw) {
+const STR_OPTS = { config: CONFIGS.map((c) => c[0]), cheek: CHEEKS.map((c) => c[0]), stagger: STAGGER.map((c) => c[0]), edge: EDGES.map((c) => c[0]) };
+function sanitizeItem(raw, legacy) {
   if (!raw || !TYPE_INFO[raw.type]) return null;
   const d = defaults(raw.type, 0, 0);
   const out = { ...d, id: typeof raw.id === "string" && raw.id ? raw.id.slice(0, 40) : d.id, label: String(raw.label ?? d.label).slice(0, 60) };
-  for (const k of Object.keys(d)) if (!["id", "type", "label", "material"].includes(k)) out[k] = num(raw[k], d[k], k === "x" || k === "y" || k === "base" ? -1e5 : 0, 1e5);
+  for (const k of Object.keys(d)) {
+    if (["id", "type", "label"].includes(k)) continue;
+    if (typeof d[k] === "number") { if (raw[k] != null) out[k] = num(raw[k], d[k], ["x", "y", "base", "elev"].includes(k) ? -1e5 : 0, 1e5); }
+    else if (STR_OPTS[k]) out[k] = STR_OPTS[k].includes(raw[k]) ? raw[k] : d[k];
+    else if (["block", "surface", "infill"].includes(k)) out[k] = mat(raw[k]) ? raw[k] : d[k];
+    else if (k === "cap") out[k] = raw[k] === "" || raw[k] === null ? "" : mat(raw[k]) ? raw[k] : d[k];
+  }
+  if (out.block) out.color = validColor(out.block, raw.color ?? d.color);
+  if (out.cap) out.capColor = validColor(out.cap, raw.capColor ?? d.capColor);
+  if (out.surface) out.color = validColor(out.surface, raw.color ?? d.color);
+  if (out.type === "landing" && out.block) out.blockColor = validColor(out.block, raw.blockColor ?? d.blockColor);
   out.rot = ((out.rot % 360) + 360) % 360;
-  if (out.type === "steps") { out.w = Math.max(out.w, 12); out.tread = Math.max(out.tread, 4); }
+  if (out.type === "steps") {
+    out.w = Math.max(out.w, 12);
+    const P = build(out);
+    if (legacy || raw.tread == null) out.tread = defaultTread(P); else out.tread = Math.max(out.tread, 4);
+    if (legacy || raw.base == null) out.base = defaultBase(P);
+  }
   return out;
 }
 function sanitizeJob(j) {
-  const s = sampleJob();
-  const P = j.product || {};
-  return {
-    v: 1, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
-    product: { name: String(P.name ?? s.product.name).slice(0, 80), L: num(P.L, s.product.L, 4, 200), D: num(P.D, s.product.D, 4, 60), H: num(P.H, s.product.H, 2, 24),
-      setback: num(P.setback, s.product.setback, 0, 30), capL: num(P.capL, s.product.capL, 0, 200), capD: num(P.capD, s.product.capD, 0, 60), capH: num(P.capH, s.product.capH, 0, 12), capOver: num(P.capOver, s.product.capOver, 0, 6),
-      color: /^#[0-9a-f]{6}$/i.test(P.color) ? P.color : s.product.color, stagger: P.stagger === "none" ? "none" : "half" },
-    site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
-    items: (Array.isArray(j.items) ? j.items : []).map(sanitizeItem).filter(Boolean).slice(0, 300),
-  };
+  const s = sampleJob(), legacy = !j.v || j.v < 2;
+  const custom = (Array.isArray(j.custom) ? j.custom : []).filter((m) => m && typeof m.id === "string" && m.id.startsWith("c-") && KIND_LABEL[m.kind]).map((m) => ({
+    id: m.id.slice(0, 40), brand: String(m.brand || "Custom").slice(0, 40), line: String(m.line || "").slice(0, 40), name: String(m.name || "Material").slice(0, 60), kind: m.kind,
+    L: num(m.L, 0, 0, 400), D: num(m.D, 0, 0, 400), H: num(m.H, 1, 0.1, 48), setback: num(m.setback, 0, 0, 30), price: num(m.price, 0, 0, 1e5),
+    colors: (Array.isArray(m.colors) ? m.colors : ["Grey"]).map((c) => String(c).slice(0, 30)).slice(0, 12), pattern: m.kind === "surface" ? "concrete" : undefined,
+  }));
+  const prev = job; job = { ...s, custom }; // so material lookups during cleanup can see this job's custom materials
+  try {
+    const defs = { ...DEFAULTS };
+    for (const k of Object.keys(DEFAULTS)) { const v = j.defaults && j.defaults[k]; if (typeof DEFAULTS[k] === "number") defs[k] = num(v, DEFAULTS[k], 0, 100); else if (k === "cap" || k === "wallCap") defs[k] = v === "" ? "" : mat(v) ? v : DEFAULTS[k]; else if (k.toLowerCase().includes("color")) defs[k] = typeof v === "string" ? v.slice(0, 30) : DEFAULTS[k]; else defs[k] = mat(v) ? v : DEFAULTS[k]; }
+    job.defaults = defs;
+    const est = { ...EST_DEFAULTS }; for (const k of Object.keys(EST_DEFAULTS)) est[k] = num(j.est && j.est[k], EST_DEFAULTS[k], 0, 1e6);
+    const prices = {}; for (const [k, v] of Object.entries(j.prices || {})) if (isFinite(+v) && +v >= 0) prices[String(k).slice(0, 40)] = +v;
+    return {
+      v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
+      quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom,
+      extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
+      site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
+      items: (Array.isArray(j.items) ? j.items : []).map((r) => sanitizeItem(r, legacy)).filter(Boolean).slice(0, 300),
+    };
+  } finally { job = prev; }
 }
 
 // ---------- files ----------
 let downloadsCap = null;
 async function saveFile(filename, blob) {
-  try { if (downloadsCap) { await downloadsCap.save({ filename, data: blob }); return; } } catch (e) { if (e && e.code === "declined") return; }
+  try { if (downloadsCap) { await downloadsCap.save({ filename, data: blob }); return; } } catch (e) { if (e && (e.code === "declined" || e.code === "cancelled")) return; }
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 const canvasBlob = (c) => new Promise((r) => c.toBlob(r, "image/png"));
@@ -996,45 +1586,42 @@ $("exportBtn").onclick = async () => {
   const u = 2.6, titleH = 190, colX = Math.round(W * 0.64);
   const v = {}; fitView(colX, H - titleH, v, 150);
   renderSheet(ctx, W, H, v, { unit: u, section: false, selId: null });
-  // right column: one section per stair run, then the material schedule
   ctx.fillStyle = "#123a6b"; ctx.fillRect(colX, 14, W - colX - 14, H - titleH - 14);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(colX, 14); ctx.lineTo(colX, H - titleH); ctx.stroke();
   const stairs = job.items.filter((i) => i.type === "steps").slice(0, 2);
   const cw = W - colX - 80; let cy = 60;
-  stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 520, u, "AB"[k]); cy += 560; });
+  stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 500, u, "AB"[k]); cy += 540; });
   label(ctx, "MATERIAL SCHEDULE", colX + 40, cy + 20, 30, "left", BP.ink, 600);
   cy += 70;
+  const q = estimate();
+  for (const l of q.lines.filter((l) => l.cat === "Materials")) {
+    if (cy > H - titleH - 50) break;
+    label(ctx, `${num1(l.qty)} ${l.unit}`.padEnd(11) + l.desc.slice(0, 52), colX + 40, cy, 22, "left", BP.ink2); cy += 34;
+  }
   for (const st of job.items.filter((i) => i.type === "steps")) {
     const cc = stepCalc(st);
-    label(ctx, `${(st.label || "Steps").toUpperCase()}`, colX + 40, cy, 26, "left", BP.ink, 600); cy += 40;
-    const lines = [`${cc.count} risers × ${fmtIn(cc.H)} · tread ${fmtIn(st.tread)} · run ${fmtLen(cc.run)} · top +${fmtLen(cc.top)}`, `${fmtLen(st.w)} wide · ${cc.full + cc.cuts} blocks (${cc.cuts} cut)${cc.cap ? ` · ${cc.capFull + cc.capCuts} caps (${cc.capCuts} cut)` : ""}`];
-    if (cc.base < 0) lines.push(`Bottom course set ${fmtIn(-cc.base)} below grade on 6" compacted base`);
-    if (cc.infillArea > 1) lines.push(`Tread infill behind caps: ${(cc.infillArea / 144).toFixed(1)} sq ft`);
-    for (const line of lines) { label(ctx, line, colX + 40, cy, 24, "left", BP.ink2); cy += 36; }
-    for (const [kind, msg] of cc.checks.filter(([kk]) => kk !== "ok")) { label(ctx, (kind === "bad" ? "FIX: " : "CHECK: ") + msg, colX + 40, cy, 22, "left", kind === "bad" ? "#ffb4a8" : BP.sel); cy += 34; }
-    cy += 16; if (cy > H - titleH - 60) break;
+    if (cy > H - titleH - 50) break;
+    cy += 10; label(ctx, `${(st.label || "Steps").toUpperCase()}: ${cc.count} × ${fmtIn(cc.H)} RISERS, ${fmtIn(st.tread)} TREADS${cc.cutting ? `, BLOCKS CUT TO ${fmtIn(cc.bH)}` : ""}`, colX + 40, cy, 22, "left", BP.ink); cy += 34;
+    for (const [kind, msg] of cc.checks.filter(([kk]) => kk === "bad")) { if (cy > H - titleH - 50) break; label(ctx, "FIX: " + msg.slice(0, 70), colX + 40, cy, 20, "left", "#ffb4a8"); cy += 30; }
   }
-  // title block
   ctx.fillStyle = "#0f2f58"; ctx.fillRect(0, H - titleH, W, titleH);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.strokeRect(14, 14, W - 28, H - 28); ctx.beginPath(); ctx.moveTo(14, H - titleH); ctx.lineTo(W - 14, H - titleH); ctx.stroke();
-  const cols = [[40, "JOB", job.name], [760, "CLIENT", job.client], [1300, "SITE", job.address], [2000, "PRODUCT", job.product.name]];
-  for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 58), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
-  const mm = materials();
-  label(ctx, `ORDER ${mm.orderBlocks} BLOCKS${hasCap(job.product) ? " · " + mm.orderCaps + " CAPS" : ""} (INCL. 5%) · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
+  const co = company();
+  const cols = [[40, "JOB", job.name], [760, "CLIENT", job.client], [1300, "SITE", job.address], [2000, "PREPARED BY", co.name || ""]];
+  for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 46), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
+  label(ctx, `QUOTE ${quoteNo()} · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
   if (job.notes) label(ctx, "NOTES: " + job.notes.slice(0, 120), 1300, H - titleH + 140, 24, "left", BP.ink2);
-  saveFile((job.name || "blueprint").replace(/[^\w-]+/g, "_") + "_blueprint.png", await canvasBlob(c));
+  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(c));
 };
 
-// ---------- undo / toast ----------
-$("undoBtn").onclick = () => { const s = undoStack.pop(); if (!s) { toast("Nothing to undo."); return; } job = JSON.parse(s); if (!job.items.find((i) => i.id === selId)) selId = null; renderJobPane(); commit(); };
-let toastT; function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
-
+// ---------- undo / toast / view ----------
+$("undoBtn").onclick = () => { const s = undoStack.pop(); if (!s) { toast("Nothing to undo."); return; } job = JSON.parse(s); if (!job.items.find((i) => i.id === selId)) selId = null; renderJobPane(); renderMaterials(); renderEstFields(); commit(); };
+let toastT; function toast(m) { const t = $("toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3400); }
 $("fitBtn").onclick = () => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); };
 $("secBtn").setAttribute("aria-pressed", showSection);
 $("secBtn").onclick = (e) => { showSection = !showSection; e.target.setAttribute("aria-pressed", showSection); drawPlan(); };
 $("snapBtn").onclick = (e) => { snap = !snap; e.target.setAttribute("aria-pressed", snap); e.target.textContent = snap ? 'Snap 1"' : "Snap off"; };
 
-// ---------- view switching ----------
 let view = "plan";
 function setView(vw) {
   view = vw;
@@ -1059,13 +1646,44 @@ function start3d() {
   if (!R3) init3d();
   resize3d(); build3d();
 }
-function noiseTex(base, amt, size = 256, speck = 0.6) {
-  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d");
-  x.fillStyle = base; x.fillRect(0, 0, size, size);
+function canvasTex(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d"); draw(x, size);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t;
+}
+function speckle(x, size, amt, speck = 0.6) {
   const img = x.getImageData(0, 0, size, size), d = img.data;
   for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * amt * (Math.random() < speck ? 1 : 2.4); d[i] += n; d[i + 1] += n; d[i + 2] += n; }
   x.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; return t;
+}
+function noiseTex(base, amt, size = 256, speck = 0.6) { return canvasTex(size, (x, s) => { x.fillStyle = base; x.fillRect(0, 0, s, s); speckle(x, s, amt, speck); }); }
+function shade(hex, k) { const n = parseInt(hex.slice(1), 16); const f = (v) => clamp(Math.round(v * k), 0, 255); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
+// Surface texture for a paver, slab or poured surface. One tile covers 4 × 4 units (or 48" for poured surfaces).
+function surfaceTex(m, colorName) {
+  const hex = hexOf(colorName), pat = m.pattern || (m.kind === "slab" || m.kind === "paver" ? "units" : "concrete");
+  const tex = canvasTex(512, (x, s) => {
+    x.fillStyle = hex; x.fillRect(0, 0, s, s);
+    if (pat === "units") {
+      const uw = s / 4, uh = s / 4 * (m.D / m.L) * 1; const rows = Math.round(s / uh);
+      x.strokeStyle = shade(hex, 0.62); x.lineWidth = 3;
+      for (let r = 0; r < rows; r++) {
+        const y = r * s / rows, off = r % 2 ? uw / 2 : 0;
+        for (let k = -1; k < 5; k++) { x.fillStyle = shade(hex, 0.92 + 0.16 * Math.random()); x.fillRect(k * uw + off + 2, y + 2, uw - 4, s / rows - 4); }
+        x.beginPath(); x.moveTo(0, y); x.lineTo(s, y); x.stroke();
+        for (let k = 0; k <= 4; k++) { x.beginPath(); x.moveTo(k * uw + off, y); x.lineTo(k * uw + off, y + s / rows); x.stroke(); }
+      }
+      speckle(x, s, 16);
+    } else if (pat === "flag") {
+      x.strokeStyle = shade(hex, 0.55); x.lineWidth = 6;
+      for (let k = 0; k < 26; k++) { x.fillStyle = shade(hex, 0.85 + 0.3 * Math.random()); const cx = Math.random() * s, cy = Math.random() * s, r = 50 + Math.random() * 60; x.beginPath(); for (let a = 0; a < 6; a++) { const t = a / 6 * Math.PI * 2 + Math.random() * 0.4, rr = r * (0.7 + 0.4 * Math.random()); a ? x.lineTo(cx + rr * Math.cos(t), cy + rr * Math.sin(t)) : x.moveTo(cx + rr * Math.cos(t), cy + rr * Math.sin(t)); } x.closePath(); x.fill(); x.stroke(); }
+      speckle(x, s, 14);
+    } else if (pat === "wood") {
+      const n = 8; for (let k = 0; k < n; k++) { x.fillStyle = shade(hex, 0.85 + 0.25 * Math.random()); x.fillRect(0, k * s / n + 2, s, s / n - 4); }
+      speckle(x, s, 18);
+    } else if (pat === "gravel") { speckle(x, s, 70, 0.3); }
+    else { speckle(x, s, 14, 0.9); x.strokeStyle = shade(hex, 0.7); x.lineWidth = 2; x.strokeRect(0, 0, s, s); }
+  });
+  const tile = pat === "units" ? m.L * 4 : pat === "wood" ? 44 : pat === "flag" ? 72 : 48;
+  return { tex, tile };
 }
 function init3d() {
   const canvas = $("three");
@@ -1080,9 +1698,9 @@ function init3d() {
   const sun = new THREE.DirectionalLight("#fff3df", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
   scene.add(sun); scene.add(sun.target);
   const world = new THREE.Group(); scene.add(world);
-  const tex = { grass: noiseTex("#5f8a3e", 34, 256), soil: noiseTex("#6d5640", 30, 128), bark: noiseTex("#5a4330", 40, 64), stone: noiseTex("#8d8b86", 40, 128), pav: noiseTex("#9a8f82", 26, 128) };
-  tex.grass.repeat.set(40, 40); tex.soil.repeat.set(6, 1); tex.pav.repeat.set(1, 3);
-  R3 = { renderer, scene, camera, controls, sun, world, tex, mats: {} };
+  const tex = { grass: noiseTex("#5f8a3e", 34, 256), soil: noiseTex("#6d5640", 30, 128), bark: noiseTex("#5a4330", 40, 64), stone: noiseTex("#8d8b86", 40, 128) };
+  tex.grass.repeat.set(40, 40); tex.soil.repeat.set(6, 1);
+  R3 = { renderer, scene, camera, controls, sun, world, tex, mats: {}, temp: [] };
   const loop = () => { requestAnimationFrame(loop); if (view !== "3d") return; controls.update(); renderer.render(scene, camera); };
   loop();
   camPreset("corner");
@@ -1093,15 +1711,15 @@ function resize3d() {
 }
 function sceneCenter() {
   const st = job.items.find((i) => i.id === selId) || job.items.find((i) => i.type === "steps");
-  return st ? new THREE.Vector3(st.x, 20, -st.y) : new THREE.Vector3(job.site.w / 2, 0, -job.site.d / 2);
+  return st ? new THREE.Vector3(st.x, 20 + (st.elev || 0), -st.y) : new THREE.Vector3(job.site.w / 2, 0, -job.site.d / 2);
 }
 function camPreset(kind) {
   const c = sceneCenter(), span = Math.max(job.site.w, job.site.d);
   const st = job.items.find((i) => i.id === selId && RECT_TYPES.has(i.type)) || job.items.find((i) => i.type === "steps");
   const a = (st ? st.rot : 0) * Math.PI / 180; // front of the steps faces local -y
-  const fx = -Math.sin(a), fz = Math.cos(a); // world dir of local -y: (x=-sin, z=+cos) in three coords
+  const fx = -Math.sin(a), fz = Math.cos(a);
   const dist = Math.max(240, span * 0.55);
-  if (kind === "front") R3.camera.position.set(c.x + fx * dist, 66, c.z + fz * dist);
+  if (kind === "front") R3.camera.position.set(c.x + fx * dist, 66 + c.y, c.z + fz * dist);
   else if (kind === "top") R3.camera.position.set(c.x + fx * 10, span * 1.15, c.z + fz * span * 0.25);
   else R3.camera.position.set(c.x + (fx * 0.8 + fz * 0.6) * dist, dist * 0.5, c.z + (fz * 0.8 - fx * 0.6) * dist);
   R3.controls.target.copy(c); R3.controls.update();
@@ -1116,62 +1734,89 @@ function placeSun() {
   const sc = R3.sun.shadow.camera, half = span * 0.75; sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 1; sc.far = span * 3; sc.updateProjectionMatrix();
 }
 $("sun").oninput = placeSun; $("sunH").oninput = placeSun;
-$("shotBtn").onclick = async () => { if (!R3) return; R3.renderer.render(R3.scene, R3.camera); saveFile((job.name || "rendering").replace(/[^\w-]+/g, "_") + "_render.png", await canvasBlob($("three"))); };
+$("shotBtn").onclick = async () => { if (!R3) return; R3.renderer.render(R3.scene, R3.camera); saveFile(slug(job.name || "rendering") + "_render.png", await canvasBlob($("three"))); };
 
-function mat(key, make) { return R3.mats[key] || (R3.mats[key] = make()); }
-function box(w, h, d, m) { const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); g.castShadow = true; g.receiveShadow = true; return g; }
+function mat3(key, make) { return R3.mats[key] || (R3.mats[key] = make()); }
+function blockMat(colorName, smooth) {
+  return mat3("blk|" + colorName + "|" + !!smooth, () => {
+    const t = noiseTex(hexOf(colorName), smooth ? 14 : 24, 128, 0.85);
+    return new THREE.MeshStandardMaterial({ map: t, roughness: smooth ? 0.78 : 0.93 });
+  });
+}
+function box(w, h, d, m) { const g = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w, 0.05), Math.max(h, 0.05), Math.max(d, 0.05)), m); g.castShadow = true; g.receiveShadow = true; return g; }
+function surfaceMesh(m, colorName, w, d, h) {
+  const { tex, tile } = surfaceTex(m, colorName); R3.temp.push(tex);
+  const top = new THREE.MeshStandardMaterial({ map: tex, roughness: m.pattern === "wood" ? 0.7 : 0.9 }); R3.temp.push(top);
+  tex.repeat.set(w / tile, d / tile);
+  const side = blockMat(colorName, true);
+  const g = box(w, h, d, [side, side, top, side, side, side]); g.castShadow = false; return g;
+}
 function build3d() {
   if (!R3 || !dirty3d) return; dirty3d = false;
   const { world, tex } = R3;
   world.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
   world.clear();
-  for (const k in R3.mats) if (k.startsWith("block")) { if (k === "block") R3.mats[k].map.dispose(); R3.mats[k].dispose(); delete R3.mats[k]; }
-  const blockTex = noiseTex(job.product.color || "#a8a39a", 22, 128, 0.85);
-  const mBlock = mat("block", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.92 }));
-  const mBlockCut = mat("blockcut", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.95, color: "#f2efe9" }));
-  const mCap = mat("blockcap", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.8, color: "#f4f2ee" }));
-  const mGrass = mat("grass", () => new THREE.MeshStandardMaterial({ map: tex.grass, roughness: 1 }));
-  const mSoil = mat("soil", () => new THREE.MeshStandardMaterial({ map: tex.soil, roughness: 1 }));
-  const mBark = mat("bark", () => new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 1 }));
-  const mStone = mat("stone", () => new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.9, flatShading: true }));
-  const mPav = mat("pav", () => new THREE.MeshStandardMaterial({ map: tex.pav, roughness: 0.95 }));
-  const mWall = mat("wall", () => new THREE.MeshStandardMaterial({ color: "#e9e4da", roughness: 0.9 }));
-  const mRoof = mat("roof", () => new THREE.MeshStandardMaterial({ color: "#4a4f57", roughness: 0.8 }));
-  const mTrim = mat("trim", () => new THREE.MeshStandardMaterial({ color: "#3b3027", roughness: 0.7 }));
-  const leaf = (c) => mat("leaf" + c, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }));
+  for (const t of R3.temp) t.dispose(); R3.temp = [];
+  const mGrass = mat3("grass", () => new THREE.MeshStandardMaterial({ map: tex.grass, roughness: 1 }));
+  const mSoil = mat3("soil", () => new THREE.MeshStandardMaterial({ map: tex.soil, roughness: 1 }));
+  const mBark = mat3("bark", () => new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 1 }));
+  const mStone = mat3("stone", () => new THREE.MeshStandardMaterial({ map: tex.stone, roughness: 0.9, flatShading: true }));
+  const mWall = mat3("wall", () => new THREE.MeshStandardMaterial({ color: "#e9e4da", roughness: 0.9 }));
+  const mRoof = mat3("roof", () => new THREE.MeshStandardMaterial({ color: "#4a4f57", roughness: 0.8 }));
+  const mTrim = mat3("trim", () => new THREE.MeshStandardMaterial({ color: "#3b3027", roughness: 0.7 }));
+  const mGlass = mat3("glass", () => new THREE.MeshStandardMaterial({ color: "#5d7894", roughness: 0.2, metalness: 0.3 }));
+  const leaf = (c) => mat3("leaf" + c, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true }));
 
   const margin = Math.max(job.site.w, job.site.d) * 2 + 1200;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(margin, margin), mGrass); ground.rotation.x = -Math.PI / 2; ground.position.set(job.site.w / 2, 0, -job.site.d / 2); ground.receiveShadow = true; world.add(ground);
-
   // Plan rotation is clockwise seen from above; in three.js (y up, z = -north) that is a negative turn about +y.
   const place = (obj, it, lx, ly, z) => { const p = rotPt(it, lx, ly); obj.position.set(p.x, z, -p.y); obj.rotation.y = -(it.rot * Math.PI / 180); world.add(obj); return obj; };
+  const placeBox = (it, q, m, shrink = 0.25) => place(box(q.x1 - q.x0 - shrink, q.z1 - q.z0 - 0.15, q.y1 - q.y0 - shrink, m), it, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, (q.z0 + q.z1) / 2);
 
   for (const it of job.items) {
     const gz = (it.type === "grade" || it.type === "landing") ? 0 : groundAt(it.x, it.y, it.id);
     switch (it.type) {
       case "grade": { const g = box(it.w, it.h, it.d, [mSoil, mSoil, mGrass, mSoil, mSoil, mSoil]); place(g, it, 0, 0, it.h / 2); break; }
-      case "path": { const g = box(it.w, 1.5, it.d, mPav); g.castShadow = false; place(g, it, 0, 0, gz + 0.8); break; }
+      case "path": { const m = mat(it.surface) || mat("cs-standard"); const g = surfaceMesh(m, it.color, it.w, it.d, Math.max(1, m.H * 0.6)); place(g, it, 0, 0, gz + Math.max(1, m.H * 0.6) / 2 + 0.05); break; }
       case "landing": {
-        const g = box(it.w, it.h - 2, it.d, mSoil); place(g, it, 0, 0, (it.h - 2) / 2);
-        const cap = box(it.w, 2.2, it.d, mBlock); place(cap, it, 0, 0, it.h - 0.95); // sits just proud of the lawn to avoid z-fighting
+        const lc = landingCalc(it), sm = lc.s || mat("cs-standard"), sH = Math.max(1, sm.H);
+        if (lc.edged) {
+          const bm = blockMat(it.blockColor), cm = blockMat(it.capColor, true), bH = lc.b.H, top = it.h;
+          const sides = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + lc.b.D], [-it.w / 2, it.d / 2 - lc.b.D, it.w / 2, it.d / 2], [-it.w / 2, -it.d / 2 + lc.b.D, -it.w / 2 + lc.b.D, it.d / 2 - lc.b.D], [it.w / 2 - lc.b.D, -it.d / 2 + lc.b.D, it.w / 2, it.d / 2 - lc.b.D]];
+          for (let k = 0, z = 0; k < lc.courses; k++, z += bH) {
+            const zt = Math.min(z + bH, top - lc.capH);
+            sides.forEach(([x0, y0, x1, y1], si) => { const horiz = si < 2; const len = horiz ? x1 - x0 : y1 - y0; for (const [a, b] of along(horiz ? x0 : y0, horiz ? x1 : y1, lc.b.L, k % 2 ? lc.b.L / 2 : 0)) placeBox(it, horiz ? { x0: a, x1: b, y0, y1, z0: z, z1: zt } : { x0, x1, y0: a, y1: b, z0: z, z1: zt }, bm); void len; });
+          }
+          if (lc.c) {
+            const cd = lc.capD;
+            const rim = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + cd, true], [-it.w / 2, it.d / 2 - cd, it.w / 2, it.d / 2, true], [-it.w / 2, -it.d / 2 + cd, -it.w / 2 + cd, it.d / 2 - cd, false], [it.w / 2 - cd, -it.d / 2 + cd, it.w / 2, it.d / 2 - cd, false]];
+            for (const [x0, y0, x1, y1, horiz] of rim) for (const [a, b] of along(horiz ? x0 : y0, horiz ? x1 : y1, lc.c.L, 0)) placeBox(it, horiz ? { x0: a, x1: b, y0, y1, z0: top - lc.capH, z1: top } : { x0, x1, y0: a, y1: b, z0: top - lc.capH, z1: top }, cm, 0.2);
+          }
+          const fill = box(lc.inW - 0.5, Math.max(0.1, top - sH), lc.inD - 0.5, mSoil); fill.castShadow = false; place(fill, it, 0, 0, (top - sH) / 2);
+          const s = surfaceMesh(sm, it.color, lc.inW, lc.inD, sH); place(s, it, 0, 0, top - sH / 2);
+        } else {
+          const fill = box(it.w, Math.max(0.1, it.h - sH), it.d, mSoil); place(fill, it, 0, 0, (it.h - sH) / 2);
+          const s = surfaceMesh(sm, it.color, it.w, it.d, sH); place(s, it, 0, 0, it.h - sH / 2 + 0.1);
+        }
         break;
       }
       case "wall": {
-        const P = job.product, w = wallCalc(it);
-        for (let i = 0; i < w.courses; i++) {
-          const off = P.stagger === "half" && i % 2 ? P.L / 2 : 0;
-          for (const [x0, x1] of segs(it.w, P.L, off)) { const b = box(x1 - x0 - 0.3, P.H - 0.2, it.d, mBlock); place(b, it, (x0 + x1) / 2, i * w.step, gz + i * P.H + P.H / 2); }
+        const wc = wallCalc(it), bm = blockMat(it.color);
+        for (let i = 0; i < wc.courses; i++) {
+          const off = i % 2 ? wc.b.L / 2 : 0;
+          for (const [x0, x1] of segs(it.w, wc.b.L, off)) place(box(x1 - x0 - 0.3, wc.b.H - 0.2, wc.b.D, bm), it, (x0 + x1) / 2, i * wc.step, gz + i * wc.b.H + wc.b.H / 2);
         }
-        if (hasCap(P)) for (const [x0, x1] of segs(it.w, P.capL, P.capL / 2)) { const b = box(x1 - x0 - 0.2, P.capH, P.capD, mCap); place(b, it, (x0 + x1) / 2, w.courses * w.step - (P.capOver || 0) + (P.capD - it.d) / 2, gz + w.courses * P.H + P.capH / 2); }
+        if (wc.c) { const cm = blockMat(it.capColor, true); for (const [x0, x1] of segs(it.w, wc.c.L, wc.c.L / 2)) place(box(x1 - x0 - 0.2, wc.c.H, wc.c.D, cm), it, (x0 + x1) / 2, wc.courses * wc.step - 1 + (wc.c.D - wc.b.D) / 2, gz + wc.courses * wc.b.H + wc.c.H / 2); }
         break;
       }
       case "steps": {
-        const c = stepCalc(it);
-        for (const b of c.blocks) { const m = box(b.x1 - b.x0 - 0.3, c.H - 0.2, c.D - 0.2, b.cut ? mBlockCut : mBlock); place(m, it, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.z0 + c.H / 2); }
-        for (const q of c.caps) { const m = box(q.x1 - q.x0 - 0.2, c.capH, c.capD, mCap); place(m, it, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, q.z0 + c.capH / 2); }
-        for (const q of c.infill) { const m = box(q.x1 - q.x0, c.capH - 0.3, q.y1 - q.y0, mPav); m.castShadow = false; place(m, it, 0, (q.y0 + q.y1) / 2, q.z0 + (c.capH - 0.3) / 2); }
-        for (let i = 1; i < c.count; i++) { const y0 = -c.run / 2 + i * it.tread + c.over, fillH = c.base + i * c.H; if (fillH <= 0) continue; const f = box(it.w - 1, fillH, c.D - 1, mSoil); place(f, it, 0, y0 + c.D / 2, fillH / 2); }
-        if (c.base > 0) { const f = box(it.w, c.base, c.run, mSoil); place(f, it, 0, 0, c.base / 2); }
+        const c = stepCalc(it), bm = blockMat(it.color), cm = blockMat(it.capColor || it.color, true);
+        const im = mat(it.infill);
+        for (const f of c.fills) { const b = box(f.x1 - f.x0, f.z1 - f.z0, f.y1 - f.y0, mSoil); b.castShadow = false; place(b, it, (f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2, (f.z0 + f.z1) / 2); }
+        for (const q of c.pieces) {
+          if (q.kind === "infill") { if (im) { const s = surfaceMesh(im, firstColor(it.infill), q.x1 - q.x0, q.y1 - q.y0, q.z1 - q.z0 - 0.2); place(s, it, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, (q.z0 + q.z1) / 2 - 0.1); } continue; }
+          placeBox(it, q, q.kind === "cap" || q.kind === "cheekcap" ? cm : bm, q.kind === "cap" || q.kind === "cheekcap" ? 0.2 : 0.3);
+        }
         break;
       }
       case "house": {
@@ -1181,7 +1826,7 @@ function build3d() {
         const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: it.w + 24, bevelEnabled: false }), mRoof); roof.castShadow = true; roof.receiveShadow = true;
         roof.rotation.y = Math.PI / 2; roof.position.set(-it.w / 2 - 12, it.h, 0); g.add(roof);
         const door = box(36, 80, 2, mTrim); door.position.set(0, 40, -it.d / 2 - 1); g.add(door);
-        for (const wx of [-it.w * 0.3, it.w * 0.3]) { const win = box(42, 48, 2, mat("glass", () => new THREE.MeshStandardMaterial({ color: "#5d7894", roughness: 0.2, metalness: 0.3 }))); win.position.set(wx, 60, -it.d / 2 - 1); g.add(win); }
+        for (const wx of [-it.w * 0.3, it.w * 0.3]) { const win = box(42, 48, 2, mGlass); win.position.set(wx, 60, -it.d / 2 - 1); g.add(win); }
         place(g, it, 0, 0, gz);
         break;
       }
@@ -1191,15 +1836,13 @@ function build3d() {
         const trunk = new THREE.Mesh(new THREE.CylinderGeometry(it.trunk * 0.35, it.trunk / 2, trunkH + 20, 10), mBark); trunk.position.y = (trunkH + 20) / 2; trunk.castShadow = true; g.add(trunk);
         if (it.type === "tree") {
           const cols = ["#4f7a2f", "#5c8a36", "#46702a"];
-          const n = 9;
-          for (let k = 0; k < n; k++) {
+          for (let k = 0; k < 9; k++) {
             const t = rand(seed + k) * Math.PI * 2, rr = R * 0.55 * Math.sqrt(rand(seed + 40 + k)), sz = R * (0.42 + 0.22 * rand(seed + 80 + k));
             const s = new THREE.Mesh(new THREE.IcosahedronGeometry(sz, 1), leaf(cols[k % 3]));
             s.position.set(Math.cos(t) * rr, trunkH + (H - trunkH) * (0.35 + 0.4 * rand(seed + 120 + k)), Math.sin(t) * rr); s.scale.y = 0.8; s.castShadow = true; s.receiveShadow = true; g.add(s);
           }
         } else {
-          const tiers = 4;
-          for (let k = 0; k < tiers; k++) { const f = k / tiers; const h = (H - trunkH) / tiers * 1.6; const cone = new THREE.Mesh(new THREE.ConeGeometry(R * (1 - f * 0.7), h, 9), leaf("#2f5a37")); cone.position.y = trunkH + (H - trunkH) * f + h / 2 - k * 6; cone.castShadow = true; cone.receiveShadow = true; g.add(cone); }
+          for (let k = 0; k < 4; k++) { const f = k / 4; const h = (H - trunkH) / 4 * 1.6; const cone = new THREE.Mesh(new THREE.ConeGeometry(R * (1 - f * 0.7), h, 9), leaf("#2f5a37")); cone.position.y = trunkH + (H - trunkH) * f + h / 2 - k * 6; cone.castShadow = true; cone.receiveShadow = true; g.add(cone); }
         }
         g.position.set(it.x, gz, -it.y); world.add(g);
         break;
@@ -1223,42 +1866,45 @@ function build3d() {
 }
 
 // ---------- AI assistant ----------
+function aiCatalog() {
+  return allMats().map((m) => `${m.id}: ${m.brand} ${matName(m)} [${m.kind}${m.L ? `, ${m.L}×${m.D}×${m.H} in` : ""}] colours: ${(m.colors || []).join("/")}`).join("\n");
+}
 const SCHEMA_DOC = `JSON shape (all lengths in INCHES, numbers only):
 {
   "summary": "2-4 short sentences for the contractor: what you drew, what you assumed, anything they should re-measure",
-  "job": {
-    "name": string, "client": string, "notes": string,
-    "product": leave out to keep the contractor's current block and cap,
-    "site": { "w": width of work area east-west, "d": depth north-south },
-    "items": [ ... ]
-  }
+  "job": { "name": string, "client": string, "notes": string, "site": { "w": work area east-west, "d": north-south }, "items": [ ... ] }
 }
 Coordinates: x = east, y = north, origin at the south-west corner of the work area. Keep everything inside 0..site.w and 0..site.d.
-"rot" = degrees clockwise from north. For "steps", rot 0 means you walk UP heading north; rot 180 means you walk up heading south.
-Item types (x,y is always the CENTER of the item):
-- {"type":"steps","x","y","w": stair width,"rise": total measured rise from lower grade to the top,"rot","label"}
-  Leave out "tread" and "base"; the app sets them from the block product. Each riser is one course of the product's block with a cap as the tread.
-  Place the steps so their top (back) edge meets the landing, porch or upper grade.
-- {"type":"landing","x","y","w","d","h": top elevation,"rot","label"} flat block platform
-- {"type":"grade","x","y","w","d","h": height of the raised ground,"rot","label"} the upper level the steps climb to
-- {"type":"path","x","y","w","d","rot","label"} walkway or patio at ground level
-- {"type":"wall","x","y","w": length,"d": thickness,"h","rot","label"} retaining wall
-- {"type":"house","x","y","w","d","h": wall height,"rot","label"}
-- {"type":"tree","x","y","canopy": canopy diameter,"height","trunk": trunk diameter,"label": species}
-- {"type":"evergreen", same fields as tree}
-- {"type":"shrub","x","y","canopy","height","label"}
-- {"type":"rock","x","y","canopy": size across,"height","label"}
+"rot" = degrees clockwise from north. For "steps", rot 0 means you walk UP heading north; 90 = heading east; 180 = south; 270 = west.
+x,y is always the CENTER of an item. Material fields take an id from the material list below; colour fields take one of that material's colours.
+Item types:
+- steps: {"type":"steps","x","y","w": stair width,"rise": rise of this flight,"elev": elevation the flight starts at (0 at grade, or a landing's height),"rot","label",
+    "block": riser block id (kind block or solid),"color","cap": cap/slab id or "" for none,"capColor","stepRise": inches per step when blocks are cut so block + cap = rise (0 = full block),
+    "config": "straight" | "wrapL" | "wrapR" | "wrapLR" (steps wrap around the sides, pyramid style),"cheek": "none" | "left" | "right" | "both" (block cheek walls beside the stair)}
+  Leave out tread and base; the app sets them. A flight's run is about (risers - 1) × 11 + 13 inches with 12" caps.
+- landing: {"type":"landing","x","y","w","d","h": top elevation,"rot","label","surface","color","edge": "caps" (block walls with cap border) or "none","block","blockColor","cap","capColor"}
+- path: {"type":"path","x","y","w","d","rot","label","surface","color"} walkway or patio at ground level
+- wall: {"type":"wall","x","y","w": length,"d": thickness,"h": height,"rot","label","block","color","cap","capColor"}
+- grade: {"type":"grade","x","y","w","d","h": height of raised ground,"rot","label"} the upper level the steps climb to
+- house: {"type":"house","x","y","w","d","h": wall height,"rot","label"}
+- tree / evergreen: {"type":"tree","x","y","canopy": canopy diameter,"height","trunk": trunk diameter,"label": species}
+- shrub: {"type":"shrub","x","y","canopy","height","label"}
+- rock: {"type":"rock","x","y","canopy": size across,"height","label"}
+For L-shaped, U-turn or multi-flight stairs, use separate steps items joined by landings; each upper flight's "elev" equals the landing "h".
 Keep existing "id" values for items you keep; new items need no id.`;
-
 function aiPrompt(mode, text, nPhotos) {
-  const cur = JSON.stringify({ name: job.name, client: job.client, notes: job.notes, product: { name: job.product.name, L: job.product.L, D: job.product.D, H: job.product.H }, site: job.site, items: job.items });
-  return `You are the layout assistant inside a tablet app that hardscape contractors use to draw blueprints and 3D renderings of concrete block step jobs.
-${mode === "new" ? "Draw a NEW layout from the contractor's description. Use the current job only for the block product and job name unless the description changes them." : "REVISE the current layout per the contractor's request. Change only what they ask for, keep everything else exactly as it is (same ids, same positions)."}
-Convert feet and inches carefully (1 ft = 12 in). Choose sensible positions when the contractor gives relative directions ("left of the steps" means left when standing at the bottom looking up). Include every tree, shrub, rock, building or other environment feature they mention, with realistic sizes when they don't give one. Size the work area to fit the job with a few feet of margin.
+  const cur = JSON.stringify({ name: job.name, client: job.client, notes: job.notes, site: job.site, items: job.items });
+  const d = job.defaults;
+  return `You are the layout assistant inside a tablet app that hardscape and stonework contractors use to draw blueprints, 3D renderings and quotes.
+${mode === "new" ? "Draw a NEW layout from the contractor's description." : "REVISE the current layout per the contractor's request. Change only what they ask for, keep everything else exactly as it is (same ids, same positions)."}
+Convert feet and inches carefully (1 ft = 12 in). Choose sensible positions when the contractor gives relative directions ("left of the steps" means left when standing at the bottom looking up). Include every tree, shrub, rock, building or other feature they mention, with realistic sizes when they don't give one. Size the work area to fit the job with a few feet of margin.
+Use the materials they name. When they don't name one, use the job defaults: steps ${d.block} ${d.color} with ${d.cap || "no cap"} ${d.capColor}, ${d.stepRise}" per step; walls ${d.wallBlock}; paving ${d.surface} ${d.surfaceColor}.
 ${nPhotos ? `They attached ${nPhotos} photo(s) of a sketch or the site. Read any written measurements on them; prefer typed measurements when they conflict.` : ""}
 
 ${SCHEMA_DOC}
-Block product on this job: ${job.product.name}. Block ${fmtIn(job.product.L)} long × ${fmtIn(job.product.D)} deep × ${fmtIn(job.product.H)} high (one course per riser)${hasCap(job.product) ? `, cap ${fmtIn(job.product.capL)} × ${fmtIn(job.product.capD)} × ${fmtIn(job.product.capH)} used as the tread` : ""}. Each riser adds ${job.product.H}" of height; a stair run is about (risers - 1) × ${defaultTread(job.product)} + ${Math.max(job.product.capD || 0, (job.product.capOver || 0) + job.product.D)} inches deep.
+
+Material list (id: description):
+${aiCatalog()}
 
 Current job:
 ${cur}
@@ -1286,7 +1932,6 @@ function renderThumbs() {
   $("aiThumbs").innerHTML = ""; photos.forEach((p) => { const i = new Image(); i.src = URL.createObjectURL(p); i.alt = "Attached photo"; $("aiThumbs").appendChild(i); });
   $("aiClearPhotos").hidden = !photos.length;
 }
-
 async function askWithApiKey(prompt, signal, onText) {
   const key = $("apiKey").value.trim();
   if (!key) throw { code: "no_key", message: "Add your Anthropic API key below, or open this app inside claude.ai." };
@@ -1326,7 +1971,7 @@ async function runAi(mode) {
       raw = (await sampleCap(prompt, opts)).text;
     } else raw = await askWithApiKey(prompt, aiCtl.signal, onText);
     const res = extractJson(raw);
-    const next = sanitizeJob({ ...job, ...res.job, product: { ...job.product, ...(res.job && res.job.product) } });
+    const next = sanitizeJob({ ...job, ...(res.job || {}), defaults: job.defaults, est: job.est, prices: job.prices, custom: job.custom, extras: job.extras, quoteNo: job.quoteNo, v: 2 });
     if (!next.items.length) throw { code: "empty", message: "The assistant didn't return any items. Add more detail and try again." };
     snapshot(); job = next; selId = null; afterLoad();
     out.textContent = (res.summary || "Layout updated.") + "\n\nTap Undo to go back to the previous plan.";
@@ -1343,28 +1988,23 @@ $("apiKey").value = store.get("bsp.apikey", "");
 $("apiKey").addEventListener("change", (e) => store.set("bsp.apikey", e.target.value.trim()));
 
 // ---------- boot ----------
-(async () => {
-  if (window.claude && claude.use) {
-    claude.use("sample").then(async (s) => {
-      if (!s) return; sampleCap = s; $("aiKeyBox").hidden = true;
-      try { const lim = await s.limits(); if (!lim || !lim.images) { $("aiPhotoLabel").hidden = true; } } catch { $("aiPhotoLabel").hidden = true; }
-    });
-    claude.use("downloads").then((d) => { downloadsCap = d; });
-  }
-})();
+if (window.claude && claude.use) {
+  claude.use("sample").then(async (s) => {
+    if (!s) return; sampleCap = s; $("aiKeyBox").hidden = true;
+    try { const lim = await s.limits(); if (!lim || !lim.images) $("aiPhotoLabel").hidden = true; } catch { $("aiPhotoLabel").hidden = true; }
+  });
+  claude.use("downloads").then((d) => { downloadsCap = d; });
+}
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) navigator.serviceWorker.register("sw.js").catch(() => {});
-let migrated = false;
 {
   const saved = store.get("bsp.current", null);
-  if (saved) { job = saved;
-  if (!job.product || job.product.capH == null) { // saved before block + cap support: switch to the contractor's product
-    job.product = presetProduct(PRESETS[0]); migrated = true;
-    for (const it of job.items || []) if (it.type === "steps") { it.tread = defaultTread(job.product); it.base = defaultBase(job.product); }
+  if (saved) {
+    const legacy = !saved.v || saved.v < 2;
+    try { job = sanitizeJob({ custom: store.get("bsp.library", []), ...saved, prices: { ...store.get("bsp.prices", {}), ...(saved.prices || {}) } }); } catch { job = sampleJob(); }
+    if (legacy) setTimeout(() => toast("Updated to the new materials library. Steps use SR Classic cut to 3¾\" + Pro Cap Max for a 7½\" rise."), 600);
   }
-  try { job = sanitizeJob(job); } catch { job = sampleJob(); } }
 }
-if (migrated) setTimeout(() => toast("Switched to SR Classic block + Pro Cap Max. Step treads were reset."), 600);
-renderJobPane(); renderItemPane(); renderList(); renderOrder();
+renderJobPane(); renderMaterials(); renderEstFields(); renderCompany(); renderItemPane(); renderList(); renderQuote();
 $("jobTitle").textContent = job.name || "";
 requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); });
 document.fonts && document.fonts.ready.then(drawPlan);

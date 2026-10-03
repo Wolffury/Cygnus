@@ -1,5 +1,5 @@
 // Offline cache so the planner opens on a job site with no signal.
-const CACHE = "bsp-v1";
+const CACHE = "bsp-v2";
 const CORE = [
   "./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png",
   "https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js",

@@ -1,32 +1,43 @@
 # Block Step Planner
 
-A tablet app (Android or any modern browser) for laying out concrete block step jobs.
+A tablet app (Android or any modern browser) for planning, drawing and quoting hardscape and
+stonework jobs: block steps, landings, retaining walls, walkways and patios.
 
-- **Blueprint**: a measured plan view on blueprint paper with block-by-block layout, cut pieces,
+## What it does
+
+- **Blueprint**: a measured plan on blueprint paper with every block, cap and cut piece,
   dimensions, a stair section, north arrow, scale bar and title block. Drag items with a finger;
   type exact measurements (`4' 6"`, `54"`, `4.5'`, `1.37m`) on the Item tab.
-- **3D render**: the same job as a 3D scene with the real block size and color, trees,
-  evergreens, shrubs, boulders, the house, walkways and raised grade. Orbit with a finger,
-  move the sun, and save a PNG rendering.
-- **AI assistant**: describe the job in plain words (and optionally attach a photo of your
-  sketch). Claude draws a new layout or revises the current one. Undo always works.
-- **Step checks**: riser height, tread depth, width, block overlap and handrail warnings
-  (common residential limits; your local code decides).
-- **Material order**: full blocks, cut pieces and order quantity with 5% waste.
-- **Export sheet**: a 17 × 11 blueprint PNG with plan, sections and material schedule.
-- Jobs save on the tablet; export/import job files to move them between devices.
+- **3D render**: the same job in 3D with the real block, cap and paver sizes and colours, trees,
+  shrubs, boulders, the house and raised grade. Orbit with a finger, move the sun, save a picture.
+- **Many configurations**: straight flights, wraparound (one side or both, pyramid), cheek walls,
+  flights that start on a landing, and one-tap layouts for two flights with a landing, L-shapes
+  and U-turns. Each item picks its own block, cap, colour, cap overhang and rise per step.
+- **Materials library**: Abbotsford wall blocks (SR Classic 6° and the Allan Block line),
+  Garden WallScapes, Pro Cap Max caps, Classic and Old Country Stone pavers, Texada and
+  Saturna slabs, plus generic precast and natural stone. Add your own materials with sizes,
+  colours and prices; they're saved on the tablet for every job.
+- **Estimates and quotes**: a full takeoff (blocks, caps, cut pieces, pavers, base, fill,
+  drain rock, bedding sand, polymeric sand, adhesive), labour from production rates,
+  equipment, delivery, disposal, contingency, overhead and profit, GST and PST, and deposit.
+  Save a client quote page (with the rendering and blueprint, prints to PDF) or export the
+  line items as CSV or JSON for accounting and job-management apps.
+- **AI assistant**: describe the job in plain words or attach a photo of your sketch; Claude
+  draws a new layout or revises the current one with the materials you name.
+- **Checks**: riser height, tread depth, width, first-riser match, cap/riser fit, handrails,
+  and wall height.
 
-## Block product
+## Default build: SR Classic + Pro Cap Max
 
-The default product is **Abbotsford Concrete SR Classic 6° (Grey)** wall block with
-**18" Pro Cap Max (Grey)** caps, built Allan Block style:
+Steps default to **Abbotsford SR Classic 6° (Grey)** risers with **18" Pro Cap Max (Grey)** treads:
 
-- Each step's riser is one course of SR Classic (18" × 12" × 7⅝").
-- A row of Pro Cap Max caps (18" × 12" × 3¾") forms the tread, with a 1" nosing overhang.
-- The next riser sits snug against the back of the cap, with its bottom level with the top of the blocks below.
-- The bottom course is buried by the cap height (3¾") so every riser is the same height.
+- Each riser block is cut to 3¾" high so block + 3¾" cap = **7½" rise** per step.
+- The cap overhangs the riser face by 1"; the next riser sits snug against the back of the cap,
+  on compacted base level with the cap top. Treads are 11" nosing to nosing.
+- Set **Rise per step** to 0 to use full-height blocks Allan Block style (bottom course buried).
 
-All sizes can be edited on the Job tab. Check them against your supplier's spec sheet.
+Abbotsford sizes come from published specs; check them against your supplier's current
+sheets. Prices are examples until you enter your own on the Materials tab.
 
 ## Put it on an Android tablet
 
