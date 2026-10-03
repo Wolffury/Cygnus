@@ -225,8 +225,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <canvas id="three" hidden aria-label="3D rendering"></canvas>
       <canvas id="side" hidden aria-label="Side view"></canvas>
       <div class="three-tools" id="sideTools" hidden>
-        <label>Section <select id="sideCut"></select></label>
-        <label>Heights <select id="sideVE"><option value="1">True scale</option><option value="2">× 2</option><option value="5">× 5</option></select></label>
+        <label>Show <select id="sideCut"></select></label>
+        <label id="sideVEBox">Heights <select id="sideVE"><option value="1">True scale</option><option value="2">× 2</option><option value="5">× 5</option></select></label>
         <button class="btn primary" id="sideSave">Save side view</button>
       </div>
       <div class="stage-tools" id="planTools">
@@ -239,6 +239,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <button class="btn" id="fitBtn">Fit</button>
         <button class="btn" id="secBtn">Section</button>
         <button class="btn" id="snapBtn" aria-pressed="true">Snap 1"</button>
+        <button class="btn" id="lookBtn" title="Switch between a realistic picture and the blueprint">Look: Realistic</button>
         <button class="btn" id="legendBtn" aria-pressed="false">Legend</button>
       </div>
       <div class="legendbox" id="legendBox" hidden>
@@ -738,12 +739,17 @@ function stepCalc(it) {
       const gap = i < count - 1 ? tread + over - capD : 0;
       if (gap > 0.1) { pieces.push({ kind: "infill", step: i, x0: xl + (wrapL ? capD : 0), x1: xr - (wrapR ? capD : 0), y0: Y + capD, y1: Y + capD + gap, z0: z1 + E, z1: z1 + capH + E }); infillArea += gap * (xr - xl); }
     }
-    // compacted fill under the next steps, behind this riser
-    if (i > 0 && z0 > Math.min(0, base)) fills.push({ x0: xl + 0.4, x1: xr - 0.4, y0: Y + over + 0.4, y1: yEnd - 0.4, z0: Math.min(0, base) + E, z1: z0 + E });
   }
-  // ground under the middle of the flight; a flight that starts above it sits on compacted fill
-  const gC = (() => { const a = rotPt(it, 0, 0); return natGround(a.x, a.y); })(), fillUnder = Math.max(0, E - gC);
-  if (E + Math.min(0, base) > gC + 0.5) fills.push({ x0: -it.w / 2, x1: it.w / 2, y0: -run / 2 + over, y1: yEnd, z0: gC, z1: E + Math.min(0, base) });
+  // Compacted fill, one column per step: from the ground up to the bottom of that step's riser. Where the ground is higher
+  // than the riser (a flight cut into a bank) there is no fill; the step sits on a bench dug into the native soil.
+  let fillVol = 0;
+  const colTop = (j) => E + (j ? base + j * H : Math.min(0, base));
+  for (let j = 0; j < xs.length; j++) {
+    const [xl, xr] = xs[j], y0 = -run / 2 + j * tread + over, y1 = j < xs.length - 1 ? -run / 2 + (j + 1) * tread + over : yEnd;
+    const gp = rotPt(it, (xl + xr) / 2, (y0 + y1) / 2), top = colTop(j), bottom = Math.min(natGround(gp.x, gp.y) + Math.min(0, base), top);
+    if (top - bottom > 0.1) { fills.push({ x0: xl + 0.4, x1: xr - 0.4, y0: y0 + 0.4, y1: y1 - 0.4, z0: bottom, z1: top, col: j }); fillVol += (xr - xl) * (y1 - y0) * (top - bottom); }
+  }
+  const gC = (() => { const a = rotPt(it, 0, 0); return natGround(a.x, a.y); })();
   // cheek walls: block courses beside the stair, stepping up with it, topped with caps
   const cw = D, above = it.cheekAbove ?? 8;
   for (const side of [cheekL ? -1 : 0, cheekR ? 1 : 0].filter(Boolean)) {
@@ -782,7 +788,7 @@ function stepCalc(it) {
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
   const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
-  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillUnder, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
+  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
 }
 function wallCalc(it) {
   const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
@@ -882,7 +888,7 @@ function finishedAt(x, y) {
     const l = localOf(it, x, y), w = it.w / 2 + 6;
     if (Math.abs(l.x) > w) continue;
     const c = stepCalc(it); if (Math.abs(l.y) > c.run / 2 + 2) continue;
-    z = Math.min(z, c.E + Math.min(0, c.base));
+    z = Math.min(z, c.colTop(clamp(Math.floor((l.y + c.run / 2 - c.over) / it.tread), 0, c.count - 1))); // dug down to each step's bench
   }
   return z;
 }
@@ -925,7 +931,9 @@ function usePaper(theme) { Object.assign(BP, PAPERS[theme && theme !== "blueprin
 // Draw with another style's paper (printing in a style other than the one on screen), then put the screen's back
 function withPaper(theme, fn) { usePaper(theme); try { return fn(); } finally { usePaper((job.style || {}).theme); } }
 function themeFilter() { return (THEMES[(job.style || {}).theme] || THEMES.blueprint).filter; }
-function applyTheme() { usePaper((job.style || {}).theme); const f = themeFilter(); try { drawPlan(); drawSide(); } catch {} if (typeof drawLegendBox === "function" && $("legendBox")) drawLegendBox(); $("plan").style.filter = f === "none" ? "" : f; $("side").style.filter = f === "none" ? "" : f; if ($("jTheme")) $("jTheme").value = (job.style || {}).theme || "blueprint"; }
+function planLook() { return (job.style || {}).look === "blueprint" ? "blueprint" : "real"; }
+function applyTheme() { usePaper((job.style || {}).theme); const f = themeFilter();
+  if ($("lookBtn")) { $("lookBtn").textContent = planLook() === "real" ? "Look: Realistic" : "Look: Blueprint"; $("legendBtn").hidden = planLook() === "real"; if (planLook() === "real") $("legendBox").hidden = true; } try { drawPlan(); drawSide(); } catch {} if (typeof drawLegendBox === "function" && $("legendBox")) drawLegendBox(); $("plan").style.filter = f === "none" || planLook() === "real" ? "" : f; $("side").style.filter = f === "none" || (typeof sideCutId !== "undefined" && sideCutId && sideCutId.startsWith("stairs:")) ? "" : f; if ($("jTheme")) $("jTheme").value = (job.style || {}).theme || "blueprint"; }
 // Copy of a canvas with the current style applied (for saved pictures and printing)
 function themed(c, theme) {
   const f = theme ? THEMES[theme].filter : themeFilter(); if (f === "none") return c;
@@ -937,7 +945,7 @@ function themed(c, theme) {
 const plan = $("plan"), pctx = plan.getContext("2d");
 const view2d = { s: 1, ox: 0, oy: 0 }; // screen = world*s + o (y flipped)
 let showSection = window.innerWidth > 700, snap = true;
-const BP = { paper: "#173f73", panel: "#123a6b", band: "#0f2f58", box: "rgba(12,38,72,.92)", grid: "rgba(190,215,245,.10)", grid5: "rgba(190,215,245,.22)", ink: "#eaf2fc", ink2: "rgba(234,242,252,.7)", sel: "#ffc857", fill: "rgba(234,242,252,.07)" };
+const BP = { joint: "rgba(234,242,252,.22)", paper: "#173f73", panel: "#123a6b", band: "#0f2f58", box: "rgba(12,38,72,.92)", grid: "rgba(190,215,245,.10)", grid5: "rgba(190,215,245,.22)", ink: "#eaf2fc", ink2: "rgba(234,242,252,.7)", sel: "#ffc857", fill: "rgba(234,242,252,.07)" };
 
 function sizeCanvas(c) {
   const r = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -968,7 +976,13 @@ function drawPlan() {
   renderSheet(pctx, w, h, view2d, { screen: true, section: showSection, selId });
 }
 
+// Realistic plan colours: dark ink on grass instead of white ink on blue paper
+const REALBP = { joint: "rgba(0,0,0,.28)", paper: "#8fb26a", grid: "rgba(255,255,255,.10)", grid5: "rgba(255,255,255,.22)", ink: "#1d2733", ink2: "rgba(29,39,51,.78)", sel: "#d35400", fill: "rgba(255,255,255,.25)" };
 function renderSheet(ctx, W, H, v, o) {
+  if ((o.real ?? planLook() === "real") && !o.inReal) {
+    const keep = { ...BP }; Object.assign(BP, REALBP); realLabels = [];
+    try { return renderSheet(ctx, W, H, v, { ...o, inReal: true }); } finally { Object.assign(BP, keep); realLabels = null; }
+  }
   const u = o.unit || 1; // line-width multiplier for export
   ctx.fillStyle = BP.paper; ctx.fillRect(0, 0, W, H);
   const [x0w, y1w] = S2W(v, 0, 0), [x1w, y0w] = S2W(v, W, H);
@@ -987,8 +1001,20 @@ function renderSheet(ctx, W, H, v, o) {
   ctx.strokeRect(a1, b2, a2 - a1, b1 - b2); ctx.restore();
   label(ctx, "WORK AREA " + fmtLen(job.site.w) + " × " + fmtLen(job.site.d), a1 + 6 * u, b2 - 8 * u, 11 * u, "left", BP.ink2);
 
-  if (hasTerrain()) drawElevationTint(ctx, v, W, H);
-  for (const it of drawOrder()) drawItem(ctx, v, it, u, it.id === o.selId);
+  if (o.inReal) drawRealGround(ctx, v, W, H, u);
+  else if (hasTerrain()) drawElevationTint(ctx, v, W, H);
+  // realistic look: plants go under the hardscape so the work stays visible; their outline and name are drawn on top
+  const PLANT = new Set(["tree", "evergreen", "shrub", "rock"]), ord = drawOrder();
+  const order = o.inReal ? ord.filter((i) => ["shore", "contour", "grade"].includes(i.type)).concat(ord.filter((i) => PLANT.has(i.type)), ord.filter((i) => !PLANT.has(i.type) && !["shore", "contour", "grade"].includes(i.type))) : ord;
+  for (const it of order) {
+    if (o.inReal && drawItemReal(ctx, v, it, u, it.id === o.selId)) { if (it.id === o.selId) drawSelOutline(ctx, v, it, u); }
+    else drawItem(ctx, v, it, u, it.id === o.selId);
+  }
+  if (o.inReal) for (const it of ord.filter((i) => i.type === "tree" || i.type === "evergreen" || i.type === "shrub")) {
+    const [cx, cy] = W2S(v, it.x, it.y), r = it.canopy / 2 * v.s;
+    ctx.save(); ctx.setLineDash([5 * u, 4 * u]); ctx.strokeStyle = "rgba(25,55,25,.55)"; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.restore();
+    if (it.label && r > 8 * u) realLabel(ctx, shortLabel(it.label), cx, cy + r + 9 * u, 10.5 * u, u);
+  }
   if (o.screen && o.selId) { const it = job.items.find((i) => i.id === o.selId); if (it) drawHandles(ctx, v, it); }
 
   if (o.noChrome) return;
@@ -1008,7 +1034,8 @@ function renderSheet(ctx, W, H, v, o) {
     const st = job.items.find((i) => i.id === o.selId && i.type === "steps") || job.items.find((i) => i.type === "steps");
     if (st) {
       const bw = Math.min(380 * u, W * 0.44), bh = Math.min(230 * u, H * 0.42);
-      drawSection(ctx, st, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u);
+      if (o.inReal) { ctx.save(); ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1.5 * u; renderStairs(ctx, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u * 0.62, st.id); ctx.strokeRect(W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh); ctx.restore(); }
+      else drawSection(ctx, st, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u);
     }
   }
 }
@@ -1062,7 +1089,7 @@ function lineL(ctx, v, it, ax, ay, bx, by) { const a = rotPt(it, ax, ay), b = ro
 function surfaceJoints(ctx, v, it, m, x0, y0, x1, y1, u) {
   if (!m || !(m.L > 0) || v.s * Math.min(m.L, m.D) < 5 * u) return;
   ctx.save(); polyRect(ctx, v, it, x0, y0, x1, y1); ctx.clip();
-  ctx.strokeStyle = "rgba(234,242,252,.22)"; ctx.lineWidth = 0.8 * u;
+  ctx.strokeStyle = BP.joint; ctx.lineWidth = 0.8 * u;
   if (m.pattern === "flag") {
     const seed = hashStr(it.id);
     for (let y = y0, r = 0; y < y1; y += m.D * (0.7 + 0.5 * rand(seed + r)), r++) for (let x = x0 + rand(seed + r * 3) * m.L; x < x1; x += m.L * (0.6 + 0.6 * rand(seed + x))) lineL(ctx, v, it, x, y, x + 3, y + m.D * 0.8);
@@ -1093,6 +1120,142 @@ function dimLine(ctx, v, it, ax, ay, bx, by, off, text, u) {
   ctx.restore();
 }
 
+// ---------- realistic plan: what the finished job looks like from above ----------
+// Short names on the picture ("Flight 3 - 12 risers @ 7.5\"" → "Flight 3"); the full name is in the Item panel
+const shortLabel = (t) => String(t || "").split(/\s+[-–(]\s*/)[0].slice(0, 30);
+const isGravel = (m) => !!m && (m.id === "gravel" || /gravel|crushed|rock|stone dust/i.test(m.name || ""));
+function screenBox(v, it, x0, y0, x1, y1) { const ps = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([a, b]) => { const p = rotPt(it, a, b); return W2S(v, p.x, p.y); }); return [Math.min(...ps.map((p) => p[0])), Math.min(...ps.map((p) => p[1])), Math.max(...ps.map((p) => p[0])), Math.max(...ps.map((p) => p[1]))]; }
+function realSurface(ctx, v, it, m, color, x0, y0, x1, y1, u) {
+  polyRect(ctx, v, it, x0, y0, x1, y1);
+  if (isGravel(m)) { const [a, b, c, d] = screenBox(v, it, x0, y0, x1, y1); ctx.save(); ctx.clip(); stonesIn(ctx, a, b, c - a, d - b, shade(hexOf(color), 1.05), hashStr(it.id), Math.max(1.2, v.s * 0.9)); ctx.restore(); }
+  else { ctx.fillStyle = hexOf(color); ctx.fill(); surfaceJoints(ctx, v, it, m, x0, y0, x1, y1, u); }
+  polyRect(ctx, v, it, x0, y0, x1, y1); ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1 * u; ctx.stroke();
+}
+let realLabels = null; // label boxes already placed in this drawing; a label that would overlap one is left out
+function realLabel(ctx, t, x, y, size, u, weight = 600) {
+  ctx.save(); ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  if (realLabels) {
+    const w = ctx.measureText(t).width / 2 + 3 * u, h = size * 0.65 + 2 * u, box = [x - w, y - h, x + w, y + h];
+    if (realLabels.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) { ctx.restore(); return; }
+    realLabels.push(box);
+  }
+  ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 3 * u; ctx.strokeText(t, x, y); ctx.fillStyle = "#1d2733"; ctx.fillText(t, x, y); ctx.restore();
+}
+// Sand along the shore and water out to the edge of the view
+function drawRealGround(ctx, v, W, H, u) {
+  for (const sh of job.items.filter((i) => i.type === "shore" && i.pts.length > 1)) {
+    const side = sh.side || 1;
+    const offset = (band) => sh.pts.map((p, k) => { const a = sh.pts[Math.max(0, k - 1)], b = sh.pts[Math.min(sh.pts.length - 1, k + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [p[0] - dy / L * band, p[1] + dx / L * band]; });
+    const fillBand = (band, color) => { const poly = sh.pts.concat(offset(band).reverse()).map(([x, y]) => W2S(v, x, y)); ctx.beginPath(); poly.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); };
+    fillBand(-side * 42, "#dccb9f");
+    fillBand(side * 6000, "#78aad3");
+  }
+}
+function drawSelOutline(ctx, v, it, u) {
+  const [cx, cy] = W2S(v, it.x, it.y);
+  ctx.save(); ctx.strokeStyle = BP.sel; ctx.lineWidth = 2 * u; ctx.setLineDash([6 * u, 4 * u]);
+  if (RECT_TYPES.has(it.type)) { const s = itemSize(it); polyRect(ctx, v, it, s.xc - s.w / 2 - 4, -s.d / 2 - 4, s.xc + s.w / 2 + 4, s.d / 2 + 4); ctx.stroke(); }
+  else if (it.canopy) { ctx.beginPath(); ctx.arc(cx, cy, it.canopy / 2 * v.s + 6, 0, Math.PI * 2); ctx.stroke(); }
+  else if (it.pts) { smoothPath(ctx, v, it.pts); ctx.stroke(); }
+  ctx.restore();
+}
+function drawItemReal(ctx, v, it, u, sel) {
+  const [cx, cy] = W2S(v, it.x, it.y), tag = it.label || "";
+  ctx.save(); ctx.lineWidth = 1 * u;
+  try {
+    switch (it.type) {
+      case "grade": {
+        polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(255,255,230,.10)"; ctx.fill();
+        ctx.setLineDash([6 * u, 5 * u]); ctx.strokeStyle = "rgba(40,70,30,.55)"; ctx.lineWidth = 1.4 * u; ctx.stroke(); ctx.setLineDash([]);
+        const lp = rotPt(it, 0, it.d / 2 - 14); const [gx, gy] = W2S(v, lp.x, lp.y);
+        realLabel(ctx, `${shortLabel(tag) || "Upper lawn"} (${fmtElev(it.h)})`, gx, gy, 11 * u, u);
+        return true;
+      }
+      case "path": { realSurface(ctx, v, it, mat(it.surface), it.color, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2, u); realLabel(ctx, shortLabel(tag) || "Walkway", cx, cy, 11 * u, u); return true; }
+      case "landing": {
+        const lc = landingCalc(it), cd = lc.edged && lc.c ? lc.capD : 0;
+        realSurface(ctx, v, it, lc.s, it.color, -it.w / 2 + cd, -it.d / 2 + cd, it.w / 2 - cd, it.d / 2 - cd, u);
+        if (cd) { // cap border, cap by cap
+          const capHex = hexOf(it.capColor || it.blockColor), L = lc.c.L;
+          const strips = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + cd, true], [-it.w / 2, it.d / 2 - cd, it.w / 2, it.d / 2, true], [-it.w / 2, -it.d / 2 + cd, -it.w / 2 + cd, it.d / 2 - cd, false], [it.w / 2 - cd, -it.d / 2 + cd, it.w / 2, it.d / 2 - cd, false]];
+          for (const [x0, y0, x1, y1, h] of strips) for (const [a, b] of along(h ? x0 : y0, h ? x1 : y1, L, 0)) { if (h) polyRect(ctx, v, it, a, y0, b, y1); else polyRect(ctx, v, it, x0, a, x1, b); ctx.fillStyle = capHex; ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.stroke(); }
+        }
+        realLabel(ctx, `${shortLabel(tag) || "Landing"} (top ${fmtElev(it.h)})`, cx, cy, 11 * u, u);
+        return true;
+      }
+      case "steps": {
+        const c = stepCalc(it), capHex = hexOf(it.capColor || it.color), blockHex = hexOf(it.color);
+        const top = c.pieces.filter((q) => q.kind === "cap" || q.kind === "cheekcap" || q.kind === "infill" || (!c.cap && (q.kind === "block" || q.kind === "cheek"))).sort((a, b) => a.z1 - b.z1);
+        for (const q of top) {
+          const lift = clamp((q.z1 - c.E) / Math.max(1, c.top - c.E), 0, 1);
+          polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1);
+          if (q.kind === "infill") { const [a, b, cc, d] = screenBox(v, it, q.x0, q.y0, q.x1, q.y1); ctx.save(); ctx.clip(); stonesIn(ctx, a, b, cc - a, d - b, "#c2b9a8", hashStr(it.id) + q.step, Math.max(1, v.s * 0.7)); ctx.restore(); }
+          else { ctx.fillStyle = shade(q.kind.startsWith("cheek") || q.kind === "cap" ? capHex : blockHex, 0.9 + 0.16 * lift); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 0.8 * u; ctx.stroke(); }
+        }
+        // a shadow under each step's front edge makes the steps read as steps
+        ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = Math.max(1.5, 2.2 * u);
+        c.xs.forEach(([xl, xr], i) => { const y = -c.run / 2 + i * it.tread; lineL(ctx, v, it, xl, y, xr, y); });
+        // arrow up the middle and the name
+        const a = rotPt(it, 0, -c.run / 2 + 6), b = rotPt(it, 0, c.run / 2 - 6), [ax, ay] = W2S(v, a.x, a.y), [bx, by] = W2S(v, b.x, b.y), ang = Math.atan2(by - ay, bx - ax);
+        if (Math.hypot(bx - ax, by - ay) > 30 * u) {
+          ctx.strokeStyle = "rgba(29,39,51,.55)"; ctx.fillStyle = "rgba(29,39,51,.55)"; ctx.lineWidth = 1.6 * u;
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 9 * u * Math.cos(ang - 0.45), by - 9 * u * Math.sin(ang - 0.45)); ctx.lineTo(bx - 9 * u * Math.cos(ang + 0.45), by - 9 * u * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+        }
+        const lp = rotPt(it, 0, -c.run / 2 - 22); const [lx, ly] = W2S(v, lp.x, lp.y);
+        realLabel(ctx, `${shortLabel(tag) || "Steps"}: ${c.count} step${c.count > 1 ? "s" : ""} up`, lx, ly, 11 * u, u);
+        return true;
+      }
+      case "wall": {
+        const wc = wallCalc(it), m = wc.c || wc.b, hex = hexOf(wc.c ? it.capColor || it.color : it.color);
+        polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = hex; ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,.3)"; for (let x = -it.w / 2 + m.L; x < it.w / 2 - 0.5; x += m.L) lineL(ctx, v, it, x, -it.d / 2, x, it.d / 2);
+        realLabel(ctx, `${shortLabel(tag) || "Wall"} (${plainLen(wc.top)} high)`, cx, cy - 14 * u, 11 * u, u);
+        return true;
+      }
+      case "house": {
+        polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "#6f7277"; ctx.fill(); ctx.lineWidth = 2 * u; ctx.strokeStyle = "#3d4045"; ctx.stroke();
+        ctx.lineWidth = 1 * u; ctx.strokeStyle = "rgba(255,255,255,.25)"; lineL(ctx, v, it, -it.w / 2 + 12, 0, it.w / 2 - 12, 0);
+        realLabel(ctx, tag || "House", cx, cy, 13 * u, u, 700);
+        return true;
+      }
+      case "unit": {
+        polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = shade(hexOf(it.color), 0.92 + clamp((it.z || 0) / 60, 0, 0.2)); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke();
+        return true;
+      }
+      case "tree": case "evergreen": case "shrub": {
+        const r = it.canopy / 2 * v.s, ev = it.type === "evergreen", lobes = ev ? 18 : it.type === "tree" ? 12 : 8;
+        const path = (ox, oy) => { ctx.beginPath(); for (let k = 0; k <= lobes * 8; k++) { const t = k / (lobes * 8) * Math.PI * 2, rr = ev ? r * (k % 8 < 4 ? 1 : 0.84) : r * (0.9 + 0.1 * Math.abs(Math.sin(t * lobes / 2))); const px = cx + ox + rr * Math.cos(t), py = cy + oy + rr * Math.sin(t); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); };
+        path(r * 0.12, r * 0.12); ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fill();
+        path(0, 0); const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+        const col = ev ? ["#4b7d4f", "#2a5134"] : it.type === "tree" ? ["#7aa755", "#3f6b2e"] : ["#86b25e", "#4c7a35"];
+        g.addColorStop(0, col[0]); g.addColorStop(1, col[1]); ctx.fillStyle = g; ctx.globalAlpha = it.type === "tree" ? 0.88 : 1; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(20,40,20,.5)"; ctx.stroke();
+        return true;
+      }
+      case "rock": {
+        const r = it.canopy / 2 * v.s, seed = hashStr(it.id); ctx.beginPath();
+        for (let k = 0; k < 9; k++) { const t = k / 9 * Math.PI * 2, rr = r * (0.75 + 0.25 * rand(seed + k)); const px = cx + rr * Math.cos(t), py = cy + rr * Math.sin(t); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+        ctx.closePath(); const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r); g.addColorStop(0, "#c4c0b7"); g.addColorStop(1, "#7c786f"); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.stroke();
+        return true;
+      }
+      case "shore": {
+        smoothPath(ctx, v, it.pts); ctx.strokeStyle = "#2f6fa3"; ctx.lineWidth = 2.5 * u; ctx.stroke();
+        const mid = it.pts[Math.floor(it.pts.length / 2)], [mx, my] = W2S(v, mid[0], mid[1]);
+        realLabel(ctx, `${shortLabel(tag) || "Shoreline"} (water ${fmtElev(it.water || 0)})`, mx, my - 12 * u, 10.5 * u, u);
+        return true;
+      }
+      case "spot": case "cut": return true; // survey marks: shown in the blueprint look only
+      case "contour": {
+        smoothPath(ctx, v, it.pts); ctx.strokeStyle = "rgba(90,60,25,.55)"; ctx.setLineDash([5 * u, 4 * u]); ctx.lineWidth = 1.2 * u; ctx.stroke(); ctx.setLineDash([]);
+        const mid = it.pts[Math.floor(it.pts.length / 2)], [mx, my] = W2S(v, mid[0], mid[1]);
+        realLabel(ctx, `ground ${fmtElev(it.elev || 0)}`, mx, my, 9.5 * u, u, 500);
+        return true;
+      }
+    }
+  } finally { ctx.restore(); }
+  return false; // measurements use the normal drawing with dark ink
+}
 function drawItem(ctx, v, it, u, sel) {
   ctx.save();
   ctx.lineWidth = 1.5 * u; ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.fill;
@@ -1961,10 +2124,8 @@ function takeoff() {
       w.cutPieces += (c.cutting ? c.t.blocks : c.t.blockCuts) + c.t.capCuts + c.t.cheekCuts;
       if (c.infillArea > 0) surface(it.infill, firstColor(it.infill), c.infillArea, use);
       base(c.xw * c.run, Math.max(0, -c.base));
-      // compacted fill behind each riser above the first, plus fill under a flight that starts above grade
-      let fill = 0; c.xs.forEach(([xl, xr], i) => { if (i > 0) fill += (xr - xl) * (c.run / 2 - (-c.run / 2 + i * it.tread + c.over)) * c.H; });
-      fill += it.w * c.run * c.fillUnder;
-      w.baseTon += yd3(fill) * TON_PER_YD;
+      // compacted fill behind the risers and under a flight that stands above the ground
+      w.baseTon += yd3(c.fillVol) * TON_PER_YD;
       if (c.cheekL || c.cheekR) w.drainYd += yd3(c.t.cheekFace * 12);
     } else if (it.type === "wall") {
       const wc = wallCalc(it);
@@ -2291,7 +2452,7 @@ function sanitizeJob(j) {
     return {
       v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom,
-      style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint" },
+      style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
       site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
@@ -2327,12 +2488,13 @@ $("exportBtn").onclick = async () => {
   const cutLine = job.items.find((i) => i.type === "cut");
   const cw = W - colX - 80; let cy = 60;
   // compact key of the symbols on this plan, along the bottom of the right column
-  const ents = legendEntries(false), lu = 2.2, lh = drawLegend(ctx, 0, 0, cw, lu, ents, 3, false, true), legY = H - titleH - 30 - lh;
+  const ents = planLook() === "real" ? [] : legendEntries(false), lu = 2.2, lh = drawLegend(ctx, 0, 0, cw, lu, ents, 3, false, true), legY = H - titleH - 30 - lh;
   const limit = legY - 70;
   const stairs = job.items.filter((i) => i.type === "steps").slice(0, cutLine ? 1 : 2).filter((_, k) => (cutLine ? 620 : 60) + (k + 1) * 540 < limit - 120);
-  if (cutLine) { renderProfile(ctx, colX + 40, cy, cw, 520, cutLine, 2.2, sideVE); cy += 560; }
-  stairs.forEach((st, k) => { drawSection(ctx, st, colX + 40, cy, cw, 500, u, "SX"[k]); cy += 540; });
-  label(ctx, "LEGEND", colX + 40, legY - 30, 30, "left", BP.ink, 600);
+  if (planLook() === "real" && job.items.some((i) => i.type === "steps")) { renderStairs(ctx, colX + 40, cy, cw, 520, 1.7, "all"); cy += 560; }
+  else if (cutLine) { renderProfile(ctx, colX + 40, cy, cw, 520, cutLine, 2.2, sideVE); cy += 560; }
+  stairs.forEach((st, k) => { if (planLook() === "real") renderStairs(ctx, colX + 40, cy, cw, 500, u * 0.75, st.id); else drawSection(ctx, st, colX + 40, cy, cw, 500, u, "SX"[k]); cy += 540; });
+  if (ents.length) label(ctx, "LEGEND", colX + 40, legY - 30, 30, "left", BP.ink, 600);
   drawLegend(ctx, colX + 40, legY, cw, lu, ents, 3, true, true);
   label(ctx, "MATERIAL SCHEDULE", colX + 40, cy + 20, 30, "left", BP.ink, 600);
   cy += 70;
@@ -2354,7 +2516,7 @@ $("exportBtn").onclick = async () => {
   for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 46), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
   label(ctx, `QUOTE ${quoteNo()} · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
   if (job.notes) label(ctx, "NOTES: " + job.notes.slice(0, 120), 1300, H - titleH + 140, 24, "left", BP.ink2);
-  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(themed(c)));
+  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(planLook() === "real" ? c : themed(c)));
 };
 
 // ---------- tiled print: PDF of letter/legal/A4 sheets to tape together ----------
@@ -2398,6 +2560,7 @@ function prOpen() {
   const paper = $("prPaper").value; let pick = PR_SCALES[0][0];
   for (const [v] of PR_SCALES) { const L = tileLayout(paper, v); if (L.nx * L.ny <= 9) pick = v; }
   sel.value = String(pick);
+  $("prTheme").closest("label").hidden = planLook() === "real";
   $("printDlg").hidden = false; $("prGo").disabled = false; prPreview();
 }
 function prPreview() {
@@ -2406,7 +2569,7 @@ function prPreview() {
   const v = {}; const fakeW = L.totW / L.k, fakeH = L.totH / L.k;
   v.s = Math.min((w - 20) / fakeW, (h - 20) / fakeH); v.ox = w / 2 - (L.x0 + fakeW / 2) * v.s; v.oy = h / 2 + (L.y0 - fakeH / 2) * v.s;
   withPaper($("prTheme").value, () => { renderSheet(ctx, w, h, v, { unit: 0.7, section: false, selId: null, noChrome: true }); drawTileGrid(ctx, v, L, 1); });
-  const f = THEMES[$("prTheme").value].filter; c.style.filter = f === "none" ? "" : f;
+  const f = planLook() === "real" ? "none" : THEMES[$("prTheme").value].filter; c.style.filter = f === "none" ? "" : f;
   const n = L.nx * L.ny, PWd = L.PW > L.PH ? "landscape" : "portrait";
   $("prInfo").textContent = `${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}. Taped together the plan is about ${num1(L.totW)} × ${num1(L.totH)} in. Plus a cover, legend and sections pages.`;
 }
@@ -2416,7 +2579,9 @@ function newPage(L) { const c = document.createElement("canvas"); c.width = Math
 // The drawing area of a page, drawn in blueprint colours and then given the chosen style
 function pageBody(L, theme, draw) {
   const W = Math.round(L.pw * PR.dpi), H = Math.round(L.ph * PR.dpi), c = document.createElement("canvas"); c.width = W; c.height = H;
-  const x = c.getContext("2d"); withPaper(theme, () => { x.fillStyle = BP.paper; x.fillRect(0, 0, W, H); draw(x, W, H); }); return themed(c, theme);
+  const x = c.getContext("2d");
+  if (planLook() === "real") { const keep = { ...BP }; Object.assign(BP, REALBP, { paper: "#ffffff", box: "#ffffff" }); try { x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); draw(x, W, H); } finally { Object.assign(BP, keep); } return c; }
+  withPaper(theme, () => { x.fillStyle = BP.paper; x.fillRect(0, 0, W, H); draw(x, W, H); }); return themed(c, theme);
 }
 function pageFooter(ctx, L, text, n, total) {
   const D = PR.dpi, y = (L.PH - PR.m / 2) * D;
@@ -2427,7 +2592,8 @@ function pageHeader(ctx, L, text) { marginText(ctx, text, PR.m * PR.dpi, PR.top 
 async function makePrintPdf() {
   const L = tileLayout($("prPaper").value, +$("prScale").value), theme = $("prTheme").value, D = PR.dpi, u = D / 96;
   const pages = [], cuts = job.items.filter((i) => i.type === "cut"), stairs = job.items.filter((i) => i.type === "steps");
-  const secBlocks = cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = 2 + L.nx * L.ny + secPages;
+  const real = planLook() === "real";
+  const secBlocks = real ? (stairs.length ? stairs.length + 1 : 0) : cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = (real ? 1 : 2) + L.nx * L.ny + secPages;
   const title = `${job.name || "Job"}${job.client ? " · " + job.client : ""}`, when = new Date().toLocaleDateString();
   const step = async (msg) => { $("prInfo").textContent = msg; await new Promise((r) => setTimeout(r, 0)); };
   const barFt = [1, 2, 4, 5, 10, 20, 40].find((f) => f * L.perFt >= 1.4) || 40, barIn = barFt * L.perFt;
@@ -2465,9 +2631,9 @@ async function makePrintPdf() {
     });
     x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Cover · sheet map and instructions"); pageFooter(x, L, title, 1, total); await addPage(c);
   }
-  // 2. legend
-  await step("Making the legend…");
-  {
+  // 2. legend (the blueprint look only; the realistic look explains itself)
+  if (!real) {
+    await step("Making the legend…");
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
       label(ctx, "LEGEND · WHAT THE SYMBOLS AND COLOURS MEAN", 0.3 * D, 0.35 * D, 0.17 * D, "left", BP.ink, 700, "IBM Plex Sans");
@@ -2482,7 +2648,7 @@ async function makePrintPdf() {
   const targets = [];
   for (let i = 0; i < L.nx - 1; i++) for (let j = 0; j < L.ny; j++) for (const f of [0.25, 0.75]) targets.push([L.x0 + ((i + 1) * L.sx + PR.ov / 2) / L.k, L.y0 - (j * L.sy + f * L.sy) / L.k]);
   for (let j = 0; j < L.ny - 1; j++) for (let i = 0; i < L.nx; i++) for (const f of [0.25, 0.75]) targets.push([L.x0 + (i * L.sx + f * L.sx) / L.k, L.y0 - ((j + 1) * L.sy + PR.ov / 2) / L.k]);
-  let n = 2;
+  let n = real ? 1 : 2;
   for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
     n++; await step(`Making plan sheet ${sheetName(i, j)} (${n} of ${total})…`);
     const [c, x] = newPage(L);
@@ -2520,7 +2686,7 @@ async function makePrintPdf() {
     await addPage(c);
   }
   // 4. side view and step sections, two per page (not to scale)
-  const blocks = [...cuts.map((ct) => ["cut", ct]), ...stairs.map((st) => ["steps", st])];
+  const blocks = real ? (stairs.length ? [["stairs", "all"], ...stairs.slice().sort((a, b) => (a.elev || 0) - (b.elev || 0)).map((st) => ["stairs", st.id])] : []) : [...cuts.map((ct) => ["cut", ct]), ...stairs.map((st) => ["steps", st])];
   for (let p0 = 0; p0 < blocks.length; p0 += 2) {
     n++; await step(`Making the sections page (${n} of ${total})…`);
     const [c, x] = newPage(L);
@@ -2528,11 +2694,12 @@ async function makePrintPdf() {
       const bh = (H - 0.3 * D) / 2;
       blocks.slice(p0, p0 + 2).forEach(([kind, it], k) => {
         const y = 0.15 * D + k * bh;
-        if (kind === "cut") renderProfile(ctx, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, it, u, sideVE);
+        if (kind === "stairs") renderStairs(ctx, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, u * 0.9, it);
+        else if (kind === "cut") renderProfile(ctx, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, it, u, sideVE);
         else drawSection(ctx, it, 0.15 * D, y, W - 0.3 * D, bh - 0.15 * D, u * 1.2, String.fromCharCode(83 + Math.min(6, stairs.indexOf(it))));
       });
     });
-    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Side view and step sections (not to scale; read the measurements)"); pageFooter(x, L, title, n, total); await addPage(c);
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, real ? "The steps from the side: every block and cap drawn to size" : "Side view and step sections (not to scale; read the measurements)"); pageFooter(x, L, title, n, total); await addPage(c);
   }
   await step("Saving the PDF…");
   return pdfFromJpegs(pages);
@@ -2579,6 +2746,7 @@ function toast(m, actionLabel, action) {
 $("fitBtn").onclick = () => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); };
 $("secBtn").setAttribute("aria-pressed", showSection);
 $("secBtn").onclick = (e) => { showSection = !showSection; e.target.setAttribute("aria-pressed", showSection); drawPlan(); };
+$("lookBtn").onclick = () => { snapshot(); job.style = { ...job.style, look: planLook() === "real" ? "blueprint" : "real" }; applyTheme(); commit(); };
 $("legendBtn").onclick = () => { const b = $("legendBox"); b.hidden = !b.hidden; $("legendBtn").setAttribute("aria-pressed", !b.hidden); drawLegendBox(); };
 $("legendClose").onclick = () => { $("legendBox").hidden = true; $("legendBtn").setAttribute("aria-pressed", false); };
 $("legendAll").onchange = drawLegendBox;
@@ -2603,7 +2771,9 @@ let sideCutId = null, sideVE = 1;
 $("sideVE").addEventListener("change", (e) => { sideVE = +e.target.value; drawSide(); });
 $("sideCut").addEventListener("change", (e) => { sideCutId = e.target.value; drawSide(); });
 $("sideSave").addEventListener("click", async () => {
-  const c = document.createElement("canvas"); c.width = 3000; c.height = 1500; const cut = currentCut(); if (!cut) return;
+  const c = document.createElement("canvas"); c.width = 3000; c.height = 1500;
+  if (sideCutId && sideCutId.startsWith("stairs:")) { const x = c.getContext("2d"); renderStairs(x, 0, 0, 3000, 1500, 2.4, sideCutId.slice(7)); saveFile(slug(job.name) + "_stairs_side.png", await canvasBlob(c)); return; }
+  const cut = currentCut(); if (!cut) return;
   const ctx = c.getContext("2d"); renderProfile(ctx, 0, 0, 3000, 1500, cut, 2.4, sideVE);
   saveFile(slug(job.name) + "_section_" + (cut.label || "A") + ".png", await canvasBlob(themed(c)));
 });
@@ -2708,11 +2878,190 @@ function renderProfile(ctx, X, Y, W, H, cut, u, ve) {
   label(ctx, `${cut.label || "A"}`, ox, Y + pt - 12 * u, 12 * u, "center", BP.sel, 700); label(ctx, `${cut.label || "A"}′`, ox + len * sx, Y + pt - 12 * u, 12 * u, "center", BP.sel, 700);
   ctx.restore();
 }
+// ---------- stairs side view: every block and cap drawn as built, in real colours, labelled in words ----------
+// The stairway is unfolded: flights and landings follow each other from the bottom up, cut through the middle.
+function stairSequence() {
+  const els = [];
+  for (const it of job.items) {
+    if (it.type === "steps") { const c = stepCalc(it); els.push({ it, c, s: c.E, e: c.top, len: c.run, kind: "steps" }); }
+    else if (it.type === "landing") els.push({ it, s: it.h, e: it.h, kind: "landing" });
+  }
+  els.sort((a, b) => a.s - b.s || (a.kind === "landing" ? -1 : 1) - (b.kind === "landing" ? -1 : 1));
+  els.forEach((el, k) => {
+    if (el.kind !== "landing") return;
+    const f = els.slice(k + 1).find((x) => x.kind === "steps") || els.slice(0, k).reverse().find((x) => x.kind === "steps");
+    const dr = f ? (((f.it.rot - el.it.rot) % 180) + 180) % 180 : 0;
+    el.len = dr < 45 || dr > 135 ? el.it.d : el.it.w;
+    el.dir = f ? f.it.rot : el.it.rot;
+  });
+  let d = 0; for (const el of els) { el.d0 = d; d += el.len; }
+  return els;
+}
+// natural ground along an element, as [distance along the view, height]
+function seqGround(el, step = 6) {
+  const out = [];
+  for (let t = 0; t <= el.len + 0.01; t += Math.min(step, el.len || step)) {
+    let p;
+    if (el.kind === "steps") p = rotPt(el.it, 0, -el.len / 2 + t);
+    else { const a = el.dir * Math.PI / 180; p = { x: el.it.x + Math.sin(a) * (t - el.len / 2), y: el.it.y + Math.cos(a) * (t - el.len / 2) }; }
+    out.push([el.d0 + t, natGround(p.x, p.y)]);
+    if (!el.len) break;
+  }
+  return out;
+}
+function shade(hex, k) { const n = parseInt(hex.slice(1), 16), f = (v) => clamp(Math.round(v * k), 0, 255); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
+function stonesIn(ctx, x, y, w, h, base, seed, size) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = base; ctx.fillRect(x, y, w, h);
+  const n = Math.min(4000, Math.round(w * h / (size * size) * 0.7));
+  for (let k = 0; k < n; k++) { const r = size * (0.25 + 0.35 * rand(seed + k * 7)); ctx.fillStyle = shade("#9a9284", 0.75 + 0.5 * rand(seed + k * 13)); ctx.beginPath(); ctx.ellipse(x + rand(seed + k * 3) * w, y + rand(seed + k * 5) * h, r, r * 0.75, rand(seed + k) * 3, 0, 7); ctx.fill(); }
+  ctx.restore();
+}
+// One concrete unit seen from the side: face colour, a lighter top edge, a darker outline
+function unitBox(ctx, x0, y0, x1, y1, hex, px) {
+  const w = x1 - x0, h = y1 - y0; if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = hex; ctx.fillRect(x0, y0, w, h);
+  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fillRect(x0, y0, w, Math.min(h, Math.max(1, px * 0.6)));
+  ctx.fillStyle = "rgba(0,0,0,.12)"; ctx.fillRect(x0, y1 - Math.min(h, Math.max(1, px * 0.5)), w, Math.min(h, Math.max(1, px * 0.5)));
+  ctx.strokeStyle = "rgba(40,40,40,.75)"; ctx.lineWidth = Math.max(0.6, Math.min(1.4, px * 0.12)); ctx.strokeRect(x0, y0, w, h);
+}
+function callout(ctx, text, tx, ty, ax, ay, u, align = "left") {
+  ctx.save(); ctx.strokeStyle = "#1d2733"; ctx.fillStyle = "#1d2733"; ctx.lineWidth = 1.2 * u;
+  ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  const lines = String(text).split("\n"), tw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 10 * u, lh = 16 * u;
+  const cw = ctx.canvas.width / (ctx.getTransform().a || 1);
+  const bx = clamp(align === "left" ? tx : align === "right" ? tx - tw : tx - tw / 2, 4, cw - tw - 4), by = ty - lines.length * lh / 2 - 3 * u;
+  const ex = ax > bx + tw ? bx + tw : ax < bx ? bx : ax, ey = ay > by + lines.length * lh ? by + lines.length * lh + 6 * u : ay < by ? by : ty;
+  ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ax, ay); ctx.stroke(); ctx.beginPath(); ctx.arc(ax, ay, 2.6 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.fillRect(bx, by, tw, lines.length * lh + 6 * u); ctx.strokeRect(bx, by, tw, lines.length * lh + 6 * u);
+  ctx.fillStyle = "#1d2733"; lines.forEach((l, k) => ctx.fillText(l, bx + 5 * u, by + 3 * u + lh * (k + 0.5)));
+  ctx.restore();
+}
+function plainLen(v) { return fmtLen(v).replace(/'/g, " ft").replace(/"/g, " in"); }
+// which: "all" or a flight id. Returns false when there is nothing to draw.
+function renderStairs(ctx, X, Y, W, H, u, which) {
+  let els = stairSequence(); if (!els.some((e) => e.kind === "steps")) return false;
+  const single = which && which !== "all";
+  if (single) { const k = els.findIndex((e) => e.it.id === which); if (k < 0) return false; els = els.slice(Math.max(0, k - 1), k + 2); const d0 = els[0].d0; els.forEach((e) => { e.d0 -= d0; }); }
+  const total = els.reduce((a, e) => Math.max(a, e.d0 + e.len), 0), est = { ...EST_DEFAULTS, ...job.est }, wl = waterLevel();
+  const ground = els.flatMap((e) => seqGround(e));
+  let lo = Math.min(...ground.map((g) => g[1]), ...els.map((e) => e.s)) - est.baseDepth - 14, hi = Math.max(...els.map((e) => e.e)) + 30;
+  if (wl != null && wl > lo) lo = Math.min(lo, wl - 12);
+  const padL = 30 * u, padR = 30 * u, padT = 70 * u, padB = 48 * u;
+  const sc = Math.min((W - padL - padR) / total, (H - padT - padB) / (hi - lo));
+  const ox = X + padL + ((W - padL - padR) - total * sc) / 2, oy = Y + H - padB - ((H - padT - padB) - (hi - lo) * sc) / 2;
+  const P = (d, z) => [ox + d * sc, oy - (z - lo) * sc];
+  ctx.save(); ctx.beginPath(); ctx.rect(X, Y, W, H); ctx.clip();
+  const sky = ctx.createLinearGradient(0, Y, 0, Y + H); sky.addColorStop(0, "#dce9f3"); sky.addColorStop(1, "#f4f7f9"); ctx.fillStyle = sky; ctx.fillRect(X, Y, W, H);
+  // soil and the existing ground surface
+  const gPoly = () => { ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, z); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); };
+  gPoly(); { const [a] = P(total, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(0, lo)[0], Y + H); ctx.closePath(); }
+  const soil = ctx.createLinearGradient(0, P(0, hi)[1], 0, Y + H); soil.addColorStop(0, "#9b7a55"); soil.addColorStop(1, "#6f5238"); ctx.fillStyle = soil; ctx.fill();
+  if (wl != null) { ctx.save(); gPoly(); const [a] = P(total, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(0, lo)[0], Y + H); ctx.closePath(); ctx.restore(); ctx.save(); ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, Math.max(z, wl)); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); for (let k = ground.length - 1; k >= 0; k--) { const [a, b] = P(ground[k][0], ground[k][1]); ctx.lineTo(a, b); } ctx.closePath(); ctx.fillStyle = "rgba(70,140,200,.55)"; ctx.fill(); ctx.restore(); }
+  gPoly(); ctx.strokeStyle = "#5d8f37"; ctx.lineWidth = 4 * u; ctx.stroke();
+  // each element
+  const labels = [];
+  for (const el of els) {
+    const it = el.it, X0 = (v) => P(el.d0 + v, 0)[0], Z = (z) => P(0, z)[1], seed = hashStr(it.id);
+    if (el.kind === "steps") {
+      const c = el.c, off = c.run / 2, blockHex = hexOf(it.color), capHex = shade(hexOf(it.capColor || it.color), 1.12);
+      const cheek = c.pieces.filter((q) => q.kind === "cheek" || q.kind === "cheekcap"), side = cheek.some((q) => q.x0 >= 0) ? 1 : -1;
+      // side (cheek) wall behind the steps, slightly faded so the steps read in front of it
+      for (const q of cheek.filter((q) => (side > 0 ? q.x0 >= 0 : q.x1 <= 0))) { ctx.globalAlpha = 0.55; unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), q.kind === "cheekcap" ? capHex : blockHex, sc * 3); ctx.globalAlpha = 1; }
+      // gravel base under the flight and compacted fill behind the risers
+      for (let j = 0; j < c.xs.length; j++) { // gravel base under each column: under the fill, or under the riser on its bench
+        const f = c.fills.find((q) => q.col === j), zb = f ? f.z0 : c.colTop(j), y0 = -c.run / 2 + j * it.tread + c.over, y1 = j < c.xs.length - 1 ? y0 + it.tread : c.run / 2;
+        stonesIn(ctx, X0(y0 + off), Z(zb), X0(y1 + off) - X0(y0 + off), Z(zb - est.baseDepth) - Z(zb), "#a9a294", seed + j, Math.max(1.5, sc * 1.1));
+      }
+      for (const f of c.fills) if (f.x0 <= 0.5 && f.x1 >= -0.5) stonesIn(ctx, X0(f.y0 + off), Z(f.z1), X0(f.y1 + off) - X0(f.y0 + off), Z(f.z0) - Z(f.z1), "#c7bba5", seed + 99, Math.max(1.5, sc * 0.9));
+      // riser blocks and caps cut through the middle
+      const pick = (kind) => { const m = new Map(); for (const q of c.pieces) if (q.kind === kind) { const o = m.get(q.step); if (!o || Math.abs((q.x0 + q.x1) / 2) < Math.abs((o.x0 + o.x1) / 2)) m.set(q.step, q); } return [...m.values()]; };
+      for (const q of pick("infill")) stonesIn(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off) - X0(q.y0 + off), Z(q.z0) - Z(q.z1), "#b9b1a2", seed + 7, Math.max(1, sc * 0.6));
+      const blocks = pick("block"), caps = pick("cap");
+      for (const q of blocks) unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), blockHex, sc * 3);
+      for (const q of caps) unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), capHex, sc * 3);
+      labels.push({ el, blocks, caps, off });
+    } else {
+      const lc = landingCalc(it), sm = lc.s, sH = sm ? Math.max(1.5, sm.H) : 2, g = Math.min(...seqGround(el).map((q) => q[1]));
+      if (/gabion/i.test(it.label || "")) {
+        const zb = Math.min(g, it.h - 1); const [a, b] = P(el.d0, it.h), [c2, d2] = P(el.d0 + el.len, zb);
+        stonesIn(ctx, a, b, c2 - a, d2 - b, "#8d8a84", seed, Math.max(2, sc * 2.2));
+        ctx.save(); ctx.strokeStyle = "rgba(60,60,60,.8)"; ctx.lineWidth = Math.max(1, sc * 0.25); ctx.strokeRect(a, b, c2 - a, d2 - b);
+        for (let x = a; x < c2; x += Math.max(4, sc * 3)) { ctx.beginPath(); ctx.moveTo(x, b); ctx.lineTo(x, d2); ctx.stroke(); }
+        for (let y = b; y < d2; y += Math.max(4, sc * 3)) { ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(c2, y); ctx.stroke(); } ctx.restore();
+        continue;
+      }
+      const z0 = lc.edged ? lc.z0 : Math.min(g, it.h - sH);
+      stonesIn(ctx, X0(0), Z(it.h - sH), X0(el.len) - X0(0), Z(z0 - est.baseDepth) - Z(it.h - sH), "#c7bba5", seed + 5, Math.max(1.5, sc * 0.9));
+      // surface: pavers or slabs drawn unit by unit, gravel as stones
+      const sHex = hexOf(it.color);
+      if (sm && sm.L > 0 && sm.kind !== "surface" && !/gravel/i.test(sm.name || "")) for (const [a, b] of along(lc.edged ? lc.capD : 0, el.len - (lc.edged ? lc.capD : 0), sm.L, 0)) unitBox(ctx, X0(a), Z(it.h), X0(b), Z(it.h - sH), sHex, sc * 3);
+      else stonesIn(ctx, X0(0), Z(it.h), X0(el.len) - X0(0), Z(it.h - sH) - Z(it.h), shade(sHex, 1.05), seed + 3, Math.max(1, sc * 0.6));
+      if (lc.edged) {
+        const bHex = hexOf(it.blockColor || it.color), cHex = shade(hexOf(it.capColor || it.blockColor), 1.12), bD = lc.b.D;
+        for (const [a, b] of [[0, bD], [el.len - bD, el.len]]) {
+          for (let k = 0, z = lc.z0; k < lc.courses; k++, z += lc.b.H) unitBox(ctx, X0(a), Z(Math.min(z + lc.b.H, it.h - lc.capH)), X0(b), Z(z), bHex, sc * 3);
+        }
+        if (lc.c) for (const [a, b] of [[0, lc.capD], [el.len - lc.capD, el.len]]) unitBox(ctx, X0(a), Z(it.h), X0(b), Z(it.h - lc.capH), cHex, sc * 3);
+      }
+    }
+  }
+  ctx.restore(); ctx.save();
+  // words on the drawing
+  const T = (t, x, y, size, color = "#1d2733", weight = 600, align = "center") => { ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
+  T(single ? `${shortLabel(els.find((e) => e.it.id === which).it.label) || "Steps"}: side view, cut down the middle` : "Whole stairway from the side (bottom on the left)", X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700, "left");
+  T(single ? "Every block and cap drawn to size, true scale" : "Pick one flight under Show to see its blocks", X + 16 * u, Y + 44 * u, 12.5 * u, "#3d4a57", 500, "left");
+  if (!single) {
+    for (const el of els) {
+      const [a, b] = P(el.d0 + el.len / 2, el.e);
+      if (el.kind === "steps" && el.c.count > 1) { T(`${el.c.count} steps`, a, b - 26 * u, 12 * u, "#1d2733", 700); T(`up to ${fmtElev(el.e)}`, a, b - 12 * u, 11 * u, "#3d4a57", 500); }
+      else if (el.kind === "landing" && el.len * sc > 60 * u) T(`${fmtElev(el.it.h)}`, a, b - 12 * u, 11 * u, "#3d4a57", 600);
+    }
+  } else {
+    const L = labels.find((l) => l.el.it.id === which) || labels[0];
+    if (L) {
+      const c = L.el.c, it = L.el.it, i = Math.min(c.count - 1, 1), bq = L.blocks.find((q) => q.step === i) || L.blocks[0], cq = L.caps.find((q) => q.step === i) || L.caps[0];
+      const ax = (q) => P(L.el.d0 + (q.y0 + q.y1) / 2 + L.off, 0)[0], zc = (q) => P(0, (q.z0 + q.z1) / 2)[1];
+      const top = P(0, c.top)[1], left = X + 20 * u;
+      if (cq) callout(ctx, `Cap: ${matName(mat(it.cap))}\n${fmtIn(c.capH)} thick, ${fmtIn(c.over)} overhang`, left, top - 10 * u, ax(cq), zc(cq), u);
+      if (bq) callout(ctx, `Step block: ${matName(mat(it.block))}\n${c.cutting ? `cut down to ${fmtIn(c.bH)} high` : `${fmtIn(c.bH)} high`}`, left, top + 40 * u, ax(bq), zc(bq), u);
+      const fl = c.fills.slice().sort((a, b) => (b.z1 - b.z0) - (a.z1 - a.z0))[0];
+      if (fl && fl.z1 - fl.z0 > 4) callout(ctx, "Compacted gravel fill\n(under the steps)", left, top + 92 * u, P(L.el.d0 + (fl.y0 + fl.y1) / 2 + L.off, 0)[0], P(0, (fl.z0 + fl.z1) / 2)[1], u);
+      if (!c.fills.length || c.fills.length < c.count) { const j = c.count - 1, y = -c.run / 2 + j * it.tread + c.over + 6; if (!c.fills.some((q) => q.col === j)) callout(ctx, "Native soil: the step sits on a\nbench dug into the bank", P(L.el.d0 + y + L.off, 0)[0] + 40 * u, P(0, c.colTop(j))[1] + 70 * u, P(L.el.d0 + y + L.off, 0)[0], P(0, c.colTop(j) - est.baseDepth - 8)[1], u); }
+      const bz = P(0, c.colTop(0) - est.baseDepth / 2)[1], bx = P(L.el.d0 + c.over + 6, 0)[0];
+      callout(ctx, `Gravel base ${fmtIn(est.baseDepth)} deep`, bx + 60 * u, bz + 30 * u, bx, bz, u);
+      if (c.cheekL || c.cheekR) { const q = c.pieces.find((p) => p.kind === "cheek" && p.step === c.count - 1); if (q) callout(ctx, "Side wall (cheek wall), seen behind", P(L.el.d0 + c.run, 0)[0] - 10 * u, P(0, c.top)[1] - 50 * u, P(L.el.d0 + (q.y0 + q.y1) / 2 + L.off, 0)[0], P(0, (q.z0 + q.z1) / 2)[1], u, "right"); }
+      // step height and tread depth on one step
+      if (bq && cq) {
+        const s0 = bq.z0, s1 = cq.z1, xr = P(L.el.d0 + cq.y0 + L.off, 0)[0] - 12 * u;
+        ctx.strokeStyle = "#b03a2e"; ctx.fillStyle = "#b03a2e"; ctx.lineWidth = 1.5 * u;
+        ctx.beginPath(); ctx.moveTo(xr, P(0, s0)[1]); ctx.lineTo(xr, P(0, s1)[1]); ctx.stroke();
+        T(`${fmtIn(c.H)} step`, xr - 6 * u, (P(0, s0)[1] + P(0, s1)[1]) / 2, 12 * u, "#b03a2e", 700, "right");
+        const ty = P(0, s1)[1] - 12 * u, ta = P(L.el.d0 + cq.y0 + L.off, 0)[0], tb = P(L.el.d0 + cq.y0 + L.off + it.tread, 0)[0];
+        ctx.beginPath(); ctx.moveTo(ta, ty); ctx.lineTo(tb, ty); ctx.stroke(); T(`${fmtIn(it.tread)} tread`, (ta + tb) / 2, ty - 10 * u, 12 * u, "#b03a2e", 700);
+      }
+    }
+  }
+  // existing ground and water words, scale bar
+  { const g = ground[Math.floor(ground.length * 0.1)], [a, b] = P(g[0], g[1]); T("Existing ground", a, b + 16 * u, 11 * u, "#f5efe6", 700, "left"); }
+  if (wl != null && ground.some((g) => g[1] < wl)) { const g = ground.find((q) => q[1] < wl); const [a, b] = P(g[0], wl); T("Water", a + 8 * u, b + 12 * u, 11 * u, "#e9f4ff", 700, "left"); }
+  const ft = [1, 2, 5, 10, 20].find((f) => f * 12 * sc > 70 * u) || 20, bx = X + W - 30 * u - ft * 12 * sc, by = Y + H - 20 * u;
+  ctx.fillStyle = "#1d2733"; for (let k = 0; k < 4; k++) ctx[k % 2 ? "strokeRect" : "fillRect"](bx + k * ft * 3 * sc, by, ft * 3 * sc, 5 * u);
+  T(`${ft} ft`, bx + ft * 12 * sc / 2, by - 9 * u, 11 * u, "#1d2733", 600);
+  ctx.restore();
+  return true;
+}
 function drawSide() {
   if (view !== "side") return;
   const cv = $("side"), { w, h, dpr } = sizeCanvas(cv), ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const cuts = job.items.filter((i) => i.type === "cut");
-  $("sideCut").innerHTML = cuts.map((c) => `<option value="${c.id}"${currentCut() === c ? " selected" : ""}>Section ${escapeHtml(c.label || "")}</option>`).join("");
+  const cuts = job.items.filter((i) => i.type === "cut"), flights = job.items.filter((i) => i.type === "steps").sort((a, b) => (a.elev || 0) - (b.elev || 0));
+  if (!sideCutId && flights.length) sideCutId = "stairs:all";
+  const opt = (v, t) => `<option value="${v}"${sideCutId === v ? " selected" : ""}>${escapeHtml(t)}</option>`;
+  $("sideCut").innerHTML = (flights.length ? opt("stairs:all", "Whole stairway") + flights.map((f, k) => opt("stairs:" + f.id, f.label || `Steps ${k + 1}`)).join("") : "")
+    + cuts.map((c) => opt(c.id, `Ground section ${c.label || ""}`)).join("");
+  const stairs = sideCutId && sideCutId.startsWith("stairs:") && flights.length;
+  $("sideVEBox").hidden = !!stairs; cv.style.filter = stairs ? "" : (themeFilter() === "none" ? "" : themeFilter());
+  $("hint").textContent = stairs ? "Real colours and sizes. Pick a single flight under Show to see every block up close" : "Side view along the section line · exaggerate heights to read small slopes";
+  if (stairs) { const wch = sideCutId.slice(7); if (renderStairs(ctx, 0, 0, w, h, 1, wch === "all" || flights.some((f) => f.id === wch) ? wch : "all")) return; }
   const cut = currentCut();
   if (!cut) {
     ctx.fillStyle = BP.paper; ctx.fillRect(0, 0, w, h);
@@ -3021,7 +3370,7 @@ Edits (use as few as needed; an empty list is fine when you only answer or ask a
 - {"op":"delete","id":"<existing id>"}
 - {"op":"replace","items":[...every item...],"site":{"w","d"}}   only for drawing a whole new layout
 - {"op":"job","set":{"name","client","address","notes","site":{"w","d"}}}
-- {"op":"style","set":{"theme":"blueprint"|"white"|"mono"|"sepia"}}   blueprint look: blue paper, colour on white (prints best), black on white, or sepia
+- {"op":"style","set":{"look":"real"|"blueprint","theme":"blueprint"|"white"|"mono"|"sepia"}}   look: realistic picture (default) or blueprint; theme: the blueprint's paper: blue, colour on white (prints best), black on white, or sepia
 Moving an item is an update of x and y; turning it is an update of rot.`;
 function aiRules() {
   const d = job.defaults;
@@ -3104,7 +3453,11 @@ function applyOps(ops) {
         if (o.set.site) job.site = { w: num(o.set.site.w, job.site.w, 48, 20000), d: num(o.set.site.d, job.site.d, 48, 20000) };
         other.push("job details");
       }
-      else if (o.op === "style" && o.set && THEMES[o.set.theme]) { job.style = { ...job.style, theme: o.set.theme }; applyTheme(); other.push(THEMES[o.set.theme].label.toLowerCase() + " style"); }
+      else if (o.op === "style" && o.set && (THEMES[o.set.theme] || o.set.look)) {
+        if (THEMES[o.set.theme]) { job.style = { ...job.style, theme: o.set.theme }; other.push(THEMES[o.set.theme].label.toLowerCase() + " style"); }
+        if (o.set.look === "real" || o.set.look === "blueprint") { job.style = { ...job.style, look: o.set.look }; other.push(o.set.look === "real" ? "realistic look" : "blueprint look"); }
+        applyTheme();
+      }
     } catch {}
   }
   const parts = [];
