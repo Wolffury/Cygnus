@@ -1013,12 +1013,13 @@ function drawPlan() {
   if (view !== "plan") return;
   const { w, h, dpr } = sizeCanvas(plan);
   pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  renderSheet(pctx, w, h, view2d, { screen: true, section: showSection, selId });
+  labelHits = []; renderSheet(pctx, w, h, view2d, { screen: true, section: showSection, selId });
 }
 
 // Realistic plan colours: dark ink on grass instead of white ink on blue paper
 const REALBP = { joint: "rgba(0,0,0,.28)", paper: "#8fb26a", grid: "rgba(255,255,255,.10)", grid5: "rgba(255,255,255,.22)", ink: "#1d2733", ink2: "rgba(29,39,51,.78)", sel: "#d35400", fill: "rgba(255,255,255,.25)" };
 function renderSheet(ctx, W, H, v, o) {
+  if (!o.screen && labelHits) { const keep = labelHits; labelHits = null; try { return renderSheet(ctx, W, H, v, o); } finally { labelHits = keep; } } // exports never record names
   if ((o.real ?? planLook() === "real") && !o.inReal) {
     const keep = { ...BP }; Object.assign(BP, REALBP); realLabels = [];
     try { return renderSheet(ctx, W, H, v, { ...o, inReal: true }); } finally { Object.assign(BP, keep); realLabels = null; }
@@ -1053,7 +1054,7 @@ function renderSheet(ctx, W, H, v, o) {
   if (o.inReal) for (const it of ord.filter((i) => i.type === "tree" || i.type === "evergreen" || i.type === "shrub")) {
     const [cx, cy] = W2S(v, it.x, it.y), r = it.canopy / 2 * v.s;
     ctx.save(); ctx.setLineDash([5 * u, 4 * u]); ctx.strokeStyle = "rgba(25,55,25,.55)"; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.restore();
-    if (it.label && r > 8 * u) realLabel(ctx, shortLabel(it.label), cx, cy + r + 9 * u, 10.5 * u, u);
+    labelOwner = { it, v }; if (it.label && r > 8 * u) realLabel(ctx, shortLabel(it.label), cx, cy + r + 9 * u, 10.5 * u, u); labelOwner = null;
   }
   if (o.screen && o.selId) { const it = job.items.find((i) => i.id === o.selId); if (it) drawHandles(ctx, v, it); }
 
@@ -1172,9 +1173,29 @@ function realSurface(ctx, v, it, m, color, x0, y0, x1, y1, u) {
   polyRect(ctx, v, it, x0, y0, x1, y1); ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1 * u; ctx.stroke();
 }
 let realLabels = null; // label boxes already placed in this drawing; a label that would overlap one is left out
+// Names that can be moved: lox/loy (inches) shift a name from its usual spot. While the plan is drawn on screen the
+// position of each item's name is recorded, so a selected item shows a handle on its name for dragging.
+let labelHits = null, labelOwner = null;
+function placeName(ctx, v, it, x, y, u) {
+  const ox = (it.lox || 0) * v.s, oy = -(it.loy || 0) * v.s;
+  if (Math.hypot(ox, oy) > 22 * u) { ctx.save(); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.setLineDash([3 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ox, y + oy); ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, 2 * u, 0, 7); ctx.fillStyle = BP.ink2; ctx.fill(); ctx.restore(); }
+  return [x + ox, y + oy, !!(it.lox || it.loy)];
+}
+function noteName(it, x, y, w, h) { if (labelHits && !labelHits.some((b) => b.id === it.id)) labelHits.push({ id: it.id, box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2] }); }
+// Blueprint names: the usual label, moved by the item's offset and recorded for the name handle
+function nameLabel(ctx, v, it, text, x, y, size, align = "center", color = BP.ink, weight = 500, font = "IBM Plex Mono") {
+  const [nx, ny] = placeName(ctx, v, it, x, y, size / 11);
+  label(ctx, text, nx, ny, size, align, color, weight, font);
+  ctx.save(); ctx.font = `${weight} ${size}px "${font}", ui-monospace, monospace`; const w = ctx.measureText(text).width; ctx.restore();
+  noteName(it, align === "left" ? nx + w / 2 : align === "right" ? nx - w / 2 : nx, ny, w + 8, size + 8);
+}
 function realLabel(ctx, t, x, y, size, u, weight = 600) {
+  const own = labelOwner; let moved = false;
+  if (own) [x, y, moved] = placeName(ctx, own.v, own.it, x, y, u);
   ctx.save(); ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  if (realLabels) {
+  if (own) noteName(own.it, x, y, ctx.measureText(t).width + 10 * u, size + 8 * u);
+  if (realLabels && moved) realLabels.push([x - ctx.measureText(t).width / 2, y - size, x + ctx.measureText(t).width / 2, y + size]);
+  else if (realLabels) {
     const w = ctx.measureText(t).width / 2 + 3 * u, h = size * 0.65 + 2 * u, box = [x - w, y - h, x + w, y + h];
     if (realLabels.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) { ctx.restore(); return; }
     realLabels.push(box);
@@ -1201,7 +1222,7 @@ function drawSelOutline(ctx, v, it, u) {
 }
 function drawItemReal(ctx, v, it, u, sel) {
   const [cx, cy] = W2S(v, it.x, it.y), tag = it.label || "";
-  ctx.save(); ctx.lineWidth = 1 * u;
+  ctx.save(); ctx.lineWidth = 1 * u; labelOwner = it.type === "contour" ? null : { it, v };
   try {
     switch (it.type) {
       case "grade": {
@@ -1300,7 +1321,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         return true;
       }
     }
-  } finally { ctx.restore(); }
+  } finally { ctx.restore(); labelOwner = null; }
   return false; // measurements use the normal drawing with dark ink
 }
 function drawRail(ctx, v, it, u, railCol, postCol) {
@@ -1320,21 +1341,21 @@ function drawItem(ctx, v, it, u, sel) {
     case "rail": {
       drawRail(ctx, v, it, u, BP.ink, BP.paper);
       const lp = rotPt(it, 0, 10); const [lx, ly] = W2S(v, lp.x, lp.y);
-      label(ctx, `${(tag || "HANDRAIL").toUpperCase().slice(0, 30)} · ${fmtLen(it.h)} HIGH`, lx, ly - 8 * u, 10 * u, "center", BP.ink2);
+      nameLabel(ctx, v, it, `${(tag || "HANDRAIL").toUpperCase().slice(0, 30)} · ${fmtLen(it.h)} HIGH`, lx, ly - 8 * u, 10 * u, "center", BP.ink2);
       break;
     }
     case "grade": {
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(140,200,150,.10)"; ctx.fill();
       ctx.setLineDash([3 * u, 4 * u]); ctx.strokeStyle = BP.ink2; ctx.stroke(); ctx.setLineDash([]);
       const lp = rotPt(it, -it.w / 2 + 8, it.d / 2 - 10); const [gx, gy] = W2S(v, lp.x, lp.y);
-      label(ctx, `${tag ? tag.toUpperCase() + " · " : ""}GRADE +${fmtLen(it.h)}`, gx, gy + 6 * u, 11 * u, "left", BP.ink2);
+      nameLabel(ctx, v, it, `${tag ? tag.toUpperCase() + " · " : ""}GRADE +${fmtLen(it.h)}`, gx, gy + 6 * u, 11 * u, "left", BP.ink2);
       break;
     }
     case "path": {
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fill(); ctx.stroke();
       surfaceJoints(ctx, v, it, mat(it.surface), -it.w / 2, -it.d / 2, it.w / 2, it.d / 2, u);
       drawEdging(ctx, v, it, u, BP.ink);
-      label(ctx, (tag || "WALKWAY").toUpperCase(), cx, cy, 11 * u, "center", BP.ink);
+      nameLabel(ctx, v, it, (tag || "WALKWAY").toUpperCase(), cx, cy, 11 * u, "center", BP.ink);
       if (sel || u > 1) label(ctx, matName(mat(it.surface)).toUpperCase(), cx, cy + 14 * u, 9 * u, "center", BP.ink2);
       break;
     }
@@ -1342,7 +1363,7 @@ function drawItem(ctx, v, it, u, sel) {
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(234,242,252,.05)"; ctx.fill();
       ctx.save(); polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); hatch(ctx, 10 * u, "rgba(234,242,252,.16)", u); ctx.restore();
       ctx.lineWidth = 3 * u; polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.stroke();
-      label(ctx, (tag || "HOUSE").toUpperCase(), cx, cy, 13 * u, "center", BP.ink, 600);
+      nameLabel(ctx, v, it, (tag || "HOUSE").toUpperCase(), cx, cy, 13 * u, "center", BP.ink, 600);
       break;
     }
     case "landing": {
@@ -1351,7 +1372,7 @@ function drawItem(ctx, v, it, u, sel) {
       if (lc.edged && lc.capD) { ctx.lineWidth = 1 * u; polyRect(ctx, v, it, -it.w / 2 + lc.capD, -it.d / 2 + lc.capD, it.w / 2 - lc.capD, it.d / 2 - lc.capD); ctx.stroke(); }
       surfaceJoints(ctx, v, it, lc.s, -lc.inW / 2, -lc.inD / 2, lc.inW / 2, lc.inD / 2, u);
       drawEdging(ctx, v, it, u, BP.ink);
-      label(ctx, `${(tag || "LANDING").toUpperCase()} · TOP +${fmtLen(it.h)}`, cx, cy, 11 * u, "center", BP.ink);
+      nameLabel(ctx, v, it, `${(tag || "LANDING").toUpperCase()} · TOP +${fmtLen(it.h)}`, cx, cy, 11 * u, "center", BP.ink);
       if (sel) dimLine(ctx, v, it, -it.w / 2, it.d / 2, it.w / 2, it.d / 2, 16, fmtLen(it.w), u);
       break;
     }
@@ -1360,7 +1381,7 @@ function drawItem(ctx, v, it, u, sel) {
       polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = "rgba(234,242,252,.14)"; ctx.fill(); ctx.stroke();
       ctx.lineWidth = 1 * u; ctx.strokeStyle = BP.ink2;
       for (let x = -it.w / 2 + wc.b.L; x < it.w / 2 - 0.5; x += wc.b.L) lineL(ctx, v, it, x, -it.d / 2, x, it.d / 2);
-      label(ctx, `${(tag || "WALL").toUpperCase()} · ${fmtLen(wc.top)} HIGH`, cx, cy - 14 * u, 11 * u, "center", BP.ink);
+      nameLabel(ctx, v, it, `${(tag || "WALL").toUpperCase()} · ${fmtLen(wc.top)} HIGH`, cx, cy - 14 * u, 11 * u, "center", BP.ink);
       if (sel) dimLine(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, -it.d / 2, -16, fmtLen(it.w), u);
       break;
     }
@@ -1396,7 +1417,7 @@ function drawItem(ctx, v, it, u, sel) {
       dimLine(ctx, v, it, -it.w / 2, -c.run / 2, it.w / 2, -c.run / 2, -18, fmtLen(it.w), u);
       const rx = it.w / 2 + (c.cheekR ? c.D : 0);
       dimLine(ctx, v, it, rx, -c.run / 2, rx, c.run / 2, -18, "RUN " + fmtLen(c.run), u);
-      if (tag) { const tp = rotPt(it, 0, -c.run / 2 - 38); const [tx, ty] = W2S(v, tp.x, tp.y); label(ctx, tag.toUpperCase() + (c.E ? ` · FROM +${fmtLen(c.E)}` : ""), tx, ty, 11 * u, "center", BP.ink, 600); }
+      if (tag) { const tp = rotPt(it, 0, -c.run / 2 - 38); const [tx, ty] = W2S(v, tp.x, tp.y); nameLabel(ctx, v, it, tag.toUpperCase() + (c.E ? ` · FROM +${fmtLen(c.E)}` : ""), tx, ty, 11 * u, "center", BP.ink, 600); }
       break;
     }
     case "unit": {
@@ -1420,7 +1441,7 @@ function drawItem(ctx, v, it, u, sel) {
       ctx.restore();
       smoothPath(ctx, v, it.pts); ctx.strokeStyle = "#8fd0ff"; ctx.lineWidth = 3 * u; ctx.stroke();
       const mid = it.pts[Math.floor(it.pts.length / 2)], [mx, my] = W2S(v, mid[0], mid[1]);
-      label(ctx, `${(it.label || "SHORELINE").toUpperCase()} · WATER ${fmtElev(it.water || 0)}`, mx, my - 12 * u, 10 * u, "center", "#cfeaff", 600);
+      nameLabel(ctx, v, it, `${(it.label || "SHORELINE").toUpperCase()} · WATER ${fmtElev(it.water || 0)}`, mx, my - 12 * u, 10 * u, "center", "#cfeaff", 600);
       break;
     }
     case "contour": {
@@ -1469,7 +1490,7 @@ function drawItem(ctx, v, it, u, sel) {
       for (let k = 0; k < 6; k++) { const t = k / 6 * Math.PI * 2 + 0.3; ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 0.55 * Math.cos(t), cy + r * 0.55 * Math.sin(t)); }
       ctx.stroke();
       ctx.fillStyle = BP.ink; ctx.beginPath(); ctx.arc(cx, cy, Math.max(it.trunk / 2 * v.s, 3 * u), 0, Math.PI * 2); ctx.fill();
-      label(ctx, `${(tag || "TREE").toUpperCase()}`, cx, cy + r + 10 * u, 11 * u, "center", BP.ink, 600);
+      nameLabel(ctx, v, it, `${(tag || "TREE").toUpperCase()}`, cx, cy + r + 10 * u, 11 * u, "center", BP.ink, 600);
       label(ctx, `⌀${fmtLen(it.canopy)} canopy`, cx, cy + r + 24 * u, 10 * u, "center", BP.ink2);
       break;
     }
@@ -1478,7 +1499,7 @@ function drawItem(ctx, v, it, u, sel) {
       for (let k = 0; k <= 64; k++) { const t = k / 64 * Math.PI * 2, rr = r * (0.85 + 0.15 * Math.abs(Math.sin(t * 4))); const px = cx + rr * Math.cos(t), py = cy + rr * Math.sin(t); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
       ctx.closePath(); ctx.fillStyle = "rgba(140,200,150,.14)"; ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.arc(cx, cy, 2 * u, 0, Math.PI * 2); ctx.fillStyle = BP.ink; ctx.fill();
-      if (tag && r > 8 * u) label(ctx, tag.toUpperCase(), cx, cy + r + 9 * u, 10 * u, "center", BP.ink2);
+      if (tag && r > 8 * u) nameLabel(ctx, v, it, tag.toUpperCase(), cx, cy + r + 9 * u, 10 * u, "center", BP.ink2);
       break;
     }
     case "rock": {
@@ -1650,7 +1671,13 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
 // ---------- handles: drag to resize, rotate and scale ----------
 function handlesOf(it) {
   const hs = [], v = view2d;
-  if (it.type === "dim" || it.type === "cut") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  const nh = labelHits && labelHits.find((b) => b.id === it.id);
+  if (nh) { const [x, y] = S2W(v, nh.box[0] - 12, (nh.box[1] + nh.box[3]) / 2); hs.push({ kind: "label", x, y, box: nh.box }); }
+  if (it.type === "dim") { // ends, plus the middle of the line: slide it nearer or further from what it measures
+    const len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), m = rotPt({ x: it.x, y: it.y, rot: -ang * 180 / Math.PI }, len / 2, it.off ?? 12);
+    return hs.concat([{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }, { kind: "off", x: m.x, y: m.y }]);
+  }
+  if (it.type === "cut") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
   if (LINE_TYPES.has(it.type)) return it.pts.map((p, idx) => ({ kind: "pt", idx, x: p[0], y: p[1] }));
   if (it.type === "spot") return [];
   if (!RECT_TYPES.has(it.type)) { hs.push({ kind: "radius", x: it.x + it.canopy / 2, y: it.y }); return hs; }
@@ -1664,6 +1691,12 @@ function drawHandles(ctx, v, it) {
   ctx.save();
   for (const h of handlesOf(it)) {
     const [sx, sy] = W2S(v, h.x, h.y);
+    if (h.kind === "label") { // dashed box round the name and a grip to drag it
+      const [a, b, c, d] = h.box; ctx.save(); ctx.strokeStyle = BP.sel; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.strokeRect(a - 2, b - 2, c - a + 4, d - b + 4); ctx.restore();
+      ctx.beginPath(); ctx.arc(sx, sy, 8, 0, Math.PI * 2); ctx.fillStyle = BP.sel; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#fff"; for (const [dx, dy] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) { ctx.beginPath(); ctx.arc(sx + dx, sy + dy, 1.3, 0, 7); ctx.fill(); }
+      continue;
+    }
     if (h.kind === "rot") { const s = itemSize(it), a = rotPt(it, s.xc, s.d / 2), [ax, ay] = W2S(v, a.x, a.y); ctx.strokeStyle = BP.sel; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]); }
     ctx.beginPath(); ctx.arc(sx, sy, h.kind === "rot" ? 9 : 7, 0, Math.PI * 2);
     ctx.fillStyle = h.kind === "rot" ? BP.sel : "#ffffff"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = h.kind === "rot" ? "#ffffff" : BP.sel; ctx.stroke();
@@ -1675,6 +1708,7 @@ function handleAt(sx, sy) {
   const it = job.items.find((i) => i.id === selId); if (!it || view !== "plan") return null;
   let best = null, bd = 22; // generous touch target
   for (const h of handlesOf(it)) { const [hx, hy] = W2S(view2d, h.x, h.y), d = Math.hypot(hx - sx, hy - sy); if (d < bd) { bd = d; best = h; } }
+  if (!best) { const nh = handlesOf(it).find((h) => h.kind === "label" && sx >= h.box[0] - 4 && sx <= h.box[2] + 4 && sy >= h.box[1] - 4 && sy <= h.box[3] + 4); if (nh) best = nh; }
   return best ? { h: best, it } : null;
 }
 // Points a measurement snaps to: corners of everything rectangular, centres of trees and rocks, other measurement ends.
@@ -1772,6 +1806,8 @@ function placeUnit(wx, wy) {
 }
 function applyHandle(dr, wx, wy) {
   const it = dr.item, o = dr.orig, h = dr.h, q = snap ? 1 : 0.125, rq = (n) => Math.round(n / q) * q;
+  if (h.kind === "label") { it.lox = Math.round((o.lox || 0) + wx - dr.start[0]); it.loy = Math.round((o.loy || 0) + wy - dr.start[1]); if (!it.lox) delete it.lox; if (!it.loy) delete it.loy; return "Moving the name"; }
+  if (h.kind === "off") { const ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), l = localOf({ x: it.x, y: it.y, rot: -ang * 180 / Math.PI }, wx, wy); it.off = rq(l.y); return "Line " + fmtLen(Math.abs(it.off)) + " out"; }
   if (h.kind === "pt") { it.pts[h.idx] = snap ? [Math.round(wx), Math.round(wy)] : [wx, wy]; if (h.idx === 0) { it.x = it.pts[0][0]; it.y = it.pts[0][1]; } return fmtElev(it.type === "shore" ? it.water || 0 : it.elev || 0); }
   if (h.kind === "end") { const [x, y] = snapPoint(wx, wy, it.id); if (h.idx === 1) { it.x = x; it.y = y; } else { it.x2 = x; it.y2 = y; } return fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y)); }
   if (h.kind === "radius") { it.canopy = Math.max(6, rq(2 * Math.hypot(wx - o.x, wy - o.y))); return "⌀ " + fmtLen(it.canopy); }
@@ -1796,7 +1832,7 @@ plan.addEventListener("pointerdown", (e) => {
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
   moved = false;
   const ha = handleAt(e.offsetX, e.offsetY);
-  if (ha) { drag = { handle: true, h: ha.h, item: ha.it, orig: JSON.parse(JSON.stringify(ha.it)), moved: false }; return; }
+  if (ha) { drag = { handle: true, h: ha.h, item: ha.it, orig: JSON.parse(JSON.stringify(ha.it)), moved: false, start: [wx, wy] }; return; }
   if (tool === "dim") {
     snapshot(); const [x, y] = snapPoint(wx, wy);
     const d = defaults("dim", x, y); d.x2 = x; d.y2 = y; job.items.push(d); selId = d.id;
@@ -1913,6 +1949,7 @@ function renderItemPane() {
   }
   const t = it.type;
   let h = `<h2>${escapeHtml(TYPE_INFO[t].label)}</h2><label class="f">Label<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>`;
+  h += `<p class="note">Drag the round grip on the name to move the name.${it.type === "dim" ? " Drag the middle dot to move the measurement line." : ""}${it.lox || it.loy ? ` <button class="btn" id="nameReset">Put the name back</button>` : ""}</p>`;
   h += `<div class="grid2">${field("Center east (x)", "x", it)}${field("Center north (y)", "y", it)}</div>`;
   if (t === "steps") {
     const c = stepCalc(it);
@@ -1986,7 +2023,7 @@ function renderItemPane() {
     h = `<h2>Measurement</h2><label class="f">Label (optional)<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}" placeholder="e.g. Porch to curb"></label>
       <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))}</dd></div><div><dt>Angle</dt><dd>${Math.round(((Math.atan2(it.x2 - it.x, it.y2 - it.y) * 180 / Math.PI) + 360) % 360)}° from north</dd></div></dl>
       <div class="grid2">${field("Line offset", "off", it)}<span></span></div>
-      <p class="note">Drag the round ends to move them. They snap to corners and block edges.</p>`;
+      <p class="note">Drag the round ends to move them. They snap to corners and block edges. Drag the middle dot to slide the line nearer or further away.</p>`;
   } else if (RECT_TYPES.has(t)) {
     h += `<div class="grid2">${field("Width", "w", it)}${field("Depth", "d", it)}${field(t === "house" ? "Wall height" : "Height above grade", "h", it)}${field("Rotation °", "rot", it, "deg")}</div>`;
   } else {
@@ -1996,6 +2033,7 @@ function renderItemPane() {
   }
   h += `<div class="row">${RECT_TYPES.has(t) ? '<button class="btn" id="rotL">Rotate −90°</button><button class="btn" id="rotR">Rotate +90°</button>' : ""}<button class="btn" id="dupBtn">Duplicate</button><button class="btn danger" id="delBtn">Delete</button></div>`;
   pane.innerHTML = h;
+  if ($("nameReset")) $("nameReset").onclick = () => { snapshot(); delete it.lox; delete it.loy; commit(); };
   pane.querySelectorAll("[data-k]").forEach((inp) => inp.addEventListener("change", () => setItemField(it, inp)));
   const rotBy = (d) => { snapshot(); it.rot = ((it.rot || 0) + d + 360) % 360; commit(); };
   $("rotL") && ($("rotL").onclick = () => rotBy(-90));
@@ -2516,6 +2554,7 @@ function sanitizeItem(raw, legacy) {
   }
   if (out.type === "shore") out.side = raw.side === -1 ? -1 : 1;
   out.rot = ((out.rot % 360) + 360) % 360;
+  for (const k of ["lox", "loy"]) if (raw[k] != null && isFinite(+raw[k]) && +raw[k] !== 0) out[k] = clamp(Math.round(+raw[k]), -5000, 5000);
   if (out.type === "steps") {
     out.w = Math.max(out.w, 12);
     const P = build(out);
