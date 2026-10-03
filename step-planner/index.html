@@ -161,6 +161,11 @@ details { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; 
 details > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
 details[open] > summary { margin-bottom: 10px; }
 details > .grid2, details > label { margin-top: 8px; }
+.csvcols { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.csvrow { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: center; }
+.csvrow input, .csvrow select { min-width: 0; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 14px; }
+label.f.checkf { flex-direction: row; align-items: center; justify-content: space-between; }
+label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
 @media (max-width: 860px) { .main { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -281,7 +286,7 @@ details > .grid2, details > label { margin-top: 8px; }
         <div id="quoteSummary"></div>
         <div class="row">
           <button class="btn primary" id="qHtml">Save quote</button>
-          <button class="btn" id="qCsv">Export CSV</button>
+          <button class="btn" id="qCsv">Export to Ledgerline (CSV)</button>
           <button class="btn" id="qJson">Export JSON</button>
         </div>
         <p class="note">The quote is a page with the blueprint and rendering that opens in any browser and prints to PDF. CSV and JSON carry every line item for accounting or job-management apps.</p>
@@ -296,6 +301,17 @@ details > .grid2, details > label { margin-top: 8px; }
           <label class="f">Unit price <input id="exPrice" inputmode="decimal" placeholder="0.00"></label>
         </div>
         <button class="btn" id="exAdd">Add line</button>
+        <details>
+          <summary>Ledgerline CSV columns</summary>
+          <p class="note">Set up for Ledgerline: open Ledgerline, go to Estimates, tap Import CSV and pick this file. It becomes a new estimate with every line, the client and the same total. For another app, load a sample CSV from it and the columns are matched by name.</p>
+          <div class="row"><label class="btn" for="csvSample">Match another app's CSV</label><input type="file" id="csvSample" accept=".csv,text/csv" hidden><button class="btn" id="csvReset">Reset columns</button></div>
+          <div id="csvCols" class="csvcols"></div>
+          <div class="row"><button class="btn" id="csvAdd">Add column</button></div>
+          <div class="grid2">
+            <label class="f">Date format <select id="csvDate"><option value="iso">2026-10-03</option><option value="us">10/03/2026</option><option value="ca">03/10/2026</option></select></label>
+            <label class="f">Taxes <select id="csvTax"><option value="pst">Ledgerline: GST as Tax %, PST as a line</option><option value="rows">GST and PST as their own lines</option><option value="none">Leave taxes out</option></select></label>
+          </div>
+        </details>
         <details>
           <summary>Rates, markup and tax</summary>
           <div class="grid2" id="estFields"></div>
@@ -1378,12 +1394,14 @@ function estimate() {
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
   const cats = {}; for (const l of lines) cats[l.cat] = round2((cats[l.cat] || 0) + l.total);
   const subtotal = round2(lines.reduce((s, l) => s + l.total, 0));
-  const contingency = round2(subtotal * E.contingency / 100), markup = round2((subtotal + contingency) * E.markup / 100);
-  const beforeTax = round2(subtotal + contingency + markup), factor = subtotal ? beforeTax / subtotal : 1;
-  const pst = round2((cats.Materials || 0) * factor * E.pst / 100), gst = round2(beforeTax * E.gst / 100);
+  const contingency = round2(subtotal * E.contingency / 100), factor = subtotal ? (1 + E.contingency / 100) * (1 + E.markup / 100) : 1;
+  // Client prices fold contingency and markup into each line so the quote reads as finished prices. Totals are
+  // built from the rounded unit prices so any app that re-adds qty × price (Ledgerline, accounting) gets the same cents.
+  for (const l of lines) { l.clientPrice = round2(l.price * factor); l.clientTotal = round2(l.clientPrice * l.qty); }
+  const beforeTax = round2(lines.reduce((s, l) => s + l.clientTotal, 0)), markup = round2(beforeTax - subtotal - contingency);
+  const matClient = round2(lines.filter((l) => l.cat === "Materials").reduce((s, l) => s + l.clientTotal, 0));
+  const pst = round2(matClient * E.pst / 100), gst = round2(beforeTax * E.gst / 100);
   const total = round2(beforeTax + gst + pst), hours = lines.filter((l) => l.unit === "hr").reduce((s, l) => s + l.qty, 0);
-  // client prices fold contingency and markup into each line so the quote reads as finished prices
-  for (const l of lines) { l.clientPrice = round2(l.price * factor); l.clientTotal = round2(l.total * factor); }
   return { lines, cats, subtotal, contingency, markup, beforeTax, factor, gst, pst, total, deposit: round2(total * E.deposit / 100), hours, E, w };
 }
 
@@ -1451,15 +1469,6 @@ function quoteData() {
   };
 }
 $("qJson").onclick = () => saveFile(`${slug(job.name)}_${quoteNo()}.json`, new Blob([JSON.stringify(quoteData(), null, 2)], { type: "application/json" }));
-$("qCsv").onclick = () => {
-  const qd = quoteData(), esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const rows = [["Quote", qd.quoteNumber], ["Date", qd.date], ["Client", qd.client.name], ["Site", qd.client.siteAddress], ["Job", qd.job.name], [],
-    ["Category", "Description", "Quantity", "Unit", "Unit cost", "Cost total", "Unit price", "Line total", "Note"],
-    ...qd.lines.map((l) => [l.category, l.description, l.quantity, l.unit, l.unitCost, l.costTotal, l.unitPrice, l.lineTotal, l.note]), [],
-    ["Cost", qd.totals.cost], ["Contingency", qd.totals.contingency], ["Overhead & profit", qd.totals.overheadProfit], ["Before tax", qd.totals.beforeTax],
-    ["GST", qd.totals.gst], ["PST", qd.totals.pst], ["Total", qd.totals.total], ["Deposit", qd.totals.deposit]];
-  saveFile(`${slug(job.name)}_${quoteNo()}.csv`, new Blob([rows.map((r) => r.map(esc).join(",")).join("\r\n")], { type: "text/csv" }));
-};
 async function blueprintImage(W, H) {
   const c = document.createElement("canvas"); c.width = W; c.height = H; const ctx = c.getContext("2d");
   const v = {}; fitView(W, H, v, 60);
@@ -1493,6 +1502,87 @@ ${r3 ? `<h2>Rendering</h2><img src="${r3}" alt="3D rendering of the project">` :
 <tr><td colspan="3" class="n">Deposit ${qd.rates.depositPercent}% due on acceptance</td><td class="n">${money(qd.totals.deposit)}</td></tr></tbody></table>
 <h2>Terms</h2><p>${e(qd.terms)}</p><div class="sign"><div>Accepted by (client) &amp; date</div><div>${e(qd.company.name || "Contractor")} &amp; date</div></div></main></body></html>`;
   saveFile(`${slug(job.name)}_${quoteNo()}.html`, new Blob([html], { type: "text/html" }));
+};
+
+// ---------- Ledgerline CSV export ----------
+// One header row, then one row per line item, so it imports cleanly. Columns are configurable and can be
+// matched automatically to a sample CSV from another app.
+const CSV_FIELDS = [
+  ["", "(leave blank)"], ["date", "Quote date"], ["validUntil", "Valid until"], ["quoteNo", "Quote number"], ["client", "Client name"],
+  ["siteAddress", "Site address"], ["jobName", "Job name"], ["category", "Category"], ["item", "Item name"], ["description", "Description with note"],
+  ["quantity", "Quantity"], ["unit", "Unit"], ["unitPrice", "Unit price (client)"], ["lineTotal", "Line total (client)"],
+  ["unitCost", "Unit cost (yours)"], ["costTotal", "Cost total (yours)"], ["taxCode", "Tax code"], ["gstRate", "GST %"], ["pstRate", "PST %"],
+  ["taxable", "Taxable (Y/N)"], ["note", "Note"], ["company", "Your company"],
+  ["details", "Details (where it's used)"], ["kind", "Type: Labour / Materials / Other"], ["taxPct", "Tax % (GST)"], ["jobNotes", "Job name and notes"],
+];
+// Default columns are the ones Ledgerline's "Import CSV" (Estimates screen) reads. GST goes in as the estimate's
+// tax rate and PST on materials comes in as its own non-taxable line, so Ledgerline's total matches the quote.
+const CSV_DEFAULT = {
+  v: 2, dateFmt: "iso", taxRows: "pst",
+  columns: [["Client", "client"], ["Address", "siteAddress"], ["Date", "date"], ["Valid Until", "validUntil"], ["Description", "item"], ["Details", "details"], ["Qty", "quantity"], ["Unit", "unit"], ["Rate", "unitPrice"], ["Type", "kind"], ["Taxable", "taxable"], ["Tax %", "taxPct"], ["Notes", "jobNotes"]].map(([header, field]) => ({ header, field })),
+};
+// Keyword guesses for matching another app's column header to a field
+const CSV_GUESS = [
+  [/valid|expir/, "validUntil"], [/date/, "date"], [/(quote|estimate|invoice|doc).*(no|num|#|id)|^(quote|estimate)$/, "quoteNo"],
+  [/customer|client|contact|bill.?to/, "client"], [/address|site|location/, "siteAddress"], [/job|project/, "jobName"],
+  [/categor|type|group|class|account/, "category"], [/desc|detail|memo/, "description"], [/item|product|service|name|sku|code(?!.*tax)/, "item"],
+  [/qty|quant|hours|count/, "quantity"], [/unit$|uom|measure/, "unit"], [/cost/, "unitCost"],
+  [/rate|price|each/, "unitPrice"], [/amount|total|extended|line/, "lineTotal"], [/tax.?code|tax.?type/, "taxCode"], [/gst/, "gstRate"], [/pst/, "pstRate"], [/taxable|tax/, "taxable"], [/note|comment/, "note"],
+];
+function csvCfg() { const c = store.get("bsp.csvmap", null); return c && c.v === 2 && Array.isArray(c.columns) && c.columns.length ? { ...CSV_DEFAULT, ...c } : JSON.parse(JSON.stringify(CSV_DEFAULT)); }
+function saveCsvCfg(c) { store.set("bsp.csvmap", c); renderCsvMap(); }
+function parseCsvLine(text) {
+  const out = []; let cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === "," || ch === ";" || ch === "\t") { out.push(cur.trim()); cur = ""; } else if (ch === "\n" || ch === "\r") break; else cur += ch;
+  }
+  out.push(cur.trim()); return out.filter((h, i, a) => h || i < a.length - 1);
+}
+function guessField(header) { const h = header.toLowerCase(); const g = CSV_GUESS.find(([re]) => re.test(h)); return g ? g[1] : ""; }
+function fmtDate(iso, f) { const [y, m, d] = iso.split("-"); return f === "us" ? `${m}/${d}/${y}` : f === "ca" ? `${d}/${m}/${y}` : iso; }
+function renderCsvMap() {
+  const c = csvCfg(), opts = (sel) => CSV_FIELDS.map(([v, t]) => `<option value="${v}"${v === sel ? " selected" : ""}>${t}</option>`).join("");
+  $("csvCols").innerHTML = c.columns.map((col, i) => `<div class="csvrow"><input data-ch="${i}" value="${escapeHtml(col.header)}" aria-label="Column ${i + 1} header"><select data-cf="${i}" aria-label="Column ${i + 1} value">${opts(col.field)}</select>
+    <button class="btn small" data-cu="${i}" aria-label="Move up"${i ? "" : " disabled"}>↑</button><button class="btn small danger" data-cx="${i}" aria-label="Remove column">✕</button></div>`).join("");
+  $("csvDate").value = c.dateFmt; $("csvTax").value = c.taxRows || "pst";
+  $("csvCols").querySelectorAll("[data-ch]").forEach((el) => el.onchange = () => { c.columns[+el.dataset.ch].header = el.value; saveCsvCfg(c); });
+  $("csvCols").querySelectorAll("[data-cf]").forEach((el) => el.onchange = () => { c.columns[+el.dataset.cf].field = el.value; saveCsvCfg(c); });
+  $("csvCols").querySelectorAll("[data-cu]").forEach((el) => el.onclick = () => { const i = +el.dataset.cu; [c.columns[i - 1], c.columns[i]] = [c.columns[i], c.columns[i - 1]]; saveCsvCfg(c); });
+  $("csvCols").querySelectorAll("[data-cx]").forEach((el) => el.onclick = () => { c.columns.splice(+el.dataset.cx, 1); saveCsvCfg(c); });
+}
+$("csvAdd").onclick = () => { const c = csvCfg(); c.columns.push({ header: "New column", field: "" }); saveCsvCfg(c); };
+$("csvReset").onclick = () => { saveCsvCfg(JSON.parse(JSON.stringify(CSV_DEFAULT))); toast("Columns reset."); };
+$("csvDate").onchange = (e) => { const c = csvCfg(); c.dateFmt = e.target.value; saveCsvCfg(c); };
+$("csvTax").onchange = (e) => { const c = csvCfg(); c.taxRows = e.target.value; saveCsvCfg(c); };
+$("csvSample").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const headers = parseCsvLine((await f.text()).replace(/^﻿/, ""));
+  if (!headers.length || headers.length > 60) { toast("Couldn't find a header row in that file."); return; }
+  const c = csvCfg(); c.columns = headers.map((h) => ({ header: h, field: guessField(h) })); c.taxRows = "rows";
+  saveCsvCfg(c);
+  const unmatched = c.columns.filter((x) => !x.field).length;
+  toast(`Loaded ${headers.length} columns from ${f.name}.${unmatched ? ` ${unmatched} left blank. Pick a value for them below.` : " All matched."}`);
+};
+$("qCsv").onclick = () => {
+  const qd = quoteData(), c = csvCfg(), esc = (v) => /[",\n\r]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const n2 = (v) => (Math.round(v * 100) / 100).toFixed(2);
+  const base = { date: fmtDate(qd.date, c.dateFmt), validUntil: fmtDate(qd.validUntil, c.dateFmt), quoteNo: qd.quoteNumber, client: qd.client.name, siteAddress: qd.client.siteAddress, jobName: qd.job.name, company: qd.company.name,
+    taxPct: c.taxRows === "pst" ? n2(qd.rates.gstPercent) : "", jobNotes: [qd.job.name, `Quote ${qd.quoteNumber}`, qd.job.notes].filter(Boolean).join(" · ") };
+  const rowOf = (l) => {
+    const isMat = l.category === "Materials", taxCode = l.category === "Tax" ? "" : isMat ? "GST+PST" : "GST";
+    const v = { ...base, category: l.category, item: l.description, description: l.note ? `${l.description} (${l.note})` : l.description, quantity: n2(l.quantity), unit: l.unit,
+      unitPrice: n2(l.unitPrice), lineTotal: n2(l.lineTotal), unitCost: n2(l.unitCost ?? l.unitPrice), costTotal: n2(l.costTotal ?? l.lineTotal), taxCode,
+      gstRate: l.category === "Tax" ? "" : n2(qd.rates.gstPercent), pstRate: isMat ? n2(qd.rates.pstPercent) : "0.00", taxable: l.category === "Tax" ? "N" : "Y", note: l.note || "",
+      details: (l.note || "").replace(/ · incl\. .*$/, ""), kind: l.category === "Labour" ? "Labour" : isMat ? "Materials" : "Other" };
+    return c.columns.map((col) => esc(col.field ? v[col.field] ?? "" : ""));
+  };
+  const lines = qd.lines.slice();
+  if (c.taxRows === "rows") lines.push({ category: "Tax", description: `GST ${qd.rates.gstPercent}%`, quantity: 1, unit: "", unitPrice: qd.totals.gst, lineTotal: qd.totals.gst });
+  if ((c.taxRows === "rows" || c.taxRows === "pst") && qd.totals.pst) lines.push({ category: "Tax", description: `PST ${qd.rates.pstPercent}% on materials`, quantity: 1, unit: "", unitPrice: qd.totals.pst, lineTotal: qd.totals.pst });
+  const csv = [c.columns.map((col) => esc(col.header)).join(","), ...lines.map((l) => rowOf(l).join(","))].join("\r\n") + "\r\n";
+  saveFile(`${slug(job.name)}_${quoteNo()}_ledgerline.csv`, new Blob(["﻿" + csv], { type: "text/csv" }));
 };
 
 // ---------- saved jobs and files ----------
@@ -2004,7 +2094,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:" && !window.cl
     if (legacy) setTimeout(() => toast("Updated to the new materials library. Steps use SR Classic cut to 3¾\" + Pro Cap Max for a 7½\" rise."), 600);
   }
 }
-renderJobPane(); renderMaterials(); renderEstFields(); renderCompany(); renderItemPane(); renderList(); renderQuote();
+renderJobPane(); renderMaterials(); renderEstFields(); renderCompany(); renderCsvMap(); renderItemPane(); renderList(); renderQuote();
 $("jobTitle").textContent = job.name || "";
 requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); });
 document.fonts && document.fonts.ready.then(drawPlan);

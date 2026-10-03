@@ -21,7 +21,11 @@ stonework jobs: block steps, landings, retaining walls, walkways and patios.
   drain rock, bedding sand, polymeric sand, adhesive), labour from production rates,
   equipment, delivery, disposal, contingency, overhead and profit, GST and PST, and deposit.
   Save a client quote page (with the rendering and blueprint, prints to PDF) or export the
-  line items as CSV or JSON for accounting and job-management apps.
+  line items as CSV or JSON.
+- **Ledgerline**: **Export to Ledgerline (CSV)** on the Quote tab, then in Ledgerline go to
+  Estimates → **Import CSV**. The quote becomes a Ledgerline estimate with the client, every
+  line (labour / materials, units, taxable), GST as the tax rate and PST on materials as its
+  own line, so the totals match to the cent. The columns can be remapped for other apps.
 - **AI assistant**: describe the job in plain words or attach a photo of your sketch; Claude
   draws a new layout or revises the current one with the materials you name.
 - **Checks**: riser height, tread depth, width, first-riser match, cap/riser fit, handrails,
