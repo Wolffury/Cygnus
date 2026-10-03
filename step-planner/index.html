@@ -711,7 +711,7 @@ function stepCalc(it) {
   const cfg = it.config || "straight";
   const wrapL = (cfg === "wrapL" || cfg === "wrapLR") && !cheekL, wrapR = (cfg === "wrapR" || cfg === "wrapLR") && !cheekR;
   const pieces = [], fills = [];
-  const t = { blocks: 0, blockCuts: 0, caps: 0, capCuts: 0, cheekBlocks: 0, cheekCuts: 0, cheekCaps: 0 };
+  const t = { blocks: 0, blockCuts: 0, caps: 0, capCuts: 0, cheekBlocks: 0, cheekCuts: 0, cheekCaps: 0, cheekFace: 0 };
   let infillArea = 0, minTopWidth = Infinity;
   const add = (kind, step, x0, x1, y0, y1, z0, z1, cut) => {
     if (x1 - x0 < 0.2 || y1 - y0 < 0.2) return;
@@ -741,14 +741,19 @@ function stepCalc(it) {
     // compacted fill under the next steps, behind this riser
     if (i > 0 && z0 > Math.min(0, base)) fills.push({ x0: xl + 0.4, x1: xr - 0.4, y0: Y + over + 0.4, y1: yEnd - 0.4, z0: Math.min(0, base) + E, z1: z0 + E });
   }
-  if (E > 0) fills.push({ x0: -it.w / 2, x1: it.w / 2, y0: -run / 2 + over, y1: yEnd, z0: 0, z1: E + Math.min(0, base) });
+  // ground under the middle of the flight; a flight that starts above it sits on compacted fill
+  const gC = (() => { const a = rotPt(it, 0, 0); return natGround(a.x, a.y); })(), fillUnder = Math.max(0, E - gC);
+  if (E + Math.min(0, base) > gC + 0.5) fills.push({ x0: -it.w / 2, x1: it.w / 2, y0: -run / 2 + over, y1: yEnd, z0: gC, z1: E + Math.min(0, base) });
   // cheek walls: block courses beside the stair, stepping up with it, topped with caps
   const cw = D, above = it.cheekAbove ?? 8;
   for (const side of [cheekL ? -1 : 0, cheekR ? 1 : 0].filter(Boolean)) {
     const x0 = side < 0 ? -it.w / 2 - cw : it.w / 2, x1 = x0 + cw;
     for (let i = 0; i < count; i++) {
       const y0 = i === 0 ? -run / 2 + over : -run / 2 + i * tread + over, y1 = i === count - 1 ? yEnd : -run / 2 + (i + 1) * tread + over;
-      const topZ = base + i * H + bH + capH + above, blockTop = topZ - capH, bottom = Math.min(0, base) - E; // down to grade even when the flight starts higher
+      // down to the natural ground beside this step (plus the flight's bottom-course depth), even when the flight starts higher
+      const gp = rotPt(it, (x0 + x1) / 2, (y0 + y1) / 2);
+      const topZ = base + i * H + bH + capH + above, blockTop = topZ - capH, bottom = Math.min(0, base) + natGround(gp.x, gp.y) - E;
+      t.cheekFace += Math.max(0, blockTop - bottom) * (y1 - y0);
       for (let z = bottom, k = 0; z < blockTop - 0.1; z += P.H, k++) {
         const zt = Math.min(z + P.H, blockTop), cutH = zt - z < P.H - 0.05;
         for (const [a, b, cut] of along(y0, y1, L, k % 2 ? L / 2 : 0)) add("cheek", i, x0, x1, a, b, z, zt, cut || cutH);
@@ -777,7 +782,7 @@ function stepCalc(it) {
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
   const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
-  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
+  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillUnder, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
 }
 function wallCalc(it) {
   const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
@@ -857,6 +862,15 @@ function terrainAt(x, y) {
   for (const p of pts) { const d2 = (p[0] - x) ** 2 + (p[1] - y) ** 2; if (d2 < 1e-6) return p[2]; if (near.length < 10) { near.push([d2, p[2]]); near.sort((a, b) => a[0] - b[0]); } else if (d2 < near[9][0]) { near[9] = [d2, p[2]]; near.sort((a, b) => a[0] - b[0]); } }
   let sw = 0, sz = 0; for (const [d2, z] of near) { const w = 1 / d2; sw += w; sz += w * z; } return sz / sw;
 }
+// Natural ground under a point (before any digging), memoised per inch; 0 when the job has no contours or spot heights.
+let natMemo = { key: null, m: new Map() };
+function natGround(x, y) {
+  if (!terrainSamples().length) return 0;
+  if (natMemo.key !== terrainCache.key) natMemo = { key: terrainCache.key, m: new Map() };
+  const k = Math.round(x) + "," + Math.round(y); let z = natMemo.m.get(k);
+  if (z === undefined) { z = terrainAt(x, y); if (natMemo.m.size > 50000) natMemo.m.clear(); natMemo.m.set(k, z); }
+  return z;
+}
 const fmtElev = (z) => (z < -0.06 ? "−" : "+") + fmtLen(Math.abs(z));
 function waterLevel() { const sh = job.items.find((i) => i.type === "shore"); return sh ? sh.water || 0 : null; }
 
@@ -887,11 +901,14 @@ function landingCalc(it) {
   const s = mat(it.surface), edged = it.edge === "caps";
   const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
   const capH = edged && c ? c.H : 0, capD = edged && c ? c.D : 0;
-  const courses = edged ? Math.max(1, Math.ceil((it.h - capH) / b.H)) : 0;
+  // walls start on the natural ground (average of the centre and corners), so a terrace on a slope is only as tall as it stands above it
+  const g = [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]].reduce((a, [sx, sy]) => { const q = rotPt(it, sx * it.w / 2, sy * it.d / 2); return a + natGround(q.x, q.y); }, 0) / 5;
+  const z0 = Math.min(g, it.h - capH - 0.5);
+  const courses = edged ? Math.max(1, Math.ceil((it.h - capH - z0) / b.H)) : 0;
   const perim = 2 * (it.w + it.d);
   const blocks = edged ? Math.ceil(perim / b.L) * courses : 0, caps = edged && c ? Math.ceil(perim / c.L) : 0;
   const inW = Math.max(0, it.w - 2 * capD), inD = Math.max(0, it.d - 2 * capD);
-  return { s, b, c, edged, capH, capD, courses, blocks, caps, inW, inD, area: inW * inD };
+  return { s, b, c, edged, capH, capD, courses, blocks, caps, inW, inD, area: inW * inD, z0 };
 }
 
 // ---------- blueprint styles: drawn in blueprint colours, restyled with a filter (cheap on screen, same for print) ----------
@@ -1946,9 +1963,9 @@ function takeoff() {
       base(c.xw * c.run, Math.max(0, -c.base));
       // compacted fill behind each riser above the first, plus fill under a flight that starts above grade
       let fill = 0; c.xs.forEach(([xl, xr], i) => { if (i > 0) fill += (xr - xl) * (c.run / 2 - (-c.run / 2 + i * it.tread + c.over)) * c.H; });
-      if (c.E > 0) fill += it.w * c.run * c.E;
+      fill += it.w * c.run * c.fillUnder;
       w.baseTon += yd3(fill) * TON_PER_YD;
-      if (c.cheekL || c.cheekR) w.drainYd += yd3(((c.cheekL ? 1 : 0) + (c.cheekR ? 1 : 0)) * c.run * 12 * (c.top - c.E));
+      if (c.cheekL || c.cheekR) w.drainYd += yd3(c.t.cheekFace * 12);
     } else if (it.type === "wall") {
       const wc = wallCalc(it);
       addM(it.block, it.color, wc.blocks, use); w.wallBlocks += wc.blocks;
@@ -1961,7 +1978,7 @@ function takeoff() {
         addM(it.block, it.blockColor, lc.blocks, use); w.wallBlocks += lc.blocks;
         if (lc.c) { addM(it.cap, it.capColor, lc.caps, use); w.caps += lc.caps; w.adhesiveCaps += lc.caps; }
         const sH = lc.s ? lc.s.H : 2.375;
-        w.baseTon += yd3(lc.inW * lc.inD * Math.max(0, it.h - sH - 1)) * TON_PER_YD;
+        w.baseTon += yd3(lc.inW * lc.inD * Math.max(0, it.h - lc.z0 - sH - 1)) * TON_PER_YD;
         surface(it.surface, it.color, lc.area, use);
       } else surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
@@ -2873,7 +2890,7 @@ function build3d() {
         if (lc.edged) {
           const bm = blockMat(it.blockColor), cm = blockMat(it.capColor, true), bH = lc.b.H, top = it.h;
           const sides = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + lc.b.D], [-it.w / 2, it.d / 2 - lc.b.D, it.w / 2, it.d / 2], [-it.w / 2, -it.d / 2 + lc.b.D, -it.w / 2 + lc.b.D, it.d / 2 - lc.b.D], [it.w / 2 - lc.b.D, -it.d / 2 + lc.b.D, it.w / 2, it.d / 2 - lc.b.D]];
-          for (let k = 0, z = 0; k < lc.courses; k++, z += bH) {
+          for (let k = 0, z = lc.z0; k < lc.courses; k++, z += bH) {
             const zt = Math.min(z + bH, top - lc.capH);
             sides.forEach(([x0, y0, x1, y1], si) => { const horiz = si < 2; const len = horiz ? x1 - x0 : y1 - y0; for (const [a, b] of along(horiz ? x0 : y0, horiz ? x1 : y1, lc.b.L, k % 2 ? lc.b.L / 2 : 0)) placeBox(it, horiz ? { x0: a, x1: b, y0, y1, z0: z, z1: zt } : { x0, x1, y0: a, y1: b, z0: z, z1: zt }, bm); void len; });
           }
@@ -2882,7 +2899,7 @@ function build3d() {
             const rim = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + cd, true], [-it.w / 2, it.d / 2 - cd, it.w / 2, it.d / 2, true], [-it.w / 2, -it.d / 2 + cd, -it.w / 2 + cd, it.d / 2 - cd, false], [it.w / 2 - cd, -it.d / 2 + cd, it.w / 2, it.d / 2 - cd, false]];
             for (const [x0, y0, x1, y1, horiz] of rim) for (const [a, b] of along(horiz ? x0 : y0, horiz ? x1 : y1, lc.c.L, 0)) placeBox(it, horiz ? { x0: a, x1: b, y0, y1, z0: top - lc.capH, z1: top } : { x0, x1, y0: a, y1: b, z0: top - lc.capH, z1: top }, cm, 0.2);
           }
-          const fill = box(lc.inW - 0.5, Math.max(0.1, top - sH), lc.inD - 0.5, mSoil); fill.castShadow = false; place(fill, it, 0, 0, (top - sH) / 2);
+          const fill = box(lc.inW - 0.5, Math.max(0.1, top - sH - lc.z0), lc.inD - 0.5, mSoil); fill.castShadow = false; place(fill, it, 0, 0, (top - sH + lc.z0) / 2);
           const s = surfaceMesh(sm, it.color, lc.inW, lc.inD, sH); place(s, it, 0, 0, top - sH / 2);
         } else {
           const fill = box(it.w, Math.max(0.1, it.h - sH), it.d, mSoil); place(fill, it, 0, 0, (it.h - sH) / 2);
