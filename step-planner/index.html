@@ -708,7 +708,7 @@ function stepCalc(it) {
   const E = it.elev || 0, base = it.base || 0, tread = it.tread;
   const count = clamp(Math.round(((it.rise || 0) - base - bH - capH) / H) + 1, 1, 60);
   const run = (count - 1) * tread + Math.max(capD, over + D), yEnd = run / 2;
-  const cheek = it.cheek || "none", cheekL = cheek === "left" || cheek === "both", cheekR = cheek === "right" || cheek === "both";
+  const cheek = it.cheek || "none", cheekL = cheek === "left" || cheek === "both", cheekR = cheek === "right" || cheek === "both", under = cheek === "under";
   const cfg = it.config || "straight";
   const wrapL = (cfg === "wrapL" || cfg === "wrapLR") && !cheekL, wrapR = (cfg === "wrapR" || cfg === "wrapLR") && !cheekR;
   const pieces = [], fills = [];
@@ -719,7 +719,7 @@ function stepCalc(it) {
     pieces.push({ kind, step, x0, x1, y0, y1, z0: z0 + E, z1: z1 + E, cut });
     if (kind === "block") { t.blocks++; if (cut) t.blockCuts++; }
     else if (kind === "cap") { t.caps++; if (cut) t.capCuts++; }
-    else if (kind === "cheek") { t.cheekBlocks++; if (cut) t.cheekCuts++; }
+    else if (kind === "cheek" || kind === "edge") { t.cheekBlocks++; if (cut) t.cheekCuts++; }
     else if (kind === "cheekcap") t.cheekCaps++;
   };
   const xs = [];
@@ -747,7 +747,28 @@ function stepCalc(it) {
   for (let j = 0; j < xs.length; j++) {
     const [xl, xr] = xs[j], y0 = -run / 2 + j * tread + over, y1 = j < xs.length - 1 ? -run / 2 + (j + 1) * tread + over : yEnd;
     const gp = rotPt(it, (xl + xr) / 2, (y0 + y1) / 2), top = colTop(j), bottom = Math.min(natGround(gp.x, gp.y) + Math.min(0, base), top);
-    if (top - bottom > 0.1) { fills.push({ x0: xl + 0.4, x1: xr - 0.4, y0: y0 + 0.4, y1: y1 - 0.4, z0: bottom, z1: top, col: j }); fillVol += (xr - xl) * (y1 - y0) * (top - bottom); }
+    const fx0 = under ? xl + D : xl, fx1 = under ? xr - D : xr; // walls under the edges take the outer strips
+    if (top - bottom > 0.1 && fx1 > fx0) { fills.push({ x0: fx0 + 0.4, x1: fx1 - 0.4, y0: y0 + 0.4, y1: y1 - 0.4, z0: bottom, z1: top, col: j }); fillVol += (fx1 - fx0) * (y1 - y0) * (top - bottom); }
+  }
+  // Walls under the step edges: block courses along each side, inside the stair width, from the ground up to the underside
+  // of each riser. They carry the edges of the steps where the steps stand above the ground and are hidden under the treads.
+  if (under) {
+    const cols = xs.map((xx, j) => ({ j, y0: -run / 2 + j * tread + over, y1: j < xs.length - 1 ? -run / 2 + (j + 1) * tread + over : yEnd, top: colTop(j) - E }));
+    for (const sd of [-1, 1]) {
+      const X0 = sd < 0 ? -it.w / 2 : it.w / 2 - D, X1 = X0 + D;
+      const bots = cols.map((c) => { const gp = rotPt(it, (X0 + X1) / 2, (c.y0 + c.y1) / 2); return Math.min(0, base) + natGround(gp.x, gp.y) - E; });
+      const maxTop = Math.max(...cols.map((c) => c.top));
+      for (let k = 0, z = Math.min(...bots); k < 80 && z < maxTop - 0.1; k++, z += P.H) {
+        let span = null;
+        const flush = () => { if (span) for (const [a, b, cut] of along(span[0], span[1], L, k % 2 ? L / 2 : 0)) add("edge", span[2], X0, X1, a, b, z, z + P.H, cut); span = null; };
+        cols.forEach((c, i) => {
+          if (!(bots[i] < z + P.H - 0.1 && c.top > z + 0.1)) { flush(); return; } // ground above this course, or the riser sits lower
+          if (c.top >= z + P.H - 0.05) { if (span && Math.abs(span[1] - c.y0) < 0.5) span[1] = c.y1; else { flush(); span = [c.y0, c.y1, c.j]; } }
+          else { flush(); add("edge", c.j, X0, X1, c.y0, c.y1, z, c.top, true); } // top course cut down to meet the riser
+        });
+        flush();
+      }
+    }
   }
   const gC = (() => { const a = rotPt(it, 0, 0); return natGround(a.x, a.y); })();
   // cheek walls: block courses beside the stair, stepping up with it, topped with caps
@@ -788,7 +809,7 @@ function stepCalc(it) {
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
   const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
-  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
+  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, under, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
 }
 function wallCalc(it) {
   const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
@@ -1828,7 +1849,7 @@ function selectField(lbl, key, it, options) {
 const matOptions = (kinds, none) => (none ? [["", none]] : []).concat(matsOfKinds(kinds).map((m) => [m.id, `${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)}`]));
 const colorOptions = (id) => ((mat(id) && mat(id).colors) || ["Grey"]).map((c) => [c, c]);
 const CONFIGS = [["straight", "Straight"], ["wrapL", "Wrap left side"], ["wrapR", "Wrap right side"], ["wrapLR", "Wrap both sides (pyramid)"]];
-const CHEEKS = [["none", "None"], ["left", "Left"], ["right", "Right"], ["both", "Both sides"]];
+const CHEEKS = [["none", "None"], ["under", "Under the step edges (inside the width)"], ["left", "Left"], ["right", "Right"], ["both", "Both sides"]];
 const STAGGER = [["half", "Half-block stagger"], ["none", "Stacked joints"]];
 const EDGES = [["caps", "Block walls with cap border"], ["none", "Surface only (on grade or fill)"]];
 
@@ -1857,7 +1878,7 @@ function renderItemPane() {
       ${it.cap ? field("Cap overhang", "capOver", it) + field("Rise per step (cut block + cap, 0 = full block)", "stepRise", it) : ""}
       ${selectField("Joints", "stagger", it, STAGGER)}${it.cap ? selectField("Tread infill (if any)", "infill", it, matOptions(["paver", "slab", "surface"])) : "<span></span>"}
       </div>`;
-    h += `<h3>Configuration</h3><div class="grid2">${selectField("Shape", "config", it, CONFIGS)}${selectField("Cheek walls", "cheek", it, CHEEKS)}${it.cheek && it.cheek !== "none" ? field("Cheek wall above tread", "cheekAbove", it) : ""}</div>`;
+    h += `<h3>Configuration</h3><div class="grid2">${selectField("Shape", "config", it, CONFIGS)}${selectField("Cheek walls", "cheek", it, CHEEKS)}${it.cheek && it.cheek !== "none" && it.cheek !== "under" ? field("Cheek wall above tread", "cheekAbove", it) : ""}</div>`;
     h += `<dl class="stats"><div><dt>Risers</dt><dd>${c.count} × ${fmtIn(c.H)}</dd></div><div><dt>Total run</dt><dd>${fmtLen(c.run)}</dd></div>
       <div><dt>Blocks</dt><dd>${c.t.blocks} (${c.cutting ? "all cut" : c.t.blockCuts + " cut"})</dd></div><div><dt>Caps</dt><dd>${c.cap ? c.t.caps + " (" + c.t.capCuts + " cut)" : "–"}</dd></div>
       ${c.cheekL || c.cheekR ? `<div><dt>Cheek wall blocks</dt><dd>${c.t.cheekBlocks}</dd></div><div><dt>Cheek wall caps</dt><dd>${c.t.cheekCaps}</dd></div>` : ""}
@@ -2976,6 +2997,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
       // riser blocks and caps cut through the middle
       const pick = (kind) => { const m = new Map(); for (const q of c.pieces) if (q.kind === kind) { const o = m.get(q.step); if (!o || Math.abs((q.x0 + q.x1) / 2) < Math.abs((o.x0 + o.x1) / 2)) m.set(q.step, q); } return [...m.values()]; };
       for (const q of pick("infill")) stonesIn(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off) - X0(q.y0 + off), Z(q.z0) - Z(q.z1), "#b9b1a2", seed + 7, Math.max(1, sc * 0.6));
+      for (const q of c.pieces.filter((q) => q.kind === "edge" && q.x0 >= 0)) unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), shade(blockHex, 0.93), sc * 3);
       const blocks = pick("block"), caps = pick("cap");
       for (const q of blocks) unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), blockHex, sc * 3);
       for (const q of caps) unitBox(ctx, X0(q.y0 + off), Z(q.z1), X0(q.y1 + off), Z(q.z0), capHex, sc * 3);
@@ -3029,6 +3051,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
       if (!c.fills.length || c.fills.length < c.count) { const j = c.count - 1, y = -c.run / 2 + j * it.tread + c.over + 6; if (!c.fills.some((q) => q.col === j)) callout(ctx, "Native soil: the step sits on a\nbench dug into the bank", P(L.el.d0 + y + L.off, 0)[0] + 40 * u, P(0, c.colTop(j))[1] + 70 * u, P(L.el.d0 + y + L.off, 0)[0], P(0, c.colTop(j) - est.baseDepth - 8)[1], u); }
       const bz = P(0, c.colTop(0) - est.baseDepth / 2)[1], bx = P(L.el.d0 + c.over + 6, 0)[0];
       callout(ctx, `Gravel base ${fmtIn(est.baseDepth)} deep`, bx + 60 * u, bz + 30 * u, bx, bz, u);
+      if (c.under) { const qs = c.pieces.filter((p) => p.kind === "edge" && p.x0 >= 0).sort((a, b) => (b.z1 - b.z0) * (b.y1 - b.y0) - (a.z1 - a.z0) * (a.y1 - a.y0)); const q = qs[0]; if (q) callout(ctx, `Block wall under the step edges\n(hidden under the treads, ${plainLen(it.w)} wide overall)`, P(L.el.d0 + c.run, 0)[0] - 10 * u, P(0, c.top)[1] - 50 * u, P(L.el.d0 + (q.y0 + q.y1) / 2 + L.off, 0)[0], P(0, (q.z0 + q.z1) / 2)[1], u, "right"); }
       if (c.cheekL || c.cheekR) { const q = c.pieces.find((p) => p.kind === "cheek" && p.step === c.count - 1); if (q) callout(ctx, "Side wall (cheek wall), seen behind", P(L.el.d0 + c.run, 0)[0] - 10 * u, P(0, c.top)[1] - 50 * u, P(L.el.d0 + (q.y0 + q.y1) / 2 + L.off, 0)[0], P(0, (q.z0 + q.z1) / 2)[1], u, "right"); }
       // step height and tread depth on one step
       if (bq && cq) {
@@ -3341,7 +3364,7 @@ x,y is always the CENTER of an item. Material fields take an id from the materia
 Item types:
 - steps: {"type":"steps","x","y","w": stair width,"rise": rise of this flight,"elev": elevation the flight starts at (0 at grade, or a landing's height),"rot","label",
     "block": riser block id (kind block or solid),"color","cap": cap/slab id or "" for none,"capColor","stepRise": inches per step when blocks are cut so block + cap = rise (0 = full block),
-    "config": "straight" | "wrapL" | "wrapR" | "wrapLR" (steps wrap around the sides, pyramid style),"cheek": "none" | "left" | "right" | "both" (block cheek walls beside the stair)}
+    "config": "straight" | "wrapL" | "wrapR" | "wrapLR" (steps wrap around the sides, pyramid style),"cheek": "none" | "under" | "left" | "right" | "both" (block side walls: "under" = hidden under the step edges, inside the stair width, from the ground up to each riser; left/right/both = cheek walls outside the stair)}
   Leave out tread and base; the app sets them. A flight's run is about (risers - 1) × 11 + 13 inches with 12" caps.
 - landing: {"type":"landing","x","y","w","d","h": top elevation,"rot","label","surface","color","edge": "caps" (block walls with cap border) or "none","block","blockColor","cap","capColor"}
 - path: {"type":"path","x","y","w","d","rot","label","surface","color"} walkway or patio at ground level
