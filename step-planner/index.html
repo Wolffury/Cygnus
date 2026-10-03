@@ -854,7 +854,13 @@ function segDist(px, py, ax, ay, bx, by) {
 function hitTest(px, py) {
   const order = drawOrder().slice().reverse();
   for (const it of order) {
-    if (it.type === "dim" || it.type === "cut") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= 12 / view2d.s) return it; continue; }
+    if (it.type === "dim" || it.type === "cut") {
+      // a measurement is drawn off to the side of the points it measures: grab it by the line you see (or its number), finger-sized
+      const tol = 22 / view2d.s, len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), off = it.type === "dim" ? it.off ?? 12 : 0;
+      const fr = { x: it.x, y: it.y, rot: -ang * 180 / Math.PI }, a = rotPt(fr, 0, off), b = rotPt(fr, len, off);
+      if (segDist(px, py, a.x, a.y, b.x, b.y) <= tol || segDist(px, py, it.x, it.y, it.x2, it.y2) <= tol) return it;
+      continue;
+    }
     if (it.type === "spot") { if (Math.hypot(px - it.x, py - it.y) <= 16 / view2d.s) return it; continue; }
     if (it.type === "rail") { const a = rotPt(it, -it.w / 2, 0), b = rotPt(it, it.w / 2, 0); if (segDist(px, py, a.x, a.y, b.x, b.y) <= Math.max(it.d / 2, 12 / view2d.s)) return it; continue; }
     if (LINE_TYPES.has(it.type)) { const t = 12 / view2d.s; for (let k = 1; k < it.pts.length; k++) if (segDist(px, py, ...it.pts[k - 1], ...it.pts[k]) <= t) return it; continue; }
