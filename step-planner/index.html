@@ -2291,7 +2291,7 @@ function estimate() {
   L("Materials", "Bedding sand", ceilTo(w.sandYd, 0.25), "yd³", E.sandPerYd);
   L("Materials", "Polymeric joint sand", Math.ceil(w.polySqft / 60), "bag", E.polyBag);
   const rw = 1 + E.waste / 100;
-  L("Materials", "Plastic gravel edging", Math.ceil(w.edgeFt * rw), "ft", E.edgePerFt);
+  L("Materials", "Plastic edging (holds pavers or gravel)", Math.ceil(w.edgeFt * rw), "ft", E.edgePerFt);
   L("Materials", "Edging spikes (one per foot)", Math.ceil(w.edgeFt), "ea", E.edgeSpike);
   L("Materials", "Handrail cap rail, 2x6 (top)", Math.ceil(w.railFt * rw), "ft", E.railTopPerFt);
   L("Materials", "Handrail rail, 2x4", Math.ceil(w.railFt * rw), "ft", E.railPerFt);
