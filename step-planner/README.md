@@ -16,6 +16,18 @@ A tablet app (Android or any modern browser) for laying out concrete block step 
 - **Export sheet**: a 17 × 11 blueprint PNG with plan, sections and material schedule.
 - Jobs save on the tablet; export/import job files to move them between devices.
 
+## Block product
+
+The default product is **Abbotsford Concrete SR Classic 6° (Grey)** wall block with
+**18" Pro Cap Max (Grey)** caps, built Allan Block style:
+
+- Each step's riser is one course of SR Classic (18" × 12" × 7⅝").
+- A row of Pro Cap Max caps (18" × 12" × 3¾") forms the tread, with a 1" nosing overhang.
+- The next riser sits snug against the back of the cap, with its bottom level with the top of the blocks below.
+- The bottom course is buried by the cap height (3¾") so every riser is the same height.
+
+All sizes can be edited on the Job tab. Check them against your supplier's spec sheet.
+
 ## Put it on an Android tablet
 
 1. Host this folder on any HTTPS static host (GitHub Pages works: Settings → Pages →

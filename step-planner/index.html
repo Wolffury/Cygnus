@@ -239,11 +239,17 @@ textarea { resize: vertical; }
         <div class="grid2">
           <label class="f">Block length <input class="dim" id="jBL"></label>
           <label class="f">Block depth <input class="dim" id="jBD"></label>
-          <label class="f">Block height <input class="dim" id="jBH"></label>
+          <label class="f">Block height (riser) <input class="dim" id="jBH"></label>
+          <label class="f">Wall setback ° <input id="jSet" inputmode="decimal"></label>
+          <label class="f">Cap length <input class="dim" id="jCL"></label>
+          <label class="f">Cap depth (tread) <input class="dim" id="jCD"></label>
+          <label class="f">Cap height <input class="dim" id="jCH"></label>
+          <label class="f">Cap overhang <input class="dim" id="jCO"></label>
           <label class="f">Joint stagger
             <select id="jStagger"><option value="half">Half block</option><option value="none">Stacked</option></select>
           </label>
         </div>
+        <p class="note">Cap height 0 means solid step blocks with no cap. Check the sizes against your supplier's spec sheet.</p>
         <div class="swatch"><input type="color" id="jColor" aria-label="Block color"><span class="note">Block color in renderings</span></div>
         <h3>Site</h3>
         <div class="grid2">
@@ -303,27 +309,28 @@ function parseLen(s) {
   const n = parseFloat(s);
   return isNaN(n) ? NaN : n;
 }
+const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"];
 function fmtLen(inches) {
   if (!isFinite(inches)) return "–";
-  const neg = inches < 0; inches = Math.abs(inches);
-  let q = Math.round(inches * 4) / 4; // quarter inch
-  let ft = Math.floor(q / 12 + 1e-9), inch = q - ft * 12;
-  const whole = Math.floor(inch + 1e-9), frac = inch - whole;
-  const fr = frac > 0.7 ? "¾" : frac > 0.4 ? "½" : frac > 0.1 ? "¼" : "";
+  const neg = inches < 0;
+  const q = Math.round(Math.abs(inches) * 8); // nearest eighth
+  const ft = Math.floor(q / 96), rem = q - ft * 96, whole = Math.floor(rem / 8), fr = EIGHTHS[rem % 8];
   const inStr = (whole || !fr ? whole : "") + fr + '"';
   return (neg ? "-" : "") + (ft ? ft + "' " + inStr : inStr);
 }
-const fmtIn = (v) => (Math.round(v * 4) / 4).toString().replace(/\.25$/, "¼").replace(/\.5$/, "½").replace(/\.75$/, "¾") + '"';
+function fmtIn(v) { const q = Math.round(Math.abs(v) * 8), fr = EIGHTHS[q % 8], w = Math.floor(q / 8); return (v < 0 ? "-" : "") + (w || !fr ? w : "") + fr + '"'; }
 
 // ---------- data ----------
+// Block + cap systems build each step from a riser course of wall block with caps as the tread.
 const PRESETS = [
-  { name: "Standard step block 48 × 14 × 6", L: 48, D: 14, H: 6 },
-  { name: "Step block 48 × 16 × 7", L: 48, D: 16, H: 7 },
-  { name: "Step block 36 × 14 × 6", L: 36, D: 14, H: 6 },
-  { name: "Step block 72 × 18 × 7", L: 72, D: 18, H: 7 },
-  { name: "Wall block 18 × 12 × 6", L: 18, D: 12, H: 6 },
+  { name: "Abbotsford SR Classic 6° Grey + 18\" Pro Cap Max Grey", L: 18, D: 12, H: 7.625, setback: 6, capL: 18, capD: 12, capH: 3.75, capOver: 1, color: "#9c9b97" },
+  { name: "Solid step block 48 × 14 × 6", L: 48, D: 14, H: 6, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
+  { name: "Solid step block 48 × 16 × 7", L: 48, D: 16, H: 7, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
+  { name: "Solid step block 72 × 18 × 7", L: 72, D: 18, H: 7, setback: 0, capL: 0, capD: 0, capH: 0, capOver: 0 },
   { name: "Custom", L: null },
 ];
+const PRODUCT_KEYS = ["L", "D", "H", "setback", "capL", "capD", "capH", "capOver"];
+function presetProduct(p) { const o = { name: p.name, stagger: "half", color: p.color || "#a8a39a" }; for (const k of PRODUCT_KEYS) o[k] = p[k]; return o; }
 const TYPE_INFO = {
   steps: { label: "Block steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
@@ -336,12 +343,12 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 function defaults(type, x, y) {
   const b = { id: newId(), type, x, y, rot: 0, label: "" };
   switch (type) {
-    case "steps": return { ...b, w: 48, rise: 24, tread: 12, base: 0 };
-    case "landing": return { ...b, w: 60, d: 48, h: 24 };
+    case "steps": return { ...b, w: 48, rise: 23, tread: defaultTread(job ? job.product : PRESETS[0]), base: defaultBase(job ? job.product : PRESETS[0]) };
+    case "landing": return { ...b, w: 60, d: 48, h: 23 };
     case "path": return { ...b, w: 48, d: 120, material: "pavers" };
-    case "wall": return { ...b, w: 120, d: 12, h: 24 };
+    case "wall": return { ...b, w: 120, d: 12, h: 23 };
     case "house": return { ...b, w: 360, d: 240, h: 108, label: "House" };
-    case "grade": return { ...b, w: 240, d: 120, h: 24, label: "Upper lawn" };
+    case "grade": return { ...b, w: 240, d: 120, h: 23, label: "Upper lawn" };
     case "tree": return { ...b, canopy: 240, height: 300, trunk: 12, label: "Oak" };
     case "evergreen": return { ...b, canopy: 120, height: 300, trunk: 10, label: "Spruce" };
     case "shrub": return { ...b, canopy: 36, height: 30, label: "Shrub" };
@@ -353,24 +360,24 @@ function defaults(type, x, y) {
 function sampleJob() {
   return {
     v: 1, name: "Front entry steps", client: "Example client", address: "", notes: "Example layout. Replace with your measurements.",
-    product: { name: PRESETS[0].name, L: 48, D: 14, H: 6, color: "#a8a39a", stagger: "half" },
+    product: presetProduct(PRESETS[0]),
     site: { w: 480, d: 420 },
     items: [
       { id: "h1", type: "house", x: 240, y: 360, w: 420, d: 120, rot: 0, h: 108, label: "House" },
-      { id: "g1", type: "grade", x: 240, y: 262, w: 480, d: 76, rot: 0, h: 24, label: "Front lawn (upper)" },
-      { id: "l1", type: "landing", x: 240, y: 252, w: 72, d: 56, rot: 0, h: 24, label: "Top landing" },
-      { id: "s1", type: "steps", x: 240, y: 199, w: 72, rise: 24, tread: 12, base: 0, rot: 0, label: "Entry steps" },
-      { id: "p1", type: "path", x: 240, y: 105, w: 48, d: 138, rot: 0, material: "pavers", label: "Walk to drive" },
+      { id: "g1", type: "grade", x: 240, y: 262, w: 480, d: 76, rot: 0, h: 22.875, label: "Front lawn (upper)" },
+      { id: "l1", type: "landing", x: 240, y: 252, w: 72, d: 56, rot: 0, h: 22.875, label: "Top landing" },
+      { id: "s1", type: "steps", x: 240, y: 207, w: 72, rise: 22.875, tread: 11, base: -3.75, rot: 0, label: "Entry steps" },
+      { id: "p1", type: "path", x: 240, y: 112, w: 48, d: 152, rot: 0, material: "pavers", label: "Walk to drive" },
       { id: "t1", type: "tree", x: 92, y: 168, canopy: 216, height: 300, trunk: 14, rot: 0, label: "Red maple" },
       { id: "e1", type: "evergreen", x: 420, y: 60, canopy: 96, height: 240, trunk: 10, rot: 0, label: "Blue spruce" },
-      { id: "b1", type: "shrub", x: 186, y: 196, canopy: 30, height: 28, rot: 0, label: "Boxwood" },
-      { id: "b2", type: "shrub", x: 294, y: 196, canopy: 30, height: 28, rot: 0, label: "Boxwood" },
+      { id: "b1", type: "shrub", x: 186, y: 200, canopy: 30, height: 28, rot: 0, label: "Boxwood" },
+      { id: "b2", type: "shrub", x: 294, y: 200, canopy: 30, height: 28, rot: 0, label: "Boxwood" },
       { id: "r1", type: "rock", x: 330, y: 150, canopy: 34, height: 20, rot: 0, label: "" },
     ],
   };
 }
 
-let job = store.get("bsp.current", null) || sampleJob();
+let job = sampleJob();
 let selId = null;
 const undoStack = [];
 function snapshot() { undoStack.push(JSON.stringify(job)); if (undoStack.length > 60) undoStack.shift(); }
@@ -384,38 +391,52 @@ function commit(opts = {}) {
 }
 
 // ---------- step geometry ----------
+// Steps are riser courses of wall block. When the product has a cap, each riser gets a row of caps as its tread
+// and the next riser sits snug against the back of that cap, its bottom level with the top of the blocks below
+// (Allan Block style). Without a cap, each solid step block overlaps the one below.
+function segs(width, len, offset) {
+  const out = []; let x = -width / 2, first = offset > 0.01 ? offset : len;
+  while (x < width / 2 - 0.01) { const l = Math.min(out.length ? len : first, width / 2 - x); out.push([x, x + l, l < len - 0.01]); x += l; }
+  return out;
+}
+function hasCap(P) { return (P.capH || 0) > 0; }
+function defaultTread(P) { return hasCap(P) ? Math.max(10, (P.capD || 12) - (P.capOver || 0)) : 12; }
+function defaultBase(P) { return hasCap(P) ? -P.capH : 0; }
 function stepCalc(it) {
-  const P = job.product;
-  const H = P.H, D = P.D, L = P.L;
-  const count = Math.max(1, Math.round((it.rise || 0) / H));
-  const tread = it.tread;
-  const run = (count - 1) * tread + D;
-  const blocks = []; // local coords: x across, y up the run (front of bottom step at y = -run/2)
-  let full = 0, cuts = 0;
+  const P = job.product, H = P.H, D = P.D, L = P.L, cap = hasCap(P);
+  const capH = cap ? P.capH : 0, capD = cap ? P.capD : 0, capL = cap ? P.capL : 0, over = cap ? (P.capOver || 0) : 0;
+  const base = it.base || 0, tread = it.tread;
+  const count = Math.max(1, Math.round(((it.rise || 0) - base - capH) / H));
+  const run = (count - 1) * tread + Math.max(capD, over + D);
+  const blocks = [], caps = [], infill = []; // local coords: x across, y up the run (nosing of bottom step at y = -run/2)
+  let full = 0, cuts = 0, capFull = 0, capCuts = 0, infillArea = 0;
   for (let i = 0; i < count; i++) {
-    const y0 = -run / 2 + i * tread;
-    let x = -it.w / 2;
-    let first = (P.stagger === "half" && i % 2) ? L / 2 : L;
-    let seg = 0;
-    while (x < it.w / 2 - 0.01) {
-      const len = Math.min(seg === 0 ? first : L, it.w / 2 - x);
-      const isCut = len < L - 0.01;
-      isCut ? cuts++ : full++;
-      blocks.push({ step: i, x0: x, x1: x + len, y0, y1: y0 + D, z0: it.base + i * H, z1: it.base + (i + 1) * H, cut: isCut });
-      x += len; seg++;
+    const Y = -run / 2 + i * tread, z0 = base + i * H, z1 = z0 + H;
+    const off = P.stagger === "half" && i % 2 ? L / 2 : 0;
+    for (const [x0, x1, cut] of segs(it.w, L, off)) { cut ? cuts++ : full++; blocks.push({ step: i, x0, x1, y0: Y + over, y1: Y + over + D, z0, z1, cut }); }
+    if (cap) {
+      for (const [x0, x1, cut] of segs(it.w, capL, (off + capL / 2) % capL)) { cut ? capCuts++ : capFull++; caps.push({ step: i, x0, x1, y0: Y, y1: Y + capD, z0: z1, z1: z1 + capH, cut }); }
+      const gap = i < count - 1 ? (Y + tread + over) - (Y + capD) : 0;
+      if (gap > 0.1) { infill.push({ step: i, x0: -it.w / 2, x1: it.w / 2, y0: Y + capD, y1: Y + capD + gap, z0: z1, z1: z1 + capH }); infillArea += gap * it.w; }
     }
   }
+  const top = base + count * H + capH, firstRise = base + H + capH;
   const checks = [];
-  const riserOk = H <= 7.75 && H >= 4;
-  checks.push([riserOk ? "ok" : "bad", `Riser ${fmtIn(H)} ${H > 7.75 ? "is over the 7¾\" max" : H < 4 ? "is under 4\"" : "(4\"–7¾\")"}`]);
-  checks.push([tread >= 11 ? "ok" : tread >= 10 ? "warn" : "bad", `Tread ${fmtIn(tread)} ${tread >= 11 ? "(11\"+ recommended)" : tread >= 10 ? "meets 10\" min, 11\"+ is easier" : "is under the 10\" min"}`]);
+  checks.push([H <= 7.75 && H >= 4 ? "ok" : "bad", `Riser ${fmtIn(H)} ${H > 7.75 ? "is over the 7¾\" max" : H < 4 ? "is under 4\"" : "(4\"–7¾\")"}`]);
+  if (Math.abs(firstRise - H) > 0.25) checks.push(["bad", `First step is ${fmtIn(firstRise)} high, the rest are ${fmtIn(H)}. Set the bottom course at ${fmtIn(-(capH))} (bury it ${fmtIn(capH)}) so all risers match`]);
+  checks.push([tread >= 11 ? "ok" : tread >= 10 ? "warn" : "bad", `Tread ${fmtIn(tread)} ${tread >= 11 ? "(11\"+ recommended)" : tread >= 10 ? "meets the 10\" min, 11\"+ is easier" : "is under the 10\" min"}`]);
   checks.push([it.w >= 36 ? "ok" : "bad", `Width ${fmtLen(it.w)} ${it.w >= 36 ? "(36\" min)" : "is under 36\""}`]);
-  const err = count * H - (it.rise || 0);
-  checks.push([Math.abs(err) <= 0.75 ? "ok" : "warn", Math.abs(err) <= 0.75 ? `${count} blocks match the ${fmtLen(it.rise)} rise` : `${count} × ${fmtIn(H)} = ${fmtLen(count * H)}, measured rise is ${fmtLen(it.rise)}. Adjust grade or base by ${fmtIn(Math.abs(err))}`]);
-  if (tread > D) checks.push(["bad", `Tread is deeper than the block (${fmtIn(D)}); steps will not overlap`]);
+  const err = top - (it.rise || 0);
+  checks.push([Math.abs(err) <= 0.75 ? "ok" : "warn", Math.abs(err) <= 0.75 ? `${count} risers reach ${fmtLen(top)}, matching the ${fmtLen(it.rise)} rise` : `${count} risers reach ${fmtLen(top)}, measured rise is ${fmtLen(it.rise)}. Adjust the grade by ${fmtIn(Math.abs(err))}`]);
+  if (cap) {
+    const minT = capD - over;
+    if (tread < minT - 0.01) checks.push(["bad", `Tread can't be less than ${fmtIn(minT)}: the next riser has to sit behind the ${fmtIn(capD)} cap`]);
+    else if (infill.length) checks.push(["warn", `${fmtIn(tread - minT)} strip behind each cap needs paver or concrete infill`]);
+    else checks.push(["ok", `Each riser sits snug against the cap below (${fmtIn(over)} cap overhang)`]);
+  } else if (tread > D) checks.push(["bad", `Tread is deeper than the block (${fmtIn(D)}); steps will not overlap`]);
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
-  return { count, H, D, L, run, blocks, full, cuts, checks, overlap: D - tread };
+  return { count, H, D, L, cap, capH, capD, over, run, top, base, blocks, caps, infill, full, cuts, capFull, capCuts, infillArea, checks };
 }
 function itemSize(it) {
   if (it.type === "steps") { const c = stepCalc(it); return { w: it.w, d: c.run }; }
@@ -601,14 +622,24 @@ function drawItem(ctx, v, it, u, sel) {
     }
     case "steps": {
       const c = stepCalc(it);
-      // draw from top step down so lower steps are on top (they're in front)
+      // Plan shows what you see from above: the caps (or block tops), infill strips, and the riser block faces between them.
       for (let i = c.count - 1; i >= 0; i--) {
-        const visY1 = i === c.count - 1 ? -c.run / 2 + i * c.tread + c.D : -c.run / 2 + (i + 1) * it.tread;
-        for (const b of c.blocks.filter((bb) => bb.step === i)) {
-          polyRect(ctx, v, it, b.x0, b.y0, b.x1, Math.min(b.y1, visY1));
-          ctx.fillStyle = b.cut ? "rgba(255,200,87,.16)" : `rgba(234,242,252,${0.10 + i * 0.05})`; ctx.fill();
+        const nextY = i < c.count - 1 ? -c.run / 2 + (i + 1) * it.tread : Infinity;
+        const tops = c.cap ? c.caps.filter((q) => q.step === i) : c.blocks.filter((q) => q.step === i);
+        for (const q of tops) {
+          polyRect(ctx, v, it, q.x0, q.y0, q.x1, Math.min(q.y1, nextY));
+          ctx.fillStyle = q.cut ? "rgba(255,200,87,.16)" : `rgba(234,242,252,${0.10 + i * 0.05})`; ctx.fill();
           ctx.lineWidth = 1.2 * u; ctx.strokeStyle = BP.ink; ctx.stroke();
         }
+        for (const q of c.infill.filter((q) => q.step === i)) {
+          polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1); ctx.fillStyle = "rgba(234,242,252,.06)"; ctx.fill(); ctx.lineWidth = 1 * u; ctx.strokeStyle = BP.ink2; ctx.stroke();
+          ctx.save(); polyRect(ctx, v, it, q.x0, q.y0, q.x1, q.y1); hatch(ctx, 5 * u, "rgba(234,242,252,.18)", u); ctx.restore();
+        }
+      }
+      if (c.cap && c.over > 0) { // dashed riser face under each cap nosing
+        ctx.save(); ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u;
+        for (let i = 0; i < c.count; i++) { const y = -c.run / 2 + i * it.tread + c.over; const a = rotPt(it, -it.w / 2, y), b = rotPt(it, it.w / 2, y); const [ax, ay] = W2S(v, a.x, a.y), [bx, by] = W2S(v, b.x, b.y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
+        ctx.restore();
       }
       // nosing lines + step numbers
       for (let i = 0; i < c.count; i++) {
@@ -683,44 +714,47 @@ function drawSection(ctx, it, X, Y, W, H, u, letter = "A") {
   ctx.fillStyle = "rgba(12,38,72,.92)"; ctx.fillRect(X, Y, W, H);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.strokeRect(X, Y, W, H);
   label(ctx, "SECTION " + letter + " · " + (it.label || "STEPS").toUpperCase(), X + 10 * u, Y + 14 * u, 11 * u, "left", BP.ink, 600);
-  const baseDepth = 6; // compacted base under
-  const top = c.count * c.H + it.base, spanY = c.run + 24, spanZ = top + baseDepth + 8;
-  const s = Math.min((W - 70 * u) / spanY, (H - 64 * u) / spanZ);
-  const ox = X + 36 * u, oz = Y + H - 26 * u - baseDepth * s;
+  const baseDepth = 6; // compacted base under the bottom course
+  const lo = Math.min(0, c.base) - baseDepth, top = c.top, spanY = c.run + 30, spanZ = top - lo + 10;
+  const s = Math.min((W - 80 * u) / spanY, (H - 64 * u) / spanZ);
+  const ox = X + 40 * u, oz = Y + H - 26 * u + lo * s;
   const P = (y, z) => [ox + (y + 12) * s, oz - z * s];
-  // ground line lower and upper
-  ctx.strokeStyle = BP.ink2; ctx.beginPath(); let [gx, gy] = P(-12, it.base); ctx.moveTo(X + 6 * u, gy); ctx.lineTo(gx + 12 * s, gy); ctx.stroke();
-  // compacted gravel base
-  const [b1x, b1y] = P(0, it.base), [b2x] = P(c.run, it.base);
-  ctx.fillStyle = "rgba(234,242,252,.10)"; ctx.fillRect(b1x - 3 * s, b1y, b2x - b1x + 3 * s, baseDepth * s);
-  ctx.save(); ctx.beginPath(); ctx.rect(b1x - 3 * s, b1y, b2x - b1x + 3 * s, baseDepth * s); ctx.clip();
-  ctx.fillStyle = BP.ink2; for (let k = 0; k < 80; k++) { ctx.beginPath(); ctx.arc(b1x + rand(k * 7) * (b2x - b1x), b1y + rand(k * 13) * baseDepth * s, 1 * u, 0, 7); ctx.fill(); }
+  // lower grade, compacted base
+  ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(X + 6 * u, P(0, 0)[1]); ctx.lineTo(P(c.over, 0)[0], P(0, 0)[1]); ctx.stroke();
+  label(ctx, "GRADE", X + 8 * u, P(0, 0)[1] - 8 * u, 9 * u, "left", BP.ink2);
+  const [b1x, b1y] = P(c.over - 3, c.base), [b2x] = P(c.run + 3, c.base);
+  ctx.fillStyle = "rgba(234,242,252,.10)"; ctx.fillRect(b1x, b1y, b2x - b1x, baseDepth * s);
+  ctx.save(); ctx.beginPath(); ctx.rect(b1x, b1y, b2x - b1x, baseDepth * s); ctx.clip();
+  ctx.fillStyle = BP.ink2; for (let k = 0; k < 90; k++) { ctx.beginPath(); ctx.arc(b1x + rand(k * 7) * (b2x - b1x), b1y + rand(k * 13) * baseDepth * s, 1 * u, 0, 7); ctx.fill(); }
   ctx.restore();
-  // fill behind
-  ctx.beginPath(); ctx.moveTo(...P(0 + c.D * 0.6, it.base));
-  for (let i = 1; i < c.count; i++) { ctx.lineTo(...P(i * it.tread, it.base + i * c.H)); }
-  ctx.lineTo(...P(c.run + 12, top)); ctx.lineTo(...P(c.run + 12, it.base)); ctx.closePath();
+  // backfill behind the risers
+  ctx.beginPath(); ctx.moveTo(...P(c.over + c.D, c.base));
+  for (let i = 1; i < c.count; i++) { ctx.lineTo(...P(i * it.tread + c.over, c.base + i * c.H)); }
+  ctx.lineTo(...P(c.run + 18, top)); ctx.lineTo(...P(c.run + 18, c.base)); ctx.closePath();
   ctx.fillStyle = "rgba(140,200,150,.08)"; ctx.fill();
-  // blocks
+  const rect = (y0, z0, y1, z1, fill, lw = 1.4) => { const [ax, ay] = P(y0, z1), [bx, by] = P(y1, z0); ctx.fillStyle = fill; ctx.fillRect(ax, ay, bx - ax, by - ay); ctx.strokeStyle = BP.ink; ctx.lineWidth = lw * u; ctx.strokeRect(ax, ay, bx - ax, by - ay); };
   for (let i = 0; i < c.count; i++) {
-    const y0 = i * it.tread, z0 = it.base + i * c.H;
-    const [ax, ay] = P(y0, z0 + c.H), [bx, by] = P(y0 + c.D, z0);
-    ctx.fillStyle = "rgba(234,242,252,.22)"; ctx.fillRect(ax, ay, bx - ax, by - ay); ctx.strokeStyle = BP.ink; ctx.lineWidth = 1.4 * u; ctx.strokeRect(ax, ay, bx - ax, by - ay);
+    const Yn = i * it.tread, z0 = c.base + i * c.H;
+    rect(Yn + c.over, z0, Yn + c.over + c.D, z0 + c.H, "rgba(234,242,252,.22)");
+    if (c.cap) rect(Yn, z0 + c.H, Yn + c.capD, z0 + c.H + c.capH, "rgba(234,242,252,.36)");
+    const inf = c.infill.find((q) => q.step === i); if (inf) rect(Yn + c.capD, z0 + c.H, Yn + it.tread + c.over, z0 + c.H + c.capH, "rgba(234,242,252,.08)", 0.8);
   }
   // upper grade
   ctx.strokeStyle = BP.ink2; ctx.beginPath(); ctx.moveTo(...P(c.run, top)); ctx.lineTo(X + W - 6 * u, P(0, top)[1]); ctx.stroke();
-  // dims: rise / tread
-  const [rx, ry0] = P(-6, it.base), [, ry1] = P(-6, it.base + c.H);
-  ctx.strokeStyle = BP.ink; ctx.beginPath(); ctx.moveTo(rx, ry0); ctx.lineTo(rx, ry1); ctx.stroke();
-  label(ctx, fmtIn(c.H), rx - 4 * u, (ry0 + ry1) / 2, 10 * u, "right", BP.ink);
+  // dims: riser and tread
+  const z1 = c.base + c.H + c.capH, z2 = z1 + c.H;
   if (c.count > 1) {
-    const [tx0, ty] = P(0, it.base + c.H + 3), [tx1] = P(it.tread, 0);
+    const [rx, ry0] = P(it.tread - 4, z1), [, ry1] = P(0, z2);
+    ctx.strokeStyle = BP.ink; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(rx, ry0); ctx.lineTo(rx, ry1); ctx.stroke();
+    label(ctx, fmtIn(c.H), rx - 4 * u, (ry0 + ry1) / 2, 10 * u, "right", BP.ink);
+    const [tx0, ty] = P(it.tread, z2 + 3), [tx1] = P(2 * it.tread, 0);
     ctx.beginPath(); ctx.moveTo(tx0, ty - 4 * u); ctx.lineTo(tx1, ty - 4 * u); ctx.stroke();
     label(ctx, fmtIn(it.tread), (tx0 + tx1) / 2, ty - 13 * u, 10 * u, "center", BP.ink);
   }
-  const [hx, hy0] = P(c.run + 6, it.base), [, hy1] = P(c.run + 6, top);
-  label(ctx, "TOTAL RISE " + fmtLen(c.count * c.H), Math.min(hx + 6 * u, X + W - 8 * u), (hy0 + hy1) / 2 + 30 * u, 10 * u, "right", BP.ink);
-  label(ctx, `${c.count} RISERS · ${fmtIn(c.D)} BLOCK · ${fmtIn(baseDepth)} COMPACTED BASE`, X + 10 * u, Y + H - 10 * u, 10 * u, "left", BP.ink2);
+  label(ctx, "TOP +" + fmtLen(top), X + W - 8 * u, P(0, top)[1] - 9 * u, 10 * u, "right", BP.ink);
+  if (c.base < 0) label(ctx, "BOTTOM COURSE " + fmtIn(-c.base) + " BELOW GRADE", P(c.run, 0)[0] + 8 * u, P(0, c.base)[1] - 4 * u, 9 * u, "left", BP.ink2);
+  const prod = c.cap ? `${fmtIn(c.H)} BLOCK RISERS · ${fmtIn(c.capH)} CAP TREADS` : `${fmtIn(c.D)} SOLID STEP BLOCKS`;
+  label(ctx, `${c.count} RISERS · ${prod} · ${fmtIn(baseDepth)} COMPACTED BASE`, X + 10 * u, Y + H - 10 * u, 10 * u, "left", BP.ink2);
   ctx.restore();
 }
 
@@ -797,10 +831,10 @@ function renderItemPane() {
   h += `<div class="grid2">${field("Center east (x)", "x", it)}${field("Center north (y)", "y", it)}</div>`;
   if (t === "steps") {
     const c = stepCalc(it);
-    h += `<div class="grid2">${field("Step width", "w", it)}${field("Total rise", "rise", it)}${field("Tread depth", "tread", it)}${field("Rotation °", "rot", it, "deg")}${field("Bottom elevation", "base", it)}</div>`;
+    h += `<div class="grid2">${field("Step width", "w", it)}${field("Total rise", "rise", it)}${field("Tread depth", "tread", it)}${field("Rotation °", "rot", it, "deg")}${field("Bottom course at", "base", it)}</div>`;
     h += `<dl class="stats"><div><dt>Risers</dt><dd>${c.count} × ${fmtIn(c.H)}</dd></div><div><dt>Total run</dt><dd>${fmtLen(c.run)}</dd></div>
-      <div><dt>Full blocks</dt><dd>${c.full}</dd></div><div><dt>Cut pieces</dt><dd>${c.cuts}</dd></div>
-      <div><dt>Built height</dt><dd>${fmtLen(c.count * c.H)}</dd></div><div><dt>Block overlap</dt><dd>${fmtIn(Math.max(0, c.overlap))}</dd></div></dl>`;
+      <div><dt>Blocks</dt><dd>${c.full + c.cuts} (${c.cuts} cut)</dd></div><div><dt>Caps</dt><dd>${c.cap ? (c.capFull + c.capCuts) + " (" + c.capCuts + " cut)" : "–"}</dd></div>
+      <div><dt>Top of steps</dt><dd>${fmtLen(c.top)}</dd></div><div><dt>Bottom course</dt><dd>${c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
     h += `<h3>Checks</h3><ul class="checks">${c.checks.map(([k, m]) => `<li><span class="pill ${k}">${k === "ok" ? "OK" : k === "warn" ? "Check" : "Fix"}</span><span>${escapeHtml(m)}</span></li>`).join("")}</ul>
       <p class="note">Based on common residential limits (IRC). Your local code decides.</p>`;
   } else if (RECT_TYPES.has(t)) {
@@ -853,9 +887,10 @@ function renderJobPane() {
   $("jName").value = job.name || ""; $("jClient").value = job.client || ""; $("jAddr").value = job.address || ""; $("jNotes").value = job.notes || "";
   const P = job.product;
   $("jPreset").innerHTML = PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join("");
-  const pi = PRESETS.findIndex((p) => p.L === P.L && p.D === P.D && p.H === P.H);
+  const pi = PRESETS.findIndex((p) => p.L && PRODUCT_KEYS.every((k) => Math.abs((p[k] || 0) - (P[k] || 0)) < 0.01));
   $("jPreset").value = pi >= 0 ? pi : PRESETS.length - 1;
   $("jProduct").value = P.name || ""; $("jBL").value = fmtLen(P.L); $("jBD").value = fmtLen(P.D); $("jBH").value = fmtLen(P.H);
+  $("jSet").value = P.setback || 0; $("jCL").value = fmtLen(P.capL || 0); $("jCD").value = fmtLen(P.capD || 0); $("jCH").value = fmtLen(P.capH || 0); $("jCO").value = fmtLen(P.capOver || 0);
   $("jStagger").value = P.stagger || "half"; $("jColor").value = P.color || "#a8a39a";
   $("jSW").value = fmtLen(job.site.w); $("jSD").value = fmtLen(job.site.d);
   renderJobs();
@@ -863,27 +898,43 @@ function renderJobPane() {
 const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v],
   ["jProduct", (v) => job.product.name = v], ["jStagger", (v) => job.product.stagger = v], ["jColor", (v) => job.product.color = v]];
 jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot(); fn(e.target.value); commit(); }));
-[["jBL", "L"], ["jBD", "D"], ["jBH", "H"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
-  const n = parseLen(e.target.value); if (!(n > 0)) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.product[k]); return; }
-  snapshot(); job.product[k] = n; commit(); renderJobPane();
+[["jBL", "L"], ["jBD", "D"], ["jBH", "H"], ["jCL", "capL", 1], ["jCD", "capD", 1], ["jCH", "capH", 1], ["jCO", "capOver", 1]].forEach(([id, k, zeroOk]) => $(id).addEventListener("change", (e) => {
+  const n = parseLen(e.target.value); if (!(n > 0 || (zeroOk && n === 0))) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.product[k]); return; }
+  snapshot(); job.product[k] = n;
+  if (hasCap(job.product) && !(job.product.capL > 0 && job.product.capD > 0)) { job.product.capL = job.product.capL || job.product.L; job.product.capD = job.product.capD || job.product.D; }
+  commit(); renderJobPane();
 }));
+$("jSet").addEventListener("change", (e) => { const n = parseFloat(e.target.value); if (!(n >= 0 && n < 30)) { toast("Setback is in degrees, 0 to 30."); e.target.value = job.product.setback || 0; return; } snapshot(); job.product.setback = n; commit(); });
 [["jSW", "w"], ["jSD", "d"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
   const n = parseLen(e.target.value); if (!(n > 0)) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.site[k]); return; }
   snapshot(); job.site[k] = n; commit();
 }));
 $("jPreset").addEventListener("change", (e) => {
   const p = PRESETS[+e.target.value]; if (!p.L) return;
-  snapshot(); Object.assign(job.product, { L: p.L, D: p.D, H: p.H, name: p.name }); commit(); renderJobPane();
+  snapshot(); Object.assign(job.product, presetProduct(p), { stagger: job.product.stagger, color: p.color || job.product.color });
+  for (const it of job.items) if (it.type === "steps") { it.tread = defaultTread(job.product); it.base = defaultBase(job.product); }
+  commit(); renderJobPane(); toast("Steps updated for " + p.name);
 });
-function renderOrder() {
-  let full = 0, cuts = 0, risers = 0, wallBlocks = 0;
+function materials() {
+  const P = job.product, m = { blocks: 0, blockCuts: 0, caps: 0, capCuts: 0, infill: 0, wallBlocks: 0, wallCaps: 0 };
   for (const it of job.items) {
-    if (it.type === "steps") { const c = stepCalc(it); full += c.full; cuts += c.cuts; risers += c.count; }
-    if (it.type === "wall") wallBlocks += Math.ceil(it.w / job.product.L) * Math.max(1, Math.round(it.h / job.product.H));
+    if (it.type === "steps") { const c = stepCalc(it); m.blocks += c.full + c.cuts; m.blockCuts += c.cuts; m.caps += c.capFull + c.capCuts; m.capCuts += c.capCuts; m.infill += c.infillArea; }
+    if (it.type === "wall") { const w = wallCalc(it); m.wallBlocks += w.blocks; m.wallCaps += w.caps; }
   }
-  const total = full + cuts, order = Math.ceil(total * 1.05);
-  $("orderStats").innerHTML = `<div><dt>Step blocks</dt><dd>${total}</dd></div><div><dt>Of those cut</dt><dd>${cuts}</dd></div>
-    <div><dt>Order (+5%)</dt><dd>${order}</dd></div><div><dt>Wall blocks</dt><dd>${wallBlocks}</dd></div>`;
+  m.orderBlocks = Math.ceil((m.blocks + m.wallBlocks) * 1.05); m.orderCaps = Math.ceil((m.caps + m.wallCaps) * 1.05);
+  return m;
+}
+function wallCalc(it) {
+  const P = job.product, cap = hasCap(P), courses = Math.max(1, Math.round((it.h - (cap ? P.capH : 0)) / P.H));
+  const per = Math.ceil(it.w / P.L), capsPer = cap ? Math.ceil(it.w / P.capL) : 0;
+  return { courses, blocks: per * courses, caps: capsPer, step: P.H * Math.tan((P.setback || 0) * Math.PI / 180) };
+}
+function renderOrder() {
+  const m = materials(), cap = hasCap(job.product);
+  $("orderStats").innerHTML = `<div><dt>Step blocks</dt><dd>${m.blocks} (${m.blockCuts} cut)</dd></div><div><dt>Step caps</dt><dd>${cap ? m.caps + " (" + m.capCuts + " cut)" : "–"}</dd></div>
+    <div><dt>Wall blocks</dt><dd>${m.wallBlocks}</dd></div><div><dt>Wall caps</dt><dd>${cap ? m.wallCaps : "–"}</dd></div>
+    <div><dt>Order blocks +5%</dt><dd>${m.orderBlocks}</dd></div><div><dt>Order caps +5%</dt><dd>${cap ? m.orderCaps : "–"}</dd></div>
+    ${m.infill > 1 ? `<div><dt>Tread infill</dt><dd>${(m.infill / 144).toFixed(1)} sq ft</dd></div><div><dt></dt><dd></dd></div>` : ""}`;
 }
 
 function jobsSaved() { return store.get("bsp.jobs", []); }
@@ -923,7 +974,9 @@ function sanitizeJob(j) {
   const P = j.product || {};
   return {
     v: 1, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
-    product: { name: String(P.name ?? s.product.name).slice(0, 80), L: num(P.L, 48, 4, 200), D: num(P.D, 14, 4, 60), H: num(P.H, 6, 2, 24), color: /^#[0-9a-f]{6}$/i.test(P.color) ? P.color : s.product.color, stagger: P.stagger === "none" ? "none" : "half" },
+    product: { name: String(P.name ?? s.product.name).slice(0, 80), L: num(P.L, s.product.L, 4, 200), D: num(P.D, s.product.D, 4, 60), H: num(P.H, s.product.H, 2, 24),
+      setback: num(P.setback, s.product.setback, 0, 30), capL: num(P.capL, s.product.capL, 0, 200), capD: num(P.capD, s.product.capD, 0, 60), capH: num(P.capH, s.product.capH, 0, 12), capOver: num(P.capOver, s.product.capOver, 0, 6),
+      color: /^#[0-9a-f]{6}$/i.test(P.color) ? P.color : s.product.color, stagger: P.stagger === "none" ? "none" : "half" },
     site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
     items: (Array.isArray(j.items) ? j.items : []).map(sanitizeItem).filter(Boolean).slice(0, 300),
   };
@@ -954,17 +1007,20 @@ $("exportBtn").onclick = async () => {
   for (const st of job.items.filter((i) => i.type === "steps")) {
     const cc = stepCalc(st);
     label(ctx, `${(st.label || "Steps").toUpperCase()}`, colX + 40, cy, 26, "left", BP.ink, 600); cy += 40;
-    for (const line of [`${cc.count} risers × ${fmtIn(cc.H)} · tread ${fmtIn(st.tread)} · run ${fmtLen(cc.run)}`, `${fmtLen(st.w)} wide · ${cc.full} full blocks + ${cc.cuts} cut pieces`]) { label(ctx, line, colX + 40, cy, 24, "left", BP.ink2); cy += 36; }
+    const lines = [`${cc.count} risers × ${fmtIn(cc.H)} · tread ${fmtIn(st.tread)} · run ${fmtLen(cc.run)} · top +${fmtLen(cc.top)}`, `${fmtLen(st.w)} wide · ${cc.full + cc.cuts} blocks (${cc.cuts} cut)${cc.cap ? ` · ${cc.capFull + cc.capCuts} caps (${cc.capCuts} cut)` : ""}`];
+    if (cc.base < 0) lines.push(`Bottom course set ${fmtIn(-cc.base)} below grade on 6" compacted base`);
+    if (cc.infillArea > 1) lines.push(`Tread infill behind caps: ${(cc.infillArea / 144).toFixed(1)} sq ft`);
+    for (const line of lines) { label(ctx, line, colX + 40, cy, 24, "left", BP.ink2); cy += 36; }
     for (const [kind, msg] of cc.checks.filter(([kk]) => kk !== "ok")) { label(ctx, (kind === "bad" ? "FIX: " : "CHECK: ") + msg, colX + 40, cy, 22, "left", kind === "bad" ? "#ffb4a8" : BP.sel); cy += 34; }
     cy += 16; if (cy > H - titleH - 60) break;
   }
   // title block
   ctx.fillStyle = "#0f2f58"; ctx.fillRect(0, H - titleH, W, titleH);
   ctx.strokeStyle = BP.ink; ctx.lineWidth = 3; ctx.strokeRect(14, 14, W - 28, H - 28); ctx.beginPath(); ctx.moveTo(14, H - titleH); ctx.lineTo(W - 14, H - titleH); ctx.stroke();
-  const cols = [[40, "JOB", job.name], [760, "CLIENT", job.client], [1300, "SITE", job.address], [2000, "BLOCK", `${job.product.name} (${fmtIn(job.product.L)}×${fmtIn(job.product.D)}×${fmtIn(job.product.H)})`]];
-  for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 46), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
-  let full = 0, cuts = 0; job.items.filter((i) => i.type === "steps").forEach((s) => { const cc = stepCalc(s); full += cc.full; cuts += cc.cuts; });
-  label(ctx, `BLOCKS ${full + cuts} (${cuts} CUT) · ORDER ${Math.ceil((full + cuts) * 1.05)} · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
+  const cols = [[40, "JOB", job.name], [760, "CLIENT", job.client], [1300, "SITE", job.address], [2000, "PRODUCT", job.product.name]];
+  for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 58), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
+  const mm = materials();
+  label(ctx, `ORDER ${mm.orderBlocks} BLOCKS${hasCap(job.product) ? " · " + mm.orderCaps + " CAPS" : ""} (INCL. 5%) · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
   if (job.notes) label(ctx, "NOTES: " + job.notes.slice(0, 120), 1300, H - titleH + 140, 24, "left", BP.ink2);
   saveFile((job.name || "blueprint").replace(/[^\w-]+/g, "_") + "_blueprint.png", await canvasBlob(c));
 };
@@ -1073,6 +1129,7 @@ function build3d() {
   const blockTex = noiseTex(job.product.color || "#a8a39a", 22, 128, 0.85);
   const mBlock = mat("block", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.92 }));
   const mBlockCut = mat("blockcut", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.95, color: "#f2efe9" }));
+  const mCap = mat("blockcap", () => new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.8, color: "#f4f2ee" }));
   const mGrass = mat("grass", () => new THREE.MeshStandardMaterial({ map: tex.grass, roughness: 1 }));
   const mSoil = mat("soil", () => new THREE.MeshStandardMaterial({ map: tex.soil, roughness: 1 }));
   const mBark = mat("bark", () => new THREE.MeshStandardMaterial({ map: tex.bark, roughness: 1 }));
@@ -1096,20 +1153,25 @@ function build3d() {
       case "path": { const g = box(it.w, 1.5, it.d, mPav); g.castShadow = false; place(g, it, 0, 0, gz + 0.8); break; }
       case "landing": {
         const g = box(it.w, it.h - 2, it.d, mSoil); place(g, it, 0, 0, (it.h - 2) / 2);
-        const cap = box(it.w, 2.2, it.d, mBlock); place(cap, it, 0, 0, it.h - 1.1);
+        const cap = box(it.w, 2.2, it.d, mBlock); place(cap, it, 0, 0, it.h - 0.95); // sits just proud of the lawn to avoid z-fighting
         break;
       }
       case "wall": {
-        const P = job.product, courses = Math.max(1, Math.round(it.h / P.H));
-        for (let i = 0; i < courses; i++) { let x = -it.w / 2; const off = (P.stagger === "half" && i % 2) ? P.L / 2 : P.L; let first = true;
-          while (x < it.w / 2 - 0.01) { const len = Math.min(first ? off : P.L, it.w / 2 - x); const b = box(len - 0.3, P.H - 0.3, it.d, mBlock); place(b, it, x + len / 2, 0, gz + i * P.H + P.H / 2); x += len; first = false; } }
+        const P = job.product, w = wallCalc(it);
+        for (let i = 0; i < w.courses; i++) {
+          const off = P.stagger === "half" && i % 2 ? P.L / 2 : 0;
+          for (const [x0, x1] of segs(it.w, P.L, off)) { const b = box(x1 - x0 - 0.3, P.H - 0.2, it.d, mBlock); place(b, it, (x0 + x1) / 2, i * w.step, gz + i * P.H + P.H / 2); }
+        }
+        if (hasCap(P)) for (const [x0, x1] of segs(it.w, P.capL, P.capL / 2)) { const b = box(x1 - x0 - 0.2, P.capH, P.capD, mCap); place(b, it, (x0 + x1) / 2, w.courses * w.step - (P.capOver || 0) + (P.capD - it.d) / 2, gz + w.courses * P.H + P.capH / 2); }
         break;
       }
       case "steps": {
         const c = stepCalc(it);
         for (const b of c.blocks) { const m = box(b.x1 - b.x0 - 0.3, c.H - 0.2, c.D - 0.2, b.cut ? mBlockCut : mBlock); place(m, it, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.z0 + c.H / 2); }
-        for (let i = 1; i < c.count; i++) { const y0 = -c.run / 2 + i * it.tread, fillH = it.base + i * c.H; if (fillH <= 0) continue; const f = box(it.w - 1, fillH, c.D - 1, mSoil); place(f, it, 0, y0 + c.D / 2, fillH / 2); }
-        if (it.base > 0) { const f = box(it.w, it.base, c.run, mSoil); place(f, it, 0, 0, it.base / 2); }
+        for (const q of c.caps) { const m = box(q.x1 - q.x0 - 0.2, c.capH, c.capD, mCap); place(m, it, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, q.z0 + c.capH / 2); }
+        for (const q of c.infill) { const m = box(q.x1 - q.x0, c.capH - 0.3, q.y1 - q.y0, mPav); m.castShadow = false; place(m, it, 0, (q.y0 + q.y1) / 2, q.z0 + (c.capH - 0.3) / 2); }
+        for (let i = 1; i < c.count; i++) { const y0 = -c.run / 2 + i * it.tread + c.over, fillH = c.base + i * c.H; if (fillH <= 0) continue; const f = box(it.w - 1, fillH, c.D - 1, mSoil); place(f, it, 0, y0 + c.D / 2, fillH / 2); }
+        if (c.base > 0) { const f = box(it.w, c.base, c.run, mSoil); place(f, it, 0, 0, c.base / 2); }
         break;
       }
       case "house": {
@@ -1166,7 +1228,7 @@ const SCHEMA_DOC = `JSON shape (all lengths in INCHES, numbers only):
   "summary": "2-4 short sentences for the contractor: what you drew, what you assumed, anything they should re-measure",
   "job": {
     "name": string, "client": string, "notes": string,
-    "product": { "name": string, "L": block length, "D": block depth front-to-back, "H": block height (= riser height) },
+    "product": leave out to keep the contractor's current block and cap,
     "site": { "w": width of work area east-west, "d": depth north-south },
     "items": [ ... ]
   }
@@ -1174,8 +1236,9 @@ const SCHEMA_DOC = `JSON shape (all lengths in INCHES, numbers only):
 Coordinates: x = east, y = north, origin at the south-west corner of the work area. Keep everything inside 0..site.w and 0..site.d.
 "rot" = degrees clockwise from north. For "steps", rot 0 means you walk UP heading north; rot 180 means you walk up heading south.
 Item types (x,y is always the CENTER of the item):
-- {"type":"steps","x","y","w": stair width,"rise": total measured rise,"tread": exposed tread depth (usually 12),"base": bottom elevation (usually 0),"rot","label"}
-  The app computes risers = round(rise / H) and run = (risers-1)*tread + D. Place the steps so their top edge meets the landing/porch/upper grade.
+- {"type":"steps","x","y","w": stair width,"rise": total measured rise from lower grade to the top,"rot","label"}
+  Leave out "tread" and "base"; the app sets them from the block product. Each riser is one course of the product's block with a cap as the tread.
+  Place the steps so their top (back) edge meets the landing, porch or upper grade.
 - {"type":"landing","x","y","w","d","h": top elevation,"rot","label"} flat block platform
 - {"type":"grade","x","y","w","d","h": height of the raised ground,"rot","label"} the upper level the steps climb to
 - {"type":"path","x","y","w","d","rot","label"} walkway or patio at ground level
@@ -1195,6 +1258,7 @@ Convert feet and inches carefully (1 ft = 12 in). Choose sensible positions when
 ${nPhotos ? `They attached ${nPhotos} photo(s) of a sketch or the site. Read any written measurements on them; prefer typed measurements when they conflict.` : ""}
 
 ${SCHEMA_DOC}
+Block product on this job: ${job.product.name}. Block ${fmtIn(job.product.L)} long × ${fmtIn(job.product.D)} deep × ${fmtIn(job.product.H)} high (one course per riser)${hasCap(job.product) ? `, cap ${fmtIn(job.product.capL)} × ${fmtIn(job.product.capD)} × ${fmtIn(job.product.capH)} used as the tread` : ""}. Each riser adds ${job.product.H}" of height; a stair run is about (risers - 1) × ${defaultTread(job.product)} + ${Math.max(job.product.capD || 0, (job.product.capOver || 0) + job.product.D)} inches deep.
 
 Current job:
 ${cur}
@@ -1289,6 +1353,17 @@ $("apiKey").addEventListener("change", (e) => store.set("bsp.apikey", e.target.v
   }
 })();
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) navigator.serviceWorker.register("sw.js").catch(() => {});
+let migrated = false;
+{
+  const saved = store.get("bsp.current", null);
+  if (saved) { job = saved;
+  if (!job.product || job.product.capH == null) { // saved before block + cap support: switch to the contractor's product
+    job.product = presetProduct(PRESETS[0]); migrated = true;
+    for (const it of job.items || []) if (it.type === "steps") { it.tread = defaultTread(job.product); it.base = defaultBase(job.product); }
+  }
+  try { job = sanitizeJob(job); } catch { job = sampleJob(); } }
+}
+if (migrated) setTimeout(() => toast("Switched to SR Classic block + Pro Cap Max. Step treads were reset."), 600);
 renderJobPane(); renderItemPane(); renderList(); renderOrder();
 $("jobTitle").textContent = job.name || "";
 requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); drawPlan(); });
