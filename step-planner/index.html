@@ -148,6 +148,25 @@ textarea { resize: vertical; }
 .mats { display: flex; flex-direction: column; gap: 6px; }
 .matrow { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .matrow .btn.small { grid-column: 1 / -1; justify-self: start; }
+.buylist { display: flex; flex-direction: column; gap: 6px; }
+.buyrow { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.buyhead { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.buyhead small { font-weight: 400; color: var(--muted); }
+.buyhead span { color: var(--muted); }
+.buyline { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-top: 6px; }
+.buyline select { min-width: 0; width: 100%; font: inherit; padding: 4px; }
+.buyline input { width: 70px; font: inherit; text-align: right; padding: 3px 4px; }
+.buyline > b { min-width: 74px; text-align: right; }
+.buytable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.buytable th, .buytable td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.buytable td.n, .buytable th.n { text-align: right; white-space: nowrap; }
+.buytable select { max-width: 190px; font: inherit; }
+.buytable input { width: 74px; font: inherit; text-align: right; }
+.supcard { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 13px; }
+.supcard b { display: block; }
+.supedit { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; }
+.supedit input, .supedit textarea { font: inherit; width: 100%; }
+.supedit textarea, .supedit .full { grid-column: 1 / -1; }
 .matinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; border-radius: 6px; }
 .matinfo:hover b, .matinfo:focus-visible b { text-decoration: underline; }
 .matpic { width: 54px; height: 40px; border-radius: 6px; border: 1px solid var(--line); flex-shrink: 0; cursor: pointer; }
@@ -370,6 +389,18 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <div class="pane" id="pQuote" role="tabpanel" hidden>
         <h2>Estimate &amp; quote</h2>
         <div id="quoteSummary"></div>
+        <h3>Where to buy</h3>
+        <p class="note">Pick who you buy each material from. A supplier's price goes straight into the quote; type a price to update it (it is remembered for that supplier). Suppliers and prices below were found online in Oct 2026: always confirm stock and price before ordering.</p>
+        <div id="buyList"></div>
+        <h3>Getting it there</h3>
+        <div class="grid2">
+          <label class="f">Ferry $ per foot, one way (0 = no ferry) <input id="fPerFt" inputmode="decimal"></label>
+          <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
+          <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
+          <label class="f">Ferry crossings per load <input id="fWays" inputmode="decimal"></label>
+        </div>
+        <p class="note" id="fNote"></p>
+        <details id="supEdit"><summary>Suppliers list</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
           <button class="btn primary" id="qHtml">Save quote</button>
           <button class="btn" id="qCsv">Export to Ledgerline (CSV)</button>
@@ -575,21 +606,21 @@ const ABB = "Abbotsford";
 const SPEC = "Published size; verify with your supplier";
 const CATALOG = [
   // Wall and riser blocks (Allan Block system made by Abbotsford; Garden WallScapes)
-  { id: "ab-classic", brand: ABB, line: "Allan Block", name: "SR Classic 6°", kind: "block", L: 18, D: 12, H: 7.625, setback: 6, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 9.5, note: SPEC },
+  { id: "ab-classic", perPallet: 40, brand: ABB, line: "Allan Block", name: "SR Classic 6°", kind: "block", L: 18, D: 12, H: 7.625, setback: 6, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 9.5, note: SPEC },
   { id: "ab-stones", brand: ABB, line: "Allan Block", name: "AB Stones 12°", kind: "block", L: 18, D: 12, H: 7.625, setback: 12, colors: ["Grey", "Charcoal"], price: 9.5, note: SPEC },
   { id: "ab-rocks", brand: ABB, line: "Allan Block", name: "AB Rocks 12° (tri-face)", kind: "block", L: 18, D: 12, H: 7.625, setback: 12, colors: ["Grey", "Charcoal"], price: 10, note: SPEC },
   { id: "ab-vertical", brand: ABB, line: "Allan Block", name: "AB Vertical 3°", kind: "block", L: 18, D: 12, H: 7.625, setback: 3, colors: ["Grey", "Charcoal"], price: 9.75, note: SPEC },
   { id: "gws-face", brand: ABB, line: "Garden WallScapes", name: "Classic Face Block", kind: "block", L: 12, D: 7.5, H: 6, setback: 0, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 4.25, note: SPEC },
   { id: "gws-corner", brand: ABB, line: "Garden WallScapes", name: "Corner Unit", kind: "block", L: 14, D: 8, H: 6, setback: 0, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 7.5, note: SPEC },
   // Caps
-  { id: "pcm18", brand: ABB, line: "Allan Block", name: '18" Pro Cap Max', kind: "cap", L: 18, D: 12, H: 3.75, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 14, note: SPEC + '. Made for up to 3" overhang' },
+  { id: "pcm18", perPallet: 56, brand: ABB, line: "Allan Block", name: '18" Pro Cap Max', kind: "cap", L: 18, D: 12, H: 3.75, colors: ["Grey", "Charcoal", "Rocky Mountain"], price: 14, note: SPEC + '. Made for up to 3" overhang' },
   { id: "pcm12", brand: ABB, line: "Allan Block", name: '12" Pro Cap Max', kind: "cap", L: 12, D: 12, H: 3.5, colors: ["Grey", "Charcoal"], price: 10, note: SPEC },
   { id: "gws-cap", brand: ABB, line: "Garden WallScapes", name: "Cap", kind: "cap", L: 18, D: 9, H: 2.375, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset", "Charcoal"], price: 7, note: SPEC },
   { id: "gws-tcap", brand: ABB, line: "Garden WallScapes", name: "Tumbled Cap", kind: "cap", L: 7.125, D: 9, H: 2.375, colors: ["Granite", "Sandalwood", "Teak", "Moroccan Sunset"], price: 3.5, note: SPEC },
   // Pavers (priced per sq ft)
-  { id: "cs-standard", brand: ABB, line: "Classic", name: "Standard 60mm", kind: "paver", L: 8.875, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
-  { id: "cs-half", brand: ABB, line: "Classic", name: "Half Standard 60mm", kind: "paver", L: 4.4375, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.5, note: SPEC },
-  { id: "cs-double", brand: ABB, line: "Classic", name: "Double Standard 60mm", kind: "paver", L: 8.875, D: 8.875, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
+  { id: "cs-standard", perPallet: 98, brand: ABB, line: "Classic", name: "Standard 60mm", kind: "paver", L: 8.875, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
+  { id: "cs-half", perPallet: 89, brand: ABB, line: "Classic", name: "Half Standard 60mm", kind: "paver", L: 4.4375, D: 4.4375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.5, note: SPEC },
+  { id: "cs-double", perPallet: 98, brand: ABB, line: "Classic", name: "Double Standard 60mm", kind: "paver", L: 8.875, D: 8.875, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.25, note: SPEC },
   { id: "cs-california", brand: ABB, line: "Classic Standard", name: "California 60mm", kind: "paver", L: 11.875, D: 5.9375, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.5, note: SPEC },
   { id: "cs-nevada", brand: ABB, line: "Classic Standard", name: "Nevada 60mm", kind: "paver", L: 11.875, D: 11.875, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 5.75, note: SPEC },
   { id: "cs-sierra", brand: ABB, line: "Classic Standard", name: "Sierra 60mm", kind: "paver", L: 15.75, D: 15.75, H: 2.375, colors: ["Natural", "Midnight", "Shaded Grey", "Indian Summer"], price: 6, note: SPEC },
@@ -656,7 +687,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 2, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -690,7 +721,7 @@ function sampleJob() {
   const st = { ...stepDefaults(DEFAULTS) };
   return {
     v: 2, name: "Front entry steps", client: "Example client", address: "", notes: "Example layout. Replace with your measurements.",
-    defaults: { ...DEFAULTS }, est: { ...EST_DEFAULTS }, extras: [], custom: [], prices: {}, style: { theme: "blueprint" }, chat: [],
+    defaults: { ...DEFAULTS }, est: { ...EST_DEFAULTS }, extras: [], custom: [], prices: {}, buy: {}, style: { theme: "blueprint" }, chat: [],
     site: { w: 480, d: 420 },
     items: [
       { id: "h1", type: "house", x: 240, y: 360, w: 420, d: 120, rot: 0, h: 108, label: "House" },
@@ -2341,6 +2372,7 @@ function estimate() {
   if (lines.length) {
     L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
     L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
+    if (E.ferryPerFt > 0) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
     L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
@@ -2375,7 +2407,68 @@ function renderEstFields() {
     snapshot(); job.est[inp.dataset.est] = n; store.set("bsp.est", { ...store.get("bsp.est", {}), [inp.dataset.est]: n }); commit();
   }));
 }
+// ---------- where to buy: suppliers near the job, their prices, and the ferry ----------
+// Found online in Oct 2026 for the Southern Gulf Islands / Saanich Peninsula. Prices are what the listing showed; confirm before ordering.
+const DEFAULT_SUPPLIERS = [
+  { id: "pender-hh", name: "Pender Island Home Building Centre (Home Hardware)", area: "On Pender Island, no ferry", address: "3338 Port Washington Rd, Pender Island", phone: "250-629-3455", url: "https://www.homehardware.ca/en/store/52992", notes: "Closest. General building, lumber and garden supplies; ask whether they can bring in Allan Block or Belgard (not confirmed). Closed Sun and Mon.", prices: {} },
+  { id: "slegg-keating", name: "Slegg Building Materials, Saanichton", area: "Saanich Peninsula, about 10 min from Swartz Bay ferry", address: "2046 Keating Cross Rd, Saanichton", phone: "", url: "https://www.slegg.com/s/content/blocks-pavers", notes: "Slegg sells Belgard (Abbotsford's line) and Allan Block. Closest yard to the Swartz Bay ferry; confirm stock or a transfer from Victoria.", prices: {} },
+  { id: "slegg-admirals", name: "Slegg Building Materials, Victoria (Admirals Rd)", area: "Victoria, about 35 min from Swartz Bay", address: "1496 Admirals Rd, Victoria", phone: "250-388-5443", url: "https://allanblock.com/dealers/slegg-building-materials-victoria-admirals-rd", notes: "Allan Block authorized dealer; Slegg also sells Belgard pavers and caps.", prices: {} },
+  { id: "siteone-victoria", name: "SiteOne Landscape Supply, Victoria", area: "Victoria", address: "", phone: "1-800-748-3663", url: "https://www.siteone.ca", notes: "Allan Block authorized dealer; carries Belgard (formerly Abbotsford) pavers and caps. Prices listed on siteone.ca: Pro Cap Max $19.40 each ($1,086.62 per pallet of 56, Rocky Mountain listing); comparable 18 x 12 x 8 Allan Blocks $16 to $21 each by the pallet.", prices: { pcm18: 19.4 } },
+  { id: "homedepot-victoria", name: "Home Depot, Victoria (Millstream)", area: "Langford, about 40 min from Swartz Bay", address: "2400 Millstream Rd, Victoria", phone: "250-391-6000", url: "https://www.allanblock.com/Dealers/Locations/Home_Depot_-_Victoria_-_7074.aspx", notes: "Allan Block authorized dealer.", prices: {} },
+  { id: "vi-precast", name: "Vancouver Island Precast", area: "Coombs; delivers anywhere on Vancouver Island and the Gulf Islands", address: "Coombs, BC", phone: "1-250-927-8265", url: "https://vancouverislandprecast.com/products/concrete-products", notes: "Ask for a delivered-to-Pender price.", prices: {} },
+  { id: "rona-online", name: "RONA (price seen online)", area: "Check the nearest RONA", address: "", phone: "", url: "https://www.rona.ca/en/product/allan-block-expocrete-ab-classic-retaining-wall-block-grey-18-in-w-x-12-in-d-x-8-in-h-16209264-39935097", notes: "AB Classic grey 18 x 12 x 8 listed at $11.59 each.", prices: { "ab-classic": 11.59 } },
+  { id: "bcbrick", name: "BC Brick Supplies", area: "Lower Mainland, via Tsawwassen ferry", address: "", phone: "", url: "https://www.bcbrick.com/products/pavers/belgard/standard/", notes: "Allan Block dealer; carries the Belgard (formerly Abbotsford Concrete) Classic Standard paver.", prices: {} },
+];
+function suppliers() {
+  const saved = store.get("bsp.suppliers", null);
+  if (!Array.isArray(saved)) return DEFAULT_SUPPLIERS.map((x) => ({ ...x, prices: { ...x.prices } }));
+  const ids = new Set(saved.map((x) => x.id));
+  return saved.concat(DEFAULT_SUPPLIERS.filter((x) => !ids.has(x.id) && !(store.get("bsp.suppliersRemoved", []) || []).includes(x.id)).map((x) => ({ ...x, prices: { ...x.prices } })));
+}
+const saveSuppliers = (list) => store.set("bsp.suppliers", list);
+function renderBuy() {
+  if (!$("buyList")) return;
+  const { mats, E } = takeoff(), waste = 1 + E.waste / 100, sups = suppliers();
+  const rows = [...mats.values()].map((o) => {
+    const m = mat(o.id), need = Math.ceil(o.qty * waste), pal = m.perPallet ? Math.ceil(need / m.perPallet) : null, sid = (job.buy || {})[o.id] || "";
+    return `<div class="buyrow"><div class="buyhead"><b>${escapeHtml(matName(m))}${o.color ? ` <small>${escapeHtml(o.color)}</small>` : ""}</b><span>${need} ${perSqft(m) ? "sq ft" : "ea"}${pal ? ` · ${pal} pallet${pal > 1 ? "s" : ""} of ${m.perPallet}` : ""}</span></div>
+      <div class="buyline"><select data-buy="${o.id}" aria-label="Buy ${escapeHtml(matName(m))} from"><option value="">Buy from…</option>${sups.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === sid ? " selected" : ""}>${escapeHtml(x.name)}${x.prices && x.prices[o.id] != null ? ` · ${money(x.prices[o.id])}` : ""}</option>`).join("")}</select>
+      <label>$<input data-bprice="${o.id}" inputmode="decimal" value="${priceOf(o.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"></label><b>${money(need * priceOf(o.id))}</b></div></div>`;
+  }).join("");
+  const used = [...new Set(Object.values(job.buy || {}))].map((id) => sups.find((x) => x.id === id)).filter(Boolean);
+  $("buyList").innerHTML = rows ? `<div class="buylist">${rows}</div>
+    ${used.map((x) => `<div class="supcard"><b>${escapeHtml(x.name)}</b>${escapeHtml(x.area || "")}${x.address ? ` · ${escapeHtml(x.address)}` : ""}${x.phone ? ` · <a href="tel:${escapeHtml(x.phone.replace(/[^0-9+]/g, ""))}">${escapeHtml(x.phone)}</a>` : ""}${x.url ? ` · <a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">website</a>` : ""}${x.notes ? `<br><small>${escapeHtml(x.notes)}</small>` : ""}</div>`).join("")}` : `<p class="note">Nothing to buy yet.</p>`;
+  $("buyList").querySelectorAll("[data-buy]").forEach((sel) => sel.onchange = () => {
+    const id = sel.dataset.buy, sp = sups.find((x) => x.id === sel.value); snapshot();
+    job.buy = { ...(job.buy || {}) }; if (sel.value) job.buy[id] = sel.value; else delete job.buy[id];
+    if (sp && sp.prices && sp.prices[id] != null) { job.prices = { ...job.prices, [id]: sp.prices[id] }; store.set("bsp.prices", { ...store.get("bsp.prices", {}), [id]: sp.prices[id] }); }
+    commit(); renderMaterials();
+  });
+  $("buyList").querySelectorAll("[data-bprice]").forEach((inp) => inp.onchange = () => {
+    const id = inp.dataset.bprice, n = parseFloat(inp.value.replace(/[$,]/g, "")); if (!(n >= 0)) { inp.value = priceOf(id).toFixed(2); return; }
+    snapshot(); job.prices = { ...job.prices, [id]: n }; store.set("bsp.prices", { ...store.get("bsp.prices", {}), [id]: n });
+    const sid = (job.buy || {})[id]; if (sid) { const list = suppliers(); const sp = list.find((x) => x.id === sid); if (sp) { sp.prices = { ...(sp.prices || {}), [id]: n }; saveSuppliers(list); } }
+    commit(); renderMaterials();
+  });
+  // ferry
+  const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"]];
+  for (const [el, k] of F) { const inp = $(el); if (document.activeElement !== inp) inp.value = job.est[k] ?? EST_DEFAULTS[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = job.est[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
+  const pal = [...mats.values()].reduce((a, o) => { const m = mat(o.id); return a + (m.perPallet ? Math.ceil(Math.ceil(o.qty * waste) / m.perPallet) : 0); }, 0);
+  $("fNote").textContent = `${pal ? `About ${pal} pallets of block, caps and pavers. ` : ""}BC Ferries, Swartz Bay to the Southern Gulf Islands: commercial vehicles over 5,500 kg were $4.55 per foot one way (Oct 2026). Otter Bay ramp limit 56,500 kg, 7 axles. Check the fare and whether the return is charged when you book.`;
+  // supplier editing
+  const list = suppliers();
+  $("supList").innerHTML = list.map((x, k) => `<div class="supedit" data-sup="${k}">
+    <input data-f="name" value="${escapeHtml(x.name)}" aria-label="Name"><input data-f="area" value="${escapeHtml(x.area || "")}" placeholder="Area / distance" aria-label="Area">
+    <input data-f="address" value="${escapeHtml(x.address || "")}" placeholder="Address" aria-label="Address"><input data-f="phone" value="${escapeHtml(x.phone || "")}" placeholder="Phone" aria-label="Phone">
+    <input class="full" data-f="url" value="${escapeHtml(x.url || "")}" placeholder="Website" aria-label="Website">
+    <textarea data-f="notes" rows="2" aria-label="Notes">${escapeHtml(x.notes || "")}</textarea>
+    <button class="btn danger small" data-supdel="${k}">Remove</button></div>`).join("");
+  $("supList").querySelectorAll("[data-sup] [data-f]").forEach((inp) => inp.onchange = () => { const all = suppliers(), k = +inp.closest("[data-sup]").dataset.sup; all[k][inp.dataset.f] = inp.value.slice(0, 300); saveSuppliers(all); renderBuy(); });
+  $("supList").querySelectorAll("[data-supdel]").forEach((b) => b.onclick = () => { const all = suppliers(), k = +b.dataset.supdel; if (!confirm(`Remove ${all[k].name}?`)) return; store.set("bsp.suppliersRemoved", [...store.get("bsp.suppliersRemoved", []), all[k].id]); all.splice(k, 1); saveSuppliers(all); renderBuy(); });
+}
+$("supAdd").onclick = () => { const all = suppliers(); all.push({ id: "s" + Date.now().toString(36), name: "New supplier", area: "", address: "", phone: "", url: "", notes: "", prices: {} }); saveSuppliers(all); $("supEdit").open = true; renderBuy(); };
 function renderQuote() {
+  renderBuy();
   const q = estimate();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
   const catRows = order.filter((c) => q.cats[c]).map((c) => `<tr><td>${c}</td><td>${money(q.cats[c])}</td></tr>`).join("");
@@ -2618,6 +2711,7 @@ function sanitizeJob(j) {
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom,
       style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
+      buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
       site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
       items: (Array.isArray(j.items) ? j.items : []).map((r) => sanitizeItem(r, legacy)).filter(Boolean).slice(0, 300),
@@ -3815,7 +3909,7 @@ $("apiKey").addEventListener("change", (e) => store.set("bsp.apikey", e.target.v
 // ---------- sync between devices ----------
 // Each saved setting is mirrored to one private document per person (data/users/<id>/<key>), so every device
 // signed in to the same Claude account shares it. Last change wins per setting. The API key never leaves the device.
-const SYNC_KEYS = ["current", "jobs", "library", "prices", "company", "csvmap", "defaults", "est", "photos"];
+const SYNC_KEYS = ["current", "jobs", "library", "prices", "company", "csvmap", "defaults", "est", "photos", "suppliers", "suppliersRemoved"];
 const sync = { db: null, uid: null, dev: Math.random().toString(36).slice(2, 10), at: store.get("bsp.syncAt", {}), timers: {}, busy: {}, again: {}, applying: false, pending: {}, state: "", ready: false };
 const rawSet = store.set;
 store.set = (k, v) => {
