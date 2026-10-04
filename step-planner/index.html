@@ -173,6 +173,10 @@ textarea { resize: vertical; }
 .supedit { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0; }
 .supedit input, .supedit textarea { font: inherit; width: 100%; }
 .supedit textarea, .supedit .full { grid-column: 1 / -1; }
+.matuse { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.matrow .row { grid-column: 1 / -1; }
+.savedmats { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 8px; }
+.savedmats summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .matinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; border-radius: 6px; }
 .matinfo:hover b, .matinfo:focus-visible b { text-decoration: underline; }
 .matpic { width: 54px; height: 40px; border-radius: 6px; border: 1px solid var(--line); flex-shrink: 0; cursor: pointer; }
@@ -678,7 +682,10 @@ const KIND_LABEL = { block: "Wall / riser blocks", cap: "Caps & treads", solid: 
 const perSqft = (m) => m.kind === "paver" || m.kind === "surface";
 
 let job; // set below
-function allMats() { return CATALOG.concat(job && job.custom ? job.custom : []); }
+// Catalogue + this job's own materials + materials you made on other jobs (the saved library)
+let libCache = null;
+function libMats() { if (!libCache) libCache = store.get("bsp.library", []).filter((m) => m && typeof m.id === "string" && m.id.startsWith("c-") && KIND_LABEL[m.kind]); return libCache; }
+function allMats() { const own = job && job.custom ? job.custom : []; return CATALOG.concat(own, libMats().filter((m) => !own.some((c) => c.id === m.id))); }
 function mat(id) { return allMats().find((m) => m.id === id) || null; }
 function matName(m) { return m ? `${m.line && m.brand !== "Generic" ? m.line + " " : ""}${m.name}` : "None"; }
 function priceOf(id) { const m = mat(id); const p = job.prices && job.prices[id]; return p != null ? p : m ? m.price || 0 : 0; }
@@ -774,6 +781,10 @@ let selId = null;
 const undoStack = [];
 function snapshot() { undoStack.push(JSON.stringify(job)); if (undoStack.length > 60) undoStack.shift(); }
 function commit(opts = {}) {
+  // a saved material used or picked on this job travels with the job
+  for (const id of new Set([...job.items.flatMap((i) => [i.block, i.cap, i.surface, i.infill]), ...(job.pick || [])])) {
+    if (typeof id === "string" && id.startsWith("c-") && !(job.custom || []).some((m) => m.id === id)) { const m = libMats().find((x) => x.id === id); if (m) job.custom = [...(job.custom || []), m]; }
+  }
   store.set("bsp.current", job);
   dirty3d = true;
   drawPlan();
@@ -2241,20 +2252,19 @@ document.querySelectorAll("[data-layout]").forEach((b) => b.addEventListener("cl
 function renderMaterials() {
   const priced = Object.keys(job.prices || {}).length > 0;
   $("priceBanner").hidden = priced;
-  let h = "";
-  for (const kind of Object.keys(KIND_LABEL)) {
-    const list = matsOfKinds([kind]);
-    if (!list.length) continue;
-    h += `<h3>${KIND_LABEL[kind]}</h3><div class="mats">`;
-    for (const m of list) {
-      const custom = m.id.startsWith("c-");
-      h += `<div class="matrow"><canvas class="matpic" data-pic="${m.id}" width="108" height="80" aria-hidden="true"></canvas><div class="matinfo" data-open="${m.id}" role="button" tabindex="0" title="Show a picture and details"><b>${escapeHtml(matName(m))}</b><span>${escapeHtml(m.brand)}${m.L ? ` · ${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : m.H ? ` · ${fmtIn(m.H)} thick` : ""}${m.setback ? ` · ${m.setback}°` : ""}</span>
+  // This job's materials first; everything else is kept below, ready to add to this or another job
+  const usedBy = (id) => job.items.filter((it) => [it.block, it.cap, it.surface, it.infill].includes(id)).length;
+  const picks = new Set(job.pick || []), onJob = (m) => usedBy(m.id) > 0 || picks.has(m.id);
+  const row = (m, extra) => { const custom = m.id.startsWith("c-"); return `<div class="matrow"><canvas class="matpic" data-pic="${m.id}" width="108" height="80" aria-hidden="true"></canvas><div class="matinfo" data-open="${m.id}" role="button" tabindex="0" title="Show a picture and details"><b>${escapeHtml(matName(m))}</b><span>${escapeHtml(m.brand)}${m.L ? ` · ${fmtIn(m.L)} × ${fmtIn(m.D)} × ${fmtIn(m.H)}` : m.H ? ` · ${fmtIn(m.H)} thick` : ""}${m.setback ? ` · ${m.setback}°` : ""}</span>
         <span class="swatches">${(m.colors || []).map((c) => `<i style="background:${hexOf(c)}" title="${escapeHtml(c)}"></i>`).join("")}<em>${escapeHtml((m.colors || []).join(", "))}</em></span></div>
         <label class="price">$<input data-price="${m.id}" inputmode="decimal" value="${priceOf(m.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"><small>/${perSqft(m) ? "sq ft" : "ea"}</small></label>
-        ${custom ? `<button class="btn danger small" data-delmat="${m.id}" aria-label="Delete ${escapeHtml(m.name)}">Delete</button>` : ""}</div>`;
-    }
-    h += `</div>`;
-  }
+        ${extra}</div>`; };
+  const group = (filter, extraFor) => { let out = ""; for (const kind of Object.keys(KIND_LABEL)) { const list = matsOfKinds([kind]).filter(filter); if (!list.length) continue; out += `<h3>${KIND_LABEL[kind]}</h3><div class="mats">${list.map((m) => row(m, extraFor(m))).join("")}</div>`; } return out; };
+  const mine = group(onJob, (m) => { const n = usedBy(m.id); return n ? `<span class="matuse">Used by ${n} item${n > 1 ? "s" : ""} on the plan</span>` : `<button class="btn small" data-pickdel="${m.id}">Take off this job</button>`; });
+  const others = matsOfKinds(Object.keys(KIND_LABEL)).filter((m) => !onJob(m)).length;
+  const saved = group((m) => !onJob(m), (m) => `<div class="row"><button class="btn small" data-pickadd="${m.id}">Add to this job</button>${m.id.startsWith("c-") ? `<button class="btn danger small" data-delmat="${m.id}" aria-label="Delete ${escapeHtml(m.name)}">Delete</button>` : ""}</div>`);
+  let h = `<h3 class="jobmats">On this job</h3>${mine || `<p class="note">Nothing yet. Materials appear here when the plan uses them, or add them from the saved list below.</p>`}
+    <details class="savedmats"${$("matList").querySelector(".savedmats[open]") ? " open" : ""}><summary>Saved materials for other jobs (${others})</summary><p class="note">The full Abbotsford list and your own materials. Add one to this job, or leave it here for later jobs.</p>${saved}</details>`;
   $("matList").innerHTML = h;
   $("matList").querySelectorAll("[data-pic]").forEach((c) => { const m = mat(c.dataset.pic); if (m) { drawMaterialPic(c.getContext("2d"), c.width, c.height, m, m.colors && m.colors[0], true); c.onclick = () => openMat(m.id); } });
   $("matList").querySelectorAll("[data-open]").forEach((el) => { el.onclick = () => openMat(el.dataset.open); el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMat(el.dataset.open); } }; });
@@ -2265,6 +2275,8 @@ function renderMaterials() {
     store.set("bsp.prices", { ...store.get("bsp.prices", {}), [inp.dataset.price]: n });
     commit(); renderMaterials();
   }));
+  $("matList").querySelectorAll("[data-pickadd]").forEach((b) => b.onclick = () => { snapshot(); job.pick = [...new Set([...(job.pick || []), b.dataset.pickadd])]; commit(); renderMaterials(); toast(`${matName(mat(b.dataset.pickadd))} added to this job.`); });
+  $("matList").querySelectorAll("[data-pickdel]").forEach((b) => b.onclick = () => { snapshot(); job.pick = (job.pick || []).filter((x) => x !== b.dataset.pickdel); commit(); renderMaterials(); });
   $("matList").querySelectorAll("[data-delmat]").forEach((b) => b.onclick = () => {
     const id = b.dataset.delmat;
     if (job.items.some((i) => [i.block, i.cap, i.surface, i.infill].includes(id))) { toast("That material is used on the plan. Change those items first."); return; }
@@ -2282,7 +2294,7 @@ $("cmAdd").onclick = () => {
   if (!needsSize && !(H > 0)) { toast("Enter the thickness as the height."); return; }
   const colors = $("cmColors").value.split(",").map((s) => s.trim()).filter(Boolean);
   const m = { id: "c-" + Date.now().toString(36), brand: $("cmBrand").value.trim() || "Custom", line: "", name, kind, L: needsSize ? L : 0, D: needsSize ? D : 0, H, setback: parseFloat($("cmSet").value) || 0, colors: colors.length ? colors : ["Grey"], price: parseFloat($("cmPrice").value) || 0, pattern: kind === "surface" ? "concrete" : undefined };
-  snapshot(); job.custom = [...(job.custom || []), m];
+  snapshot(); job.custom = [...(job.custom || []), m]; job.pick = [...new Set([...(job.pick || []), m.id])];
   store.set("bsp.library", [...store.get("bsp.library", []), m]);
   ["cmName", "cmL", "cmD", "cmH", "cmSet", "cmPrice", "cmColors"].forEach((id) => $(id).value = "");
   commit(); renderMaterials(); renderJobPane(); toast("Added " + name + ". It's in the material lists now.");
@@ -2818,6 +2830,7 @@ function sanitizeJob(j) {
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom, north: ((Math.round(num(j.north, 0, -720, 720)) % 360) + 360) % 360,
       style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
+      pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
       site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
@@ -4074,6 +4087,7 @@ const sync = { db: null, uid: null, dev: Math.random().toString(36).slice(2, 10)
 const rawSet = store.set;
 store.set = (k, v) => {
   rawSet(k, v);
+  if (k === "bsp.library") libCache = null;
   const key = k.startsWith("bsp.") ? k.slice(4) : "";
   if (!SYNC_KEYS.includes(key) || sync.applying) return;
   sync.at[key] = Date.now(); rawSet("bsp.syncAt", sync.at);
@@ -4112,7 +4126,7 @@ function syncApply(key, json) {
   if (localStorage.getItem("bsp." + key) === json) return;
   sync.applying = true;
   try {
-    localStorage.setItem("bsp." + key, json);
+    localStorage.setItem("bsp." + key, json); if (key === "library") libCache = null;
     if (key === "current") {
       snapshot();
       const keepView = { ...view2d }; loadSavedJob();
