@@ -424,12 +424,13 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <div class="grid2" id="bFields" hidden>
           <label class="f">Load per trip (kg) <input id="bKg" inputmode="decimal"></label>
           <label class="f">Minutes per round trip <input id="bMin" inputmode="decimal"></label>
+          <label class="f">Rent from <select id="bFrom"></select></label>
           <label class="f">Rental $ per day (0 if you own it) <input id="bDay" inputmode="decimal"></label>
           <label class="f">Working hours per day <input id="bHrs" inputmode="decimal"></label>
         </div>
         <div id="bPlan"></div>
         <p class="note" id="fNote"></p>
-        <details id="supEdit"><summary>Suppliers list</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
+        <details id="supEdit"><summary>Suppliers and rental yards</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
           <button class="btn primary" id="qHtml">Save quote</button>
           <button class="btn" id="qCsv">Export to Ledgerline (CSV)</button>
@@ -2520,6 +2521,14 @@ const DEFAULT_SUPPLIERS = [
   { id: "homedepot-victoria", name: "Home Depot, Victoria (Millstream)", area: "Langford, about 40 min from Swartz Bay", address: "2400 Millstream Rd, Victoria", phone: "250-391-6000", url: "https://www.allanblock.com/Dealers/Locations/Home_Depot_-_Victoria_-_7074.aspx", notes: "Allan Block authorized dealer.", prices: {} },
   { id: "vi-precast", name: "Vancouver Island Precast", area: "Coombs; delivers anywhere on Vancouver Island and the Gulf Islands", address: "Coombs, BC", phone: "1-250-927-8265", url: "https://vancouverislandprecast.com/products/concrete-products", notes: "Ask for a delivered-to-Pender price.", prices: {} },
   { id: "rona-online", name: "RONA (price seen online)", area: "Check the nearest RONA", address: "", phone: "", url: "https://www.rona.ca/en/product/allan-block-expocrete-ab-classic-retaining-wall-block-grey-18-in-w-x-12-in-d-x-8-in-h-16209264-39935097", notes: "AB Classic grey 18 x 12 x 8 listed at $11.59 each.", prices: { "ab-classic": 11.59 } },
+  // Equipment rental yards (found Oct 2026). None found on Pender itself.
+  { id: "r-sunbelt-sidney", rental: true, name: "Sunbelt Rentals, Sidney", area: "Sidney, about 5 min from Swartz Bay ferry", address: "10115 McDonald Park Rd, Sidney", phone: "250-656-9422", url: "https://www.sunbeltrentals.com/locations/bc/sidney/equipment-tool-rentals/7054", notes: "Closest yard to the ferry. Mon to Fri 7 to 5. Equipment and tool rentals with delivery and pickup.", prices: {} },
+  { id: "r-united-saanichton", rental: true, name: "United Rentals, Saanichton", area: "Saanich Peninsula, about 10 min from Swartz Bay", address: "1991 Keating Cross Rd, Saanichton", phone: "", url: "https://www.unitedrentals.com/locations/bc/saanichton/equipment-tool-rentals/42k", notes: "Mini excavators, skid steers, compact track loaders.", prices: {} },
+  { id: "r-saanich-rentals", rental: true, name: "Saanich Rentals", area: "Victoria, about 25 min from Swartz Bay", address: "1554 Cedar Hill Cross Rd, Victoria", phone: "250-477-6908", url: "https://saanichrentals.com/rental-equipment/", notes: "Rents track dumpers, plate packers and compaction equipment, Kubota mini excavators, trenchers and pumps. Over 50 years in Victoria.", prices: {} },
+  { id: "r-sunbelt-victoria", rental: true, name: "Sunbelt Rentals, Victoria", area: "Victoria", address: "402 Garbally Rd, Victoria", phone: "250-360-1962", url: "https://www.sunbeltrentals.com/locations/bc/victoria/equipment-tool-rentals/7059/", notes: "Mon to Fri 7 to 5.", prices: {} },
+  { id: "r-sunbelt-langford", rental: true, name: "Sunbelt Rentals, Langford", area: "Langford", address: "2994 Jacklin Rd, Victoria", phone: "", url: "https://qawww.sunbeltrentals.com/locations/bc/langford/equipment-tool-rentals/7055", notes: "Open Saturdays 8 to 4.", prices: {} },
+  { id: "r-united-victoria", rental: true, name: "United Rentals, Victoria", area: "Victoria", address: "573 Kelvin Rd, Victoria", phone: "", url: "https://www.unitedrentals.com/locations/bc/victoria/equipment-tool-rentals/916", notes: "", prices: {} },
+  { id: "r-aral", rental: true, name: "Aral Rentals", area: "Victoria", address: "553 Hillside Ave, Victoria", phone: "250-590-3070", url: "https://web.victoriachamber.ca/Rental-Services/Aral-Rentals-9232", notes: "", prices: {} },
   { id: "bcbrick", name: "BC Brick Supplies", area: "Lower Mainland, via Tsawwassen ferry", address: "", phone: "", url: "https://www.bcbrick.com/products/pavers/belgard/standard/", notes: "Allan Block dealer; carries the Belgard (formerly Abbotsford Concrete) Classic Standard paver.", prices: {} },
 ];
 function suppliers() {
@@ -2535,7 +2544,7 @@ function renderBuy() {
   const rows = [...mats.values()].map((o) => {
     const m = mat(o.id), need = Math.ceil(o.qty * waste), pal = m.perPallet ? Math.ceil(need / m.perPallet) : null, sid = (job.buy || {})[o.id] || "";
     return `<div class="buyrow"><div class="buyhead"><b>${escapeHtml(matName(m))}${o.color ? ` <small>${escapeHtml(o.color)}</small>` : ""}</b><span>${need} ${perSqft(m) ? "sq ft" : "ea"}${pal ? ` · ${pal} pallet${pal > 1 ? "s" : ""} of ${m.perPallet}` : ""}</span></div>
-      <div class="buyline"><select data-buy="${o.id}" aria-label="Buy ${escapeHtml(matName(m))} from"><option value="">Buy from…</option>${sups.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === sid ? " selected" : ""}>${escapeHtml(x.name)}${x.prices && x.prices[o.id] != null ? ` · ${money(x.prices[o.id])}` : ""}</option>`).join("")}</select>
+      <div class="buyline"><select data-buy="${o.id}" aria-label="Buy ${escapeHtml(matName(m))} from"><option value="">Buy from…</option>${sups.filter((x) => !x.rental).map((x) => `<option value="${escapeHtml(x.id)}"${x.id === sid ? " selected" : ""}>${escapeHtml(x.name)}${x.prices && x.prices[o.id] != null ? ` · ${money(x.prices[o.id])}` : ""}</option>`).join("")}</select>
       <label>$<input data-bprice="${o.id}" inputmode="decimal" value="${priceOf(o.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"></label><b>${money(need * priceOf(o.id))}</b></div></div>`;
   }).join("");
   const used = [...new Set(Object.values(job.buy || {}))].map((id) => sups.find((x) => x.id === id)).filter(Boolean);
@@ -2556,10 +2565,15 @@ function renderBuy() {
   // ferry
   const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
   const E2 = { ...EST_DEFAULTS, ...job.est };
-  for (const [el, k] of [["bKg", "barrowKg"], ["bMin", "barrowMin"], ["bDay", "barrowDay"], ["bHrs", "barrowHrsDay"]]) { const inp = $(el); if (document.activeElement !== inp) inp.value = E2[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = E2[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
+  if (document.activeElement !== $("bDay")) $("bDay").value = E2.barrowDay;
+  for (const [el, k] of [["bKg", "barrowKg"], ["bMin", "barrowMin"], ["bHrs", "barrowHrsDay"]]) { const inp = $(el); if (document.activeElement !== inp) inp.value = E2[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = E2[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
   $("bOn").value = String(E2.barrow ? 1 : 0); $("bFields").hidden = !E2.barrow;
   $("bOn").onchange = () => { snapshot(); job.est = { ...job.est, barrow: +$("bOn").value }; commit(); };
-  if (E2.barrow) { const bp = barrowPlan(E2); $("bPlan").innerHTML = `<div class="supcard"><b>${bp.trips} trips · about ${num1(bp.kg / 1000)} tonnes to move · ${num1(bp.hours)} hours${E2.barrowDay > 0 ? ` · ${bp.days} day${bp.days > 1 ? "s" : ""} rental` : ""}</b><small>That is about ${Math.floor(bp.pay / 34)} wall blocks or ${Math.floor(bp.pay / 28.3)} caps a trip at ${num1(bp.pay)} kg. Typical machines carry 300 to 500 kg (660 to 1,100 lb); use your machine's rating and keep loads lower on steep or wet ground.</small></div>`; }
+  { const yards = sups.filter((x) => x.rental), cur = (job.buy || {}).barrow || "";
+    $("bFrom").innerHTML = `<option value="">My own machine, or choose a yard…</option>` + yards.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === cur ? " selected" : ""}>${escapeHtml(x.name)}${x.prices && x.prices.barrow != null ? ` · ${money(x.prices.barrow)}/day` : ""}</option>`).join("");
+    $("bFrom").onchange = () => { const y = yards.find((x) => x.id === $("bFrom").value); snapshot(); job.buy = { ...(job.buy || {}) }; if (y) job.buy.barrow = y.id; else delete job.buy.barrow; if (y && y.prices && y.prices.barrow != null) job.est = { ...job.est, barrowDay: y.prices.barrow }; commit(); };
+    $("bDay").onchange = () => { const n = parseFloat($("bDay").value); if (!(n >= 0)) { $("bDay").value = E2.barrowDay; return; } snapshot(); job.est = { ...job.est, barrowDay: n }; const yid = (job.buy || {}).barrow; if (yid) { const all = suppliers(), y = all.find((x) => x.id === yid); if (y) { y.prices = { ...(y.prices || {}), barrow: n }; saveSuppliers(all); } } commit(); }; }
+  if (E2.barrow) { const bp = barrowPlan(E2), yard = sups.find((x) => x.id === (job.buy || {}).barrow); $("bPlan").innerHTML = (yard ? `<div class="supcard"><b>${escapeHtml(yard.name)}</b>${escapeHtml(yard.area || "")}${yard.address ? ` · ${escapeHtml(yard.address)}` : ""}${yard.phone ? ` · <a href="tel:${escapeHtml(yard.phone.replace(/[^0-9+]/g, ""))}">${escapeHtml(yard.phone)}</a>` : ""}${yard.url ? ` · <a href="${escapeHtml(yard.url)}" target="_blank" rel="noopener">website</a>` : ""}${yard.notes ? `<br><small>${escapeHtml(yard.notes)}</small>` : ""}</div>` : "") + `<div class="supcard"><b>${bp.trips} trips · about ${num1(bp.kg / 1000)} tonnes to move · ${num1(bp.hours)} hours${E2.barrowDay > 0 ? ` · ${bp.days} day${bp.days > 1 ? "s" : ""} rental` : ""}</b><small>That is about ${Math.floor(bp.pay / 34)} wall blocks or ${Math.floor(bp.pay / 28.3)} caps a trip at ${num1(bp.pay)} kg. Typical machines carry 300 to 500 kg (660 to 1,100 lb); use your machine's rating and keep loads lower on steep or wet ground. For comparison, a Vancouver yard (A&B Tool Rentals) lists power wheelbarrows at $65 a day; ask your yard for its tracked-barrow rate.</small></div>`; }
   else $("bPlan").innerHTML = "";
   $("hMode").value = String(E2.haulSelf ? 1 : 0); $("hBulk").value = String(E2.haulBulk ? 1 : 0);
   $("hTruck").hidden = !!E2.haulSelf; $("hSelf").hidden = !E2.haulSelf;
