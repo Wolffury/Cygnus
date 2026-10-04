@@ -415,6 +415,15 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Haul road base and gravel too <select id="hBulk"><option value="1">Yes</option><option value="0">No, I get it on the island</option></select></label>
         </div>
         <div id="hPlan"></div>
+        <h3>Moving it on site</h3>
+        <label class="f">Powered tracked wheelbarrow <select id="bOn"><option value="0">Not used</option><option value="1">Use one to move materials from the drop spot</option></select></label>
+        <div class="grid2" id="bFields" hidden>
+          <label class="f">Load per trip (kg) <input id="bKg" inputmode="decimal"></label>
+          <label class="f">Minutes per round trip <input id="bMin" inputmode="decimal"></label>
+          <label class="f">Rental $ per day (0 if you own it) <input id="bDay" inputmode="decimal"></label>
+          <label class="f">Working hours per day <input id="bHrs" inputmode="decimal"></label>
+        </div>
+        <div id="bPlan"></div>
         <p class="note" id="fNote"></p>
         <details id="supEdit"><summary>Suppliers list</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
@@ -709,7 +718,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -2336,6 +2345,12 @@ function haulList() {
   add("Handrail posts and lumber", w.railPosts * 9 + w.railFt * 2 * 1.6);
   return out;
 }
+// Powered tracked wheelbarrow: everything delivered has to be moved from the drop spot to where it goes
+function barrowPlan(E) {
+  const kg = haulList().reduce((a, x) => a + x.kg, 0), pay = Math.max(50, E.barrowKg || 300);
+  const trips = Math.ceil(kg / pay), hours = trips * (E.barrowMin || 12) / 60, days = Math.max(1, Math.ceil(hours / Math.max(1, E.barrowHrsDay || 8)));
+  return { kg, pay, trips, hours, days };
+}
 function haulPlan(E) {
   const list = haulList().filter((x) => E.haulBulk || !x.bulk), kg = list.reduce((a, x) => a + x.kg, 0), pay = Math.max(100, E.payloadKg || 1000);
   const trips = Math.ceil(kg / pay), fare = (E.fareBase || 0) + Math.max(0, (E.rigFt || 20) - 20) * (E.farePerFtOver || 0);
@@ -2436,6 +2451,11 @@ function estimate() {
   L("Labour", "Edging installation", hrs(w.edgeFt * E.hrEdgeFt), "hr", E.labourRate);
   L("Labour", "Handrail posts and rails", hrs(w.railFt * E.hrRailFt), "hr", E.labourRate);
   L("Labour", "Paving installation and jointing", hrs(w.paveSqft * E.hrPaveSqft + w.slabs * E.hrSlab + w.surfSqft * E.hrSurfSqft), "hr", E.labourRate);
+  if (E.barrow) {
+    const bp = barrowPlan(E);
+    L("Labour", `Moving materials on site with a powered tracked wheelbarrow (${bp.trips} trips of up to ${num1(bp.pay)} kg)`, ceilTo(bp.hours, 0.5), "hr", E.labourRate);
+    if (E.barrowDay > 0) L("Equipment & disposal", `Powered tracked wheelbarrow rental (${bp.days} day${bp.days > 1 ? "s" : ""})`, bp.days, "day", E.barrowDay);
+  }
   if (lines.length) {
     L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
     L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
@@ -2524,6 +2544,11 @@ function renderBuy() {
   // ferry
   const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
   const E2 = { ...EST_DEFAULTS, ...job.est };
+  for (const [el, k] of [["bKg", "barrowKg"], ["bMin", "barrowMin"], ["bDay", "barrowDay"], ["bHrs", "barrowHrsDay"]]) { const inp = $(el); if (document.activeElement !== inp) inp.value = E2[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = E2[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
+  $("bOn").value = String(E2.barrow ? 1 : 0); $("bFields").hidden = !E2.barrow;
+  $("bOn").onchange = () => { snapshot(); job.est = { ...job.est, barrow: +$("bOn").value }; commit(); };
+  if (E2.barrow) { const bp = barrowPlan(E2); $("bPlan").innerHTML = `<div class="supcard"><b>${bp.trips} trips · about ${num1(bp.kg / 1000)} tonnes to move · ${num1(bp.hours)} hours${E2.barrowDay > 0 ? ` · ${bp.days} day${bp.days > 1 ? "s" : ""} rental` : ""}</b><small>That is about ${Math.floor(bp.pay / 34)} wall blocks or ${Math.floor(bp.pay / 28.3)} caps a trip at ${num1(bp.pay)} kg. Typical machines carry 300 to 500 kg (660 to 1,100 lb); use your machine's rating and keep loads lower on steep or wet ground.</small></div>`; }
+  else $("bPlan").innerHTML = "";
   $("hMode").value = String(E2.haulSelf ? 1 : 0); $("hBulk").value = String(E2.haulBulk ? 1 : 0);
   $("hTruck").hidden = !!E2.haulSelf; $("hSelf").hidden = !E2.haulSelf;
   $("hMode").onchange = () => { snapshot(); job.est = { ...job.est, haulSelf: +$("hMode").value }; commit(); };
