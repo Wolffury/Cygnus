@@ -491,6 +491,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Client <input id="jClient"></label>
         </div>
         <label class="f">Site address <input id="jAddr"></label>
+        <label class="f">North (degrees clockwise from the top of the plan) <input id="jNorth" inputmode="decimal"></label>
+        <p class="note">Or drag the compass in the top corner of the blueprint until its arrow points to true north.</p>
         <label class="f">Blueprint style
           <select id="jTheme"><option value="blueprint">Blueprint (blue paper)</option><option value="white">Colour on white (best for printing)</option><option value="mono">Black on white</option><option value="sepia">Sepia</option></select>
         </label>
@@ -539,6 +541,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <h2 id="prTitle">Print on regular paper</h2>
     <p class="note">Makes a PDF to print at home or the office. It has a cover page with taping instructions, the legend, and the plan split over several sheets at a true scale that you tape together. The side view and step sections come last.</p>
     <div class="grid3">
+      <label class="f">What to print <select id="prWhat"><option value="all">Everything: blueprint and side views</option><option value="plan">Blueprint only</option><option value="side">Side views only</option></select></label>
       <label class="f">Paper <select id="prPaper"><option value="letter">Letter 8½ × 11"</option><option value="legal">Legal 8½ × 14"</option><option value="tabloid">Tabloid 11 × 17"</option><option value="a4">A4</option></select></label>
       <label class="f">Scale <select id="prScale"></select></label>
       <label class="f">Style <select id="prTheme"><option value="white">Colour on white</option><option value="mono">Black on white (saves colour ink)</option><option value="blueprint">Blueprint (uses lots of ink)</option><option value="sepia">Sepia</option></select></label>
@@ -1093,6 +1096,19 @@ function drawPlan() {
 
 // Realistic plan colours: dark ink on grass instead of white ink on blue paper
 const REALBP = { joint: "rgba(0,0,0,.28)", paper: "#8fb26a", grid: "rgba(255,255,255,.10)", grid5: "rgba(255,255,255,.22)", ink: "#1d2733", ink2: "rgba(29,39,51,.78)", sel: "#d35400", fill: "rgba(255,255,255,.25)" };
+// North arrow: true north is job.north degrees clockwise from the top of the plan. On screen it can be dragged round.
+let compassDrag = false;
+function drawCompass(ctx, x, y, r, u, color, active) {
+  const a = ((job.north || 0) * Math.PI) / 180, P = (dx, dy) => [x + dx * Math.cos(a) - dy * Math.sin(a), y + dx * Math.sin(a) + dy * Math.cos(a)];
+  ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5 * u;
+  if (active) { ctx.fillStyle = "rgba(255,200,87,.25)"; ctx.beginPath(); ctx.arc(x, y, r + 6 * u, 0, 7); ctx.fill(); ctx.fillStyle = color; }
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) { const [a1, b1] = P(dx * r * 0.82, dy * r * 0.82), [a2, b2] = P(dx * r, dy * r); ctx.beginPath(); ctx.moveTo(a1, b1); ctx.lineTo(a2, b2); ctx.stroke(); }
+  const pts = [P(0, -r * 0.9), P(r * 0.35, r * 0.4), P(0, r * 0.15)]; ctx.beginPath(); pts.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.closePath(); ctx.fill();
+  const [lx, ly] = P(0, -r - 7 * u); label(ctx, "N", lx, ly, 13 * u, "center", color);
+  if (active) label(ctx, `${Math.round(job.north || 0)}°`, x, y + r + 14 * u, 11 * u, "center", color, 600);
+  ctx.restore();
+}
 function renderSheet(ctx, W, H, v, o) {
   if (!o.screen && labelHits) { const keep = labelHits; labelHits = null; try { return renderSheet(ctx, W, H, v, o); } finally { labelHits = keep; } } // exports never record names
   if ((o.real ?? planLook() === "real") && !o.inReal) {
@@ -1135,10 +1151,7 @@ function renderSheet(ctx, W, H, v, o) {
 
   if (o.noChrome) return;
   const nx = W - 46 * u, ny = (o.screen ? 70 : 60) * u;
-  ctx.save(); ctx.strokeStyle = BP.ink; ctx.fillStyle = BP.ink; ctx.lineWidth = 1.5 * u;
-  ctx.beginPath(); ctx.arc(nx, ny, 20 * u, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(nx, ny - 18 * u); ctx.lineTo(nx + 7 * u, ny + 8 * u); ctx.lineTo(nx, ny + 3 * u); ctx.closePath(); ctx.fill();
-  label(ctx, "N", nx, ny - 26 * u, 13 * u, "center", BP.ink); ctx.restore();
+  drawCompass(ctx, nx, ny, 20 * u, u, BP.ink, o.screen && compassDrag);
 
   const ftPx = v.s * 12; let barFt = [1, 2, 5, 10, 20, 50].find((f) => f * ftPx > 90 * u) || 50;
   const sbx = 20 * u, sby = H - (o.screen ? 44 : 30) * u;
@@ -1906,6 +1919,7 @@ plan.addEventListener("pointerdown", (e) => {
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, s: view2d.s, ox: view2d.ox, oy: view2d.oy }; if (drag && drag.item && drag.moved) commit(); drag = null; return; }
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
   moved = false;
+  { const cx = plan.clientWidth - 46, cy = 70; if (Math.hypot(e.offsetX - cx, e.offsetY - cy) <= 28) { drag = { compass: true, cx, cy, moved: false }; compassDrag = true; drawPlan(); return; } }
   const ha = handleAt(e.offsetX, e.offsetY);
   if (ha) { drag = { handle: true, h: ha.h, item: ha.it, orig: JSON.parse(JSON.stringify(ha.it)), moved: false, start: [wx, wy] }; return; }
   if (tool === "dim") {
@@ -1939,6 +1953,11 @@ plan.addEventListener("pointermove", (e) => {
     view2d.ox = cx - (pinch.cx - pinch.ox) * r; view2d.oy = cy - (pinch.cy - pinch.oy) * r; drawPlan(); return;
   }
   if (!drag) return;
+  if (drag.compass) {
+    if (!drag.moved) { snapshot(); drag.moved = true; }
+    let a = Math.atan2(e.offsetX - drag.cx, -(e.offsetY - drag.cy)) * 180 / Math.PI; a = snap ? Math.round(a / 5) * 5 : Math.round(a);
+    job.north = ((a % 360) + 360) % 360; drawPlan(); liveTip(`North ${job.north}°`, e.offsetX, e.offsetY); return;
+  }
   if (drag.pan) { view2d.ox = drag.ox + e.offsetX - drag.sx; view2d.oy = drag.oy + e.offsetY - drag.sy; if (Math.abs(e.offsetX - drag.sx) + Math.abs(e.offsetY - drag.sy) > 4) moved = true; drawPlan(); return; }
   const [wx, wy] = S2W(view2d, e.offsetX, e.offsetY);
   if (drag.sketch) {
@@ -1971,6 +1990,7 @@ function endPointer(e) {
   }
   if (drag && drag.newDim && Math.hypot(drag.item.x2 - drag.item.x, drag.item.y2 - drag.item.y) < 1) { job.items = job.items.filter((i) => i !== drag.item); undoStack.pop(); selId = null; drawPlan(); drag = null; }
   if (drag && drag.item && drag.moved) commit();
+  if (drag && drag.compass) { compassDrag = false; if (drag.moved) { commit(); renderJobPane(); toast(`True north set to ${job.north}° from the top of the plan.`); } else { drawPlan(); toast("Drag the compass round to point it at true north."); } }
   if (drag && drag.pan && !moved && selId) { selId = null; renderItemPane(); renderList(); drawPlan(); }
   if (pointers.size === 0) drag = null;
 }
@@ -2252,6 +2272,7 @@ $("cmAdd").onclick = () => {
 
 // ---------- job pane ----------
 function renderJobPane() {
+  $("jNorth").value = Math.round(job.north || 0);
   $("jName").value = job.name || ""; $("jClient").value = job.client || ""; $("jAddr").value = job.address || ""; $("jNotes").value = job.notes || "";
   $("jSW").value = fmtLen(job.site.w); $("jSD").value = fmtLen(job.site.d);
   const d = job.defaults;
@@ -2275,6 +2296,7 @@ function renderJobPane() {
   renderJobs();
 }
 $("jTheme").addEventListener("change", (e) => { snapshot(); job.style = { ...job.style, theme: e.target.value }; applyTheme(); commit(); });
+$("jNorth").addEventListener("change", (e) => { const n = parseFloat(e.target.value); if (!isFinite(n)) { e.target.value = Math.round(job.north || 0); return; } snapshot(); job.north = ((Math.round(n) % 360) + 360) % 360; commit(); });
 const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v]];
 jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot(); fn(e.target.value); commit(); }));
 [["jSW", "w"], ["jSD", "d"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
@@ -2759,7 +2781,7 @@ function sanitizeJob(j) {
     const prices = {}; for (const [k, v] of Object.entries(j.prices || {})) if (isFinite(+v) && +v >= 0) prices[String(k).slice(0, 40)] = +v;
     return {
       v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
-      quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom,
+      quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom, north: ((Math.round(num(j.north, 0, -720, 720)) % 360) + 360) % 360,
       style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
@@ -2986,7 +3008,10 @@ function prPreview() {
   withPaper($("prTheme").value, () => { renderSheet(ctx, w, h, v, { unit: 0.7, section: false, selId: null, noChrome: true }); drawTileGrid(ctx, v, L, 1); });
   const f = planLook() === "real" ? "none" : THEMES[$("prTheme").value].filter; c.style.filter = f === "none" ? "" : f;
   const n = L.nx * L.ny, PWd = L.PW > L.PH ? "landscape" : "portrait";
-  $("prInfo").textContent = `${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}. Taped together the plan is about ${num1(L.totW)} × ${num1(L.totH)} in. Plus a cover, legend and sections pages.`;
+  const what = $("prWhat").value, flights = job.items.filter((i) => i.type === "steps").length, sides = planLook() === "real" ? (flights ? flights + 1 : 0) : job.items.filter((i) => i.type === "cut").length + flights;
+  const planTxt = `${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}, taped together about ${num1(L.totW)} × ${num1(L.totH)} in, plus a cover page with the sheet map`;
+  const sideTxt = `${Math.ceil(sides / 2)} side view page${Math.ceil(sides / 2) === 1 ? "" : "s"} (${sides} drawing${sides === 1 ? "" : "s"}, two to a page)`;
+  $("prInfo").textContent = what === "plan" ? `Blueprint only: ${planTxt}.` : what === "side" ? (sides ? `Side views only: ${sideTxt}.` : "There are no steps to show from the side.") : `${planTxt}; then ${sideTxt}.`;
 }
 // Text for the white margins (drawn after the style filter so it is always black)
 function marginText(ctx, t, x, y, size, align = "left", weight = 500) { ctx.save(); ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = "#111"; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); ctx.restore(); }
@@ -3008,13 +3033,16 @@ async function makePrintPdf() {
   const L = tileLayout($("prPaper").value, +$("prScale").value), theme = $("prTheme").value, D = PR.dpi, u = D / 96;
   const pages = [], cuts = job.items.filter((i) => i.type === "cut"), stairs = job.items.filter((i) => i.type === "steps");
   const real = planLook() === "real";
-  const secBlocks = real ? (stairs.length ? stairs.length + 1 : 0) : cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = (real ? 1 : 2) + L.nx * L.ny + secPages;
+  const what = $("prWhat").value, planPart = what !== "side", sidePart = what !== "plan";
+  const secBlocks = real ? (stairs.length ? stairs.length + 1 : 0) : cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = (planPart ? (real ? 1 : 2) + L.nx * L.ny : 0) + (sidePart ? secPages : 0);
+  if (!total) throw new Error(sidePart && !planPart ? "there are no steps or section lines to show from the side" : "nothing to print");
   const title = `${job.name || "Job"}${job.client ? " · " + job.client : ""}`, when = new Date().toLocaleDateString();
   const step = async (msg) => { $("prInfo").textContent = msg; await new Promise((r) => setTimeout(r, 0)); };
   const barFt = [1, 2, 4, 5, 10, 20, 40].find((f) => f * L.perFt >= 1.4) || 40, barIn = barFt * L.perFt;
   const addPage = async (c) => { const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9)); pages.push({ w: L.PW, h: L.PH, px: c.width, py: c.height, jpg: new Uint8Array(await b.arrayBuffer()) }); };
 
   // 1. cover: overview with the sheet map, and how to put it together
+  if (planPart) {
   await step("Making the cover page…");
   {
     const [c, x] = newPage(L);
@@ -3046,8 +3074,9 @@ async function makePrintPdf() {
     });
     x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Cover · sheet map and instructions"); pageFooter(x, L, title, 1, total); await addPage(c);
   }
+  }
   // 2. legend (the blueprint look only; the realistic look explains itself)
-  if (!real) {
+  if (!real && planPart) {
     await step("Making the legend…");
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
@@ -3063,8 +3092,8 @@ async function makePrintPdf() {
   const targets = [];
   for (let i = 0; i < L.nx - 1; i++) for (let j = 0; j < L.ny; j++) for (const f of [0.25, 0.75]) targets.push([L.x0 + ((i + 1) * L.sx + PR.ov / 2) / L.k, L.y0 - (j * L.sy + f * L.sy) / L.k]);
   for (let j = 0; j < L.ny - 1; j++) for (let i = 0; i < L.nx; i++) for (const f of [0.25, 0.75]) targets.push([L.x0 + (i * L.sx + f * L.sx) / L.k, L.y0 - ((j + 1) * L.sy + PR.ov / 2) / L.k]);
-  let n = real ? 1 : 2;
-  for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
+  let n = planPart ? (real ? 1 : 2) : 0;
+  if (planPart) for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
     n++; await step(`Making plan sheet ${sheetName(i, j)} (${n} of ${total})…`);
     const [c, x] = newPage(L);
     v.ox = -(L.x0 + i * L.sx / L.k) * v.s; v.oy = (L.y0 - j * L.sy / L.k) * v.s;
@@ -3085,8 +3114,7 @@ async function makePrintPdf() {
     pageHeader(x, L, `Sheet ${sheetName(i, j)}   ·   column ${String.fromCharCode(65 + i)} of ${L.nx}, row ${j + 1} of ${L.ny}   ·   ${prScaleText(L.perFt)}`);
     { // north arrow in the top margin, so any sheet on its own still reads
       const nx = (L.PW - PR.m - 0.2) * D, ny = PR.top / 2 * D, r = 0.17 * D;
-      x.save(); x.strokeStyle = "#111"; x.fillStyle = "#111"; x.lineWidth = 2; x.beginPath(); x.arc(nx, ny, r, 0, 7); x.stroke(); x.beginPath(); x.moveTo(nx, ny - r * 0.85); x.lineTo(nx + r * 0.35, ny + r * 0.4); x.lineTo(nx, ny + r * 0.15); x.closePath(); x.fill(); x.restore();
-      marginText(x, "N", nx - r - 0.06 * D, ny, 0.12 * D, "right", 700);
+      drawCompass(x, nx, ny, r, D / 96 * 0.7, "#111", false);
     }
     // neighbours, so a dropped sheet finds its place
     const mid = (a) => a * D;
@@ -3102,7 +3130,7 @@ async function makePrintPdf() {
   }
   // 4. side view and step sections, two per page (not to scale)
   const blocks = real ? (stairs.length ? [["stairs", "all"], ...stairs.slice().sort((a, b) => (a.elev || 0) - (b.elev || 0)).map((st) => ["stairs", st.id])] : []) : [...cuts.map((ct) => ["cut", ct]), ...stairs.map((st) => ["steps", st])];
-  for (let p0 = 0; p0 < blocks.length; p0 += 2) {
+  for (let p0 = 0; sidePart && p0 < blocks.length; p0 += 2) {
     n++; await step(`Making the sections page (${n} of ${total})…`);
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
@@ -3140,12 +3168,12 @@ function pdfFromJpegs(pages) {
   return new Blob(parts, { type: "application/pdf" });
 }
 $("printBtn").onclick = prOpen;
-for (const id of ["prPaper", "prScale", "prTheme"]) $(id).onchange = prPreview;
+for (const id of ["prPaper", "prScale", "prTheme", "prWhat"]) $(id).onchange = prPreview;
 $("prCancel").onclick = () => { $("printDlg").hidden = true; };
 $("printDlg").addEventListener("click", (e) => { if (e.target.id === "printDlg") $("printDlg").hidden = true; });
 $("prGo").onclick = async () => {
   $("prGo").disabled = true;
-  try { const pdf = await makePrintPdf(); await saveFile(slug(job.name || "plan") + "_print.pdf", pdf); $("printDlg").hidden = true; }
+  try { const pdf = await makePrintPdf(), w = $("prWhat").value; await saveFile(slug(job.name || "plan") + (w === "plan" ? "_blueprint" : w === "side" ? "_side_views" : "_print") + ".pdf", pdf); $("printDlg").hidden = true; }
   catch (e) { $("prInfo").textContent = "Couldn't make the PDF: " + ((e && e.message) || e); }
   finally { $("prGo").disabled = false; }
 };
@@ -3805,7 +3833,7 @@ Edits (use as few as needed; an empty list is fine when you only answer or ask a
 - {"op":"update","id":"<existing id>","set":{...only the fields that change...}}
 - {"op":"delete","id":"<existing id>"}
 - {"op":"replace","items":[...every item...],"site":{"w","d"}}   only for drawing a whole new layout
-- {"op":"job","set":{"name","client","address","notes","site":{"w","d"}}}
+- {"op":"job","set":{"name","client","address","notes","north": degrees true north is clockwise from the top of the plan,"site":{"w","d"}}}
 - {"op":"style","set":{"look":"real"|"blueprint","theme":"blueprint"|"white"|"mono"|"sepia"}}   look: realistic picture (default) or blueprint; theme: the blueprint's paper: blue, colour on white (prints best), black on white, or sepia
 Moving an item is an update of x and y; turning it is an update of rot.`;
 function aiRules() {
@@ -3823,7 +3851,7 @@ ${OPS_DOC}`;
 }
 const r2 = (k, v) => typeof v === "number" ? Math.round(v * 100) / 100 : v;
 function aiJobState() {
-  return JSON.stringify({ name: job.name, client: job.client, notes: job.notes, site: job.site, style: job.style, items: job.items }, r2);
+  return JSON.stringify({ name: job.name, client: job.client, notes: job.notes, site: job.site, style: job.style, northDegreesClockwiseFromPlanTop: job.north || 0, items: job.items }, r2);
 }
 let sampleCap = null, aiCtl = null, photos = [];
 function extractJson(t) { const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a < 0 || b < a) throw new Error("no json"); return JSON.parse(t.slice(a, b + 1)); }
@@ -3887,6 +3915,7 @@ function applyOps(ops) {
       else if (o.op === "job" && o.set) {
         for (const f of ["name", "client", "address", "notes"]) if (typeof o.set[f] === "string") job[f] = o.set[f].slice(0, f === "notes" ? 600 : 120);
         if (o.set.site) job.site = { w: num(o.set.site.w, job.site.w, 48, 20000), d: num(o.set.site.d, job.site.d, 48, 20000) };
+        if (o.set.north != null && isFinite(+o.set.north)) job.north = ((Math.round(+o.set.north) % 360) + 360) % 360;
         other.push("job details");
       }
       else if (o.op === "style" && o.set && (THEMES[o.set.theme] || o.set.look)) {
