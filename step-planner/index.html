@@ -147,13 +147,22 @@ textarea { resize: vertical; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* tabs scroll on narrow panels */
-.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs { flex-wrap: wrap; } /* every tab stays visible: a second row when the panel is narrow */
 .tabs button { flex: 1 0 auto; padding: 12px 10px; }
 .main { grid-template-columns: 1fr 400px; }
 .banner { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--fg); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
 .mats { display: flex; flex-direction: column; gap: 6px; }
 .matrow { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .matrow .btn.small { grid-column: 1 / -1; justify-self: start; }
+.eqrow { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; font-size: 13px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; }
+.eqrow.off { opacity: .6; }
+.eqrow input[type=text] { font: inherit; font-weight: 600; border: 1px solid transparent; background: transparent; width: 100%; padding: 2px 4px; }
+.eqrow input[type=text]:focus { border-color: var(--line); background: var(--panel); }
+.eqline { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; }
+.eqline select { min-width: 0; width: 100%; font: inherit; padding: 4px; }
+.eqline input[data-f=days] { width: 40px; }
+.eqline input { width: 62px; font: inherit; text-align: right; padding: 3px 4px; }
+.eqline > b { min-width: 74px; text-align: right; }
 .buylist { display: flex; flex-direction: column; gap: 6px; }
 .buyrow { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .buyhead { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -325,6 +334,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <button role="tab" aria-selected="false" data-pane="pAdd">Add</button>
         <button role="tab" aria-selected="false" data-pane="pMat">Materials</button>
         <button role="tab" aria-selected="false" data-pane="pQuote">Quote</button>
+        <button role="tab" aria-selected="false" data-pane="pEquip">Equipment</button>
         <button role="tab" aria-selected="false" data-pane="pAi" id="tAi">AI</button>
         <button role="tab" aria-selected="false" data-pane="pJob">Job</button>
       </div>
@@ -402,34 +412,6 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <h3>Where to buy</h3>
         <p class="note">Pick who you buy each material from. A supplier's price goes straight into the quote; type a price to update it (it is remembered for that supplier). Suppliers and prices below were found online in Oct 2026: always confirm stock and price before ordering.</p>
         <div id="buyList"></div>
-        <h3>Getting it there</h3>
-        <label class="f">How it gets there <select id="hMode"><option value="0">Supplier's delivery truck</option><option value="1">I haul it with my truck and trailer</option></select></label>
-        <div class="grid2" id="hTruck">
-          <label class="f">Ferry $ per foot, one way (0 = no ferry) <input id="fPerFt" inputmode="decimal"></label>
-          <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
-          <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
-          <label class="f">Ferry crossings per load <input id="fWays" inputmode="decimal"></label>
-        </div>
-        <div class="grid2" id="hSelf" hidden>
-          <label class="f">Trailer payload (kg) <input id="hPay" inputmode="decimal"></label>
-          <label class="f">Truck + trailer length (ft) <input id="hLen" inputmode="decimal"></label>
-          <label class="f">Ferry fare up to 20 ft ($) <input id="hBase" inputmode="decimal"></label>
-          <label class="f">Ferry $ per foot over 20 ft <input id="hOver" inputmode="decimal"></label>
-          <label class="f">Hours per trip (load, ferry, unload) <input id="hHrs" inputmode="decimal"></label>
-          <label class="f">Haul road base and gravel too <select id="hBulk"><option value="1">Yes</option><option value="0">No, I get it on the island</option></select></label>
-        </div>
-        <div id="hPlan"></div>
-        <h3>Moving it on site</h3>
-        <label class="f">Powered tracked wheelbarrow <select id="bOn"><option value="0">Not used</option><option value="1">Use one to move materials from the drop spot</option></select></label>
-        <div class="grid2" id="bFields" hidden>
-          <label class="f">Load per trip (kg) <input id="bKg" inputmode="decimal"></label>
-          <label class="f">Minutes per round trip <input id="bMin" inputmode="decimal"></label>
-          <label class="f">Rent from <select id="bFrom"></select></label>
-          <label class="f">Rental $ per day (0 if you own it) <input id="bDay" inputmode="decimal"></label>
-          <label class="f">Working hours per day <input id="bHrs" inputmode="decimal"></label>
-        </div>
-        <div id="bPlan"></div>
-        <p class="note" id="fNote"></p>
         <details id="supEdit"><summary>Suppliers and rental yards</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
           <button class="btn primary" id="qHtml">Save quote</button>
@@ -476,6 +458,43 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         </details>
       </div>
 
+      <div class="pane" id="pEquip" role="tabpanel" hidden>
+        <h2>Equipment &amp; delivery</h2>
+        <h3>Machines on this job</h3>
+        <p class="note" id="eqNote"></p>
+        <div id="eqList"></div>
+        <div class="row"><button class="btn" id="eqAdd">Add a machine</button></div>
+        <dl class="stats" id="eqTotals"></dl>
+        <h3>Getting it there</h3>
+        <label class="f">How it gets there <select id="hMode"><option value="0">Supplier's delivery truck</option><option value="1">I haul it with my truck and trailer</option></select></label>
+        <div class="grid2" id="hTruck">
+          <label class="f">Ferry $ per foot, one way (0 = no ferry) <input id="fPerFt" inputmode="decimal"></label>
+          <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
+          <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
+          <label class="f">Ferry crossings per load <input id="fWays" inputmode="decimal"></label>
+        </div>
+        <div class="grid2" id="hSelf" hidden>
+          <label class="f">Trailer payload (kg) <input id="hPay" inputmode="decimal"></label>
+          <label class="f">Truck + trailer length (ft) <input id="hLen" inputmode="decimal"></label>
+          <label class="f">Ferry fare up to 20 ft ($) <input id="hBase" inputmode="decimal"></label>
+          <label class="f">Ferry $ per foot over 20 ft <input id="hOver" inputmode="decimal"></label>
+          <label class="f">Hours per trip (load, ferry, unload) <input id="hHrs" inputmode="decimal"></label>
+          <label class="f">Haul road base and gravel too <select id="hBulk"><option value="1">Yes</option><option value="0">No, I get it on the island</option></select></label>
+        </div>
+        <div id="hPlan"></div>
+        <h3>Moving it on site</h3>
+        <label class="f">Powered tracked wheelbarrow <select id="bOn"><option value="0">Not used</option><option value="1">Use one to move materials from the drop spot</option></select></label>
+        <div class="grid2" id="bFields" hidden>
+          <label class="f">Load per trip (kg) <input id="bKg" inputmode="decimal"></label>
+          <label class="f">Minutes per round trip <input id="bMin" inputmode="decimal"></label>
+          <label class="f">Rent from <select id="bFrom"></select></label>
+          <label class="f">Rental $ per day (0 if you own it) <input id="bDay" inputmode="decimal"></label>
+          <label class="f">Working hours per day <input id="bHrs" inputmode="decimal"></label>
+        </div>
+        <div id="bPlan"></div>
+        <p class="note" id="fNote"></p>
+        <p class="note">Rental yards and suppliers, with phone numbers, are on the Quote tab under "Suppliers and rental yards".</p>
+      </div>
       <div class="pane" id="pAi" role="tabpanel" hidden>
         <h2>AI assistant</h2>
         <p class="aistatus" id="aiStatus">Connecting…</p>
@@ -2470,7 +2489,10 @@ function estimate() {
     if (E.barrowDay > 0) L("Equipment & disposal", `Powered tracked wheelbarrow rental (${bp.days} day${bp.days > 1 ? "s" : ""})`, bp.days, "day", E.barrowDay);
   }
   if (lines.length) {
-    L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
+    if (Array.isArray(job.equip)) {
+      const yards = suppliers();
+      for (const q of job.equip) if (q.use && q.days > 0 && q.rate > 0) { const y = yards.find((x) => x.id === q.yard); L("Equipment & disposal", `${q.name}${y ? `, rented from ${y.name}` : ""}`, q.days, q.days === 1 ? "day" : "days", q.rate); }
+    } else L("Equipment & disposal", "Equipment: plate compactor, wet saw, mini excavator", 1, "lot", E.equipment);
     L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
     if (E.haulSelf) {
       const hp = haulPlan(E);
@@ -2600,8 +2622,43 @@ function renderBuy() {
   $("supList").querySelectorAll("[data-supdel]").forEach((b) => b.onclick = () => { const all = suppliers(), k = +b.dataset.supdel; if (!confirm(`Remove ${all[k].name}?`)) return; store.set("bsp.suppliersRemoved", [...store.get("bsp.suppliersRemoved", []), all[k].id]); all.splice(k, 1); saveSuppliers(all); renderBuy(); });
 }
 $("supAdd").onclick = () => { const all = suppliers(); all.push({ id: "s" + Date.now().toString(36), name: "New supplier", area: "", address: "", phone: "", url: "", notes: "", prices: {} }); saveSuppliers(all); $("supEdit").open = true; renderBuy(); };
+// ---------- equipment: each machine on its own line ----------
+// Starting rates: a Saanich mini excavator averaged $478/day (DOZR, Oct 2026); the others are placeholders to set.
+const DEFAULT_EQUIP = () => [
+  { id: "compactor", name: "Plate compactor", use: 1, yard: "", rate: 95, days: 2 },
+  { id: "saw", name: "Wet saw for cutting block and caps", use: 1, yard: "", rate: 85, days: 2 },
+  { id: "mini", name: "Mini excavator", use: 0, yard: "", rate: 478, days: 1 },
+];
+function renderEquip() {
+  if (!$("eqList")) return;
+  const list = Array.isArray(job.equip) ? job.equip : DEFAULT_EQUIP(), yards = suppliers().filter((x) => x.rental), E = { ...EST_DEFAULTS, ...job.est };
+  $("eqNote").textContent = Array.isArray(job.equip) ? "Tick the machines this job needs. Pick the yard you rent from (its day rate is remembered), or leave it as your own machine with $0." : `Right now the quote has one line: "Equipment: plate compactor, wet saw, mini excavator" at ${money(E.equipment)}. Change anything below and the quote lists each machine on its own instead.`;
+  const save = (fn) => { snapshot(); job.equip = (Array.isArray(job.equip) ? job.equip : DEFAULT_EQUIP()).map((q) => ({ ...q })); fn(job.equip); commit(); };
+  $("eqList").innerHTML = list.map((q, k) => `<div class="eqrow${q.use ? "" : " off"}" data-eq="${k}">
+    <input type="checkbox" data-f="use"${q.use ? " checked" : ""} aria-label="Use ${escapeHtml(q.name)}">
+    <input type="text" data-f="name" value="${escapeHtml(q.name)}" aria-label="Machine">
+    <button class="btn small" data-eqdel="${k}" aria-label="Remove ${escapeHtml(q.name)}">✕</button>
+    <div class="eqline"><select data-f="yard" aria-label="Rent ${escapeHtml(q.name)} from"><option value="">My own machine</option>${yards.map((y) => `<option value="${escapeHtml(y.id)}"${y.id === q.yard ? " selected" : ""}>${escapeHtml(y.name)}${y.prices && y.prices["eq:" + q.id] != null ? ` · ${money(y.prices["eq:" + q.id])}/day` : ""}</option>`).join("")}</select>
+    <label>$<input data-f="rate" inputmode="decimal" value="${(+q.rate || 0).toFixed(2)}" aria-label="$ per day"></label>
+    <label><input data-f="days" inputmode="decimal" value="${q.days}" aria-label="Days"> d</label>
+    <b>${q.use ? money((q.rate || 0) * (q.days || 0)) : "–"}</b></div></div>`).join("");
+  $("eqList").querySelectorAll("[data-eq] [data-f]").forEach((el) => el.onchange = () => {
+    const k = +el.closest("[data-eq]").dataset.eq, f = el.dataset.f;
+    save((all) => {
+      const q = all[k];
+      if (f === "use") q.use = el.checked ? 1 : 0;
+      else if (f === "name") q.name = el.value.slice(0, 80) || "Machine";
+      else if (f === "yard") { q.yard = el.value; const y = yards.find((x) => x.id === el.value); if (y && y.prices && y.prices["eq:" + q.id] != null) q.rate = y.prices["eq:" + q.id]; }
+      else { const n = parseFloat(el.value); if (n >= 0) q[f] = n; if (f === "rate" && q.yard && n >= 0) { const sp = suppliers(), y = sp.find((x) => x.id === q.yard); if (y) { y.prices = { ...(y.prices || {}), ["eq:" + q.id]: n }; saveSuppliers(sp); } } }
+    });
+  });
+  $("eqList").querySelectorAll("[data-eqdel]").forEach((b) => b.onclick = () => save((all) => all.splice(+b.dataset.eqdel, 1)));
+  const q = estimate(), eq = q.lines.filter((l) => l.cat === "Equipment & disposal").reduce((a, l) => a + l.total, 0), bp = E.barrow ? barrowPlan(E) : null;
+  $("eqTotals").innerHTML = `<div><dt>Equipment, delivery &amp; disposal</dt><dd>${money(eq)}</dd></div>${bp ? `<div><dt>Tracked wheelbarrow</dt><dd>${bp.trips} trips</dd></div>` : ""}`;
+}
+$("eqAdd").onclick = () => { snapshot(); job.equip = [...(Array.isArray(job.equip) ? job.equip : DEFAULT_EQUIP()), { id: "m" + Date.now().toString(36), name: "New machine", use: 1, yard: "", rate: 0, days: 1 }]; commit(); };
 function renderQuote() {
-  renderBuy();
+  renderBuy(); renderEquip();
   const q = estimate();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
   const catRows = order.filter((c) => q.cats[c]).map((c) => `<tr><td>${c}</td><td>${money(q.cats[c])}</td></tr>`).join("");
@@ -2844,6 +2901,7 @@ function sanitizeJob(j) {
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom, north: ((Math.round(num(j.north, 0, -720, 720)) % 360) + 360) % 360,
       style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
+      equip: Array.isArray(j.equip) ? j.equip.slice(0, 40).filter((q) => q && typeof q === "object").map((q) => ({ id: String(q.id || "m").slice(0, 20), name: String(q.name || "Machine").slice(0, 80), use: q.use ? 1 : 0, yard: String(q.yard || "").slice(0, 40), rate: num(q.rate, 0, 0, 1e5), days: num(q.days, 1, 0, 1000) })) : undefined,
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
