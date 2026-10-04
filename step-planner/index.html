@@ -76,6 +76,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .modal { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modalbox { background: var(--panel); color: var(--fg); border-radius: 12px; padding: 16px 18px; width: min(560px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .modalbox h2 { margin: 0; }
+fieldset.views { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 0; grid-column: 1 / -1; }
+fieldset.views legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
+#prViews { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; margin-top: 8px; font-size: 14px; }
+#prViews label { display: flex; gap: 8px; align-items: flex-start; }
+#prViews label.off { opacity: .5; }
+#prViews h4 { grid-column: 1 / -1; margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 #prPreview { width: 100%; height: 220px; border-radius: 8px; border: 1px solid var(--line); }
 .stage-tools .btn { background: color-mix(in srgb, var(--panel) 92%, transparent); }
@@ -539,9 +545,12 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
 <div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
   <div class="modalbox">
     <h2 id="prTitle">Print on regular paper</h2>
-    <p class="note">Makes a PDF to print at home or the office. It has a cover page with taping instructions, the legend, and the plan split over several sheets at a true scale that you tape together. The side view and step sections come last.</p>
+    <p class="note">Makes a PDF to print at home or the office. Tick the pages you want: the blueprint split over sheets at a true scale to tape together, any of the side views, and the 3D rendering. Your choices are remembered.</p>
     <div class="grid3">
-      <label class="f">What to print <select id="prWhat"><option value="all">Everything: blueprint and side views</option><option value="plan">Blueprint only</option><option value="side">Side views only</option></select></label>
+      <fieldset class="views"><legend>Pages to include</legend>
+        <div class="row"><button class="btn small" data-preset="all">Everything</button><button class="btn small" data-preset="plan">Blueprint only</button><button class="btn small" data-preset="side">Side views only</button><button class="btn small" data-preset="none">Clear</button></div>
+        <div id="prViews"></div>
+      </fieldset>
       <label class="f">Paper <select id="prPaper"><option value="letter">Letter 8½ × 11"</option><option value="legal">Legal 8½ × 14"</option><option value="tabloid">Tabloid 11 × 17"</option><option value="a4">A4</option></select></label>
       <label class="f">Scale <select id="prScale"></select></label>
       <label class="f">Style <select id="prTheme"><option value="white">Colour on white</option><option value="mono">Black on white (saves colour ink)</option><option value="blueprint">Blueprint (uses lots of ink)</option><option value="sepia">Sepia</option></select></label>
@@ -2989,6 +2998,32 @@ function drawTileGrid(ctx, v, L, u) {
   }
   ctx.restore();
 }
+// Which views go in the PDF: remembered on this device, per job layout
+function printViewList() {
+  const real = planLook() === "real", flights = job.items.filter((i) => i.type === "steps").sort((a, b) => (a.elev || 0) - (b.elev || 0)), cuts = job.items.filter((i) => i.type === "cut");
+  const v = [{ g: "Blueprint", k: "cover", t: "Cover page: sheet map and taping instructions" }, { g: "Blueprint", k: "plan", t: "Plan sheets, to scale, to tape together" }];
+  if (!real) v.push({ g: "Blueprint", k: "legend", t: "Legend of symbols and colours" });
+  if (flights.length) v.push({ g: "Side views", k: "side:all", t: "Whole stairway from the side" });
+  for (const f of flights) v.push({ g: "Side views", k: "side:" + f.id, t: shortLabel(f.label) || "Steps", side: true });
+  for (const c of cuts) v.push({ g: "Side views", k: "cut:" + c.id, t: `Ground section ${c.label || ""}`.trim() });
+  v.push({ g: "Other", k: "three", t: R3 ? "3D rendering (as last shown in 3D Render)" : "3D rendering: open 3D Render once first", off: !R3 });
+  return v;
+}
+function printSel() { const set = new Set(); $("prViews").querySelectorAll("input:checked").forEach((c) => set.add(c.value)); return set; }
+function renderPrintViews() {
+  // remembered as {on, seen}: a view this device has not offered before (a new flight) starts ticked
+  const list = printViewList(), saved = store.get("bsp.printViews2", null), on = (k) => (saved && saved.seen.includes(k) ? saved.on.includes(k) : k !== "three");
+  let g = "", h = "";
+  for (const x of list) { if (x.g !== g) { g = x.g; h += `<h4>${g}</h4>`; } h += `<label class="${x.off ? "off" : ""}"><input type="checkbox" value="${escapeHtml(x.k)}"${on(x.k) && !x.off ? " checked" : ""}${x.off ? " disabled" : ""}><span>${escapeHtml(x.t)}</span></label>`; }
+  $("prViews").innerHTML = h;
+  $("prViews").querySelectorAll("input").forEach((c) => c.onchange = () => { savePrintViews(); prPreview(); });
+}
+document.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => {
+  const p = b.dataset.preset;
+  $("prViews").querySelectorAll("input:not(:disabled)").forEach((c) => { const k = c.value; c.checked = p === "all" ? true : p === "plan" ? ["cover", "plan", "legend"].includes(k) : p === "side" ? k.startsWith("side:") || k.startsWith("cut:") : false; });
+  savePrintViews(); prPreview();
+});
+function savePrintViews() { const prev = store.get("bsp.printViews2", { on: [], seen: [] }), seen = [...$("prViews").querySelectorAll("input")].map((c) => c.value); store.set("bsp.printViews2", { on: [...printSel()], seen: [...new Set([...prev.seen, ...seen])].slice(-300) }); }
 function prOpen() {
   const sel = $("prScale");
   sel.innerHTML = PR_SCALES.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
@@ -2998,6 +3033,7 @@ function prOpen() {
   for (const [v] of PR_SCALES) { const L = tileLayout(paper, v); if (L.nx * L.ny <= 9) pick = v; }
   sel.value = String(pick);
   $("prTheme").closest("label").hidden = planLook() === "real";
+  renderPrintViews();
   $("printDlg").hidden = false; $("prGo").disabled = false; prPreview();
 }
 function prPreview() {
@@ -3008,10 +3044,13 @@ function prPreview() {
   withPaper($("prTheme").value, () => { renderSheet(ctx, w, h, v, { unit: 0.7, section: false, selId: null, noChrome: true }); drawTileGrid(ctx, v, L, 1); });
   const f = planLook() === "real" ? "none" : THEMES[$("prTheme").value].filter; c.style.filter = f === "none" ? "" : f;
   const n = L.nx * L.ny, PWd = L.PW > L.PH ? "landscape" : "portrait";
-  const what = $("prWhat").value, flights = job.items.filter((i) => i.type === "steps").length, sides = planLook() === "real" ? (flights ? flights + 1 : 0) : job.items.filter((i) => i.type === "cut").length + flights;
-  const planTxt = `${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}, taped together about ${num1(L.totW)} × ${num1(L.totH)} in, plus a cover page with the sheet map`;
-  const sideTxt = `${Math.ceil(sides / 2)} side view page${Math.ceil(sides / 2) === 1 ? "" : "s"} (${sides} drawing${sides === 1 ? "" : "s"}, two to a page)`;
-  $("prInfo").textContent = what === "plan" ? `Blueprint only: ${planTxt}.` : what === "side" ? (sides ? `Side views only: ${sideTxt}.` : "There are no steps to show from the side.") : `${planTxt}; then ${sideTxt}.`;
+  const sel = printSel(), sides = [...sel].filter((k) => k.startsWith("side:") || k.startsWith("cut:")).length, parts = [];
+  if (sel.has("cover")) parts.push("a cover page with the sheet map");
+  if (sel.has("legend")) parts.push("a legend page");
+  if (sel.has("plan")) parts.push(`${n} plan sheet${n > 1 ? "s" : ""} (${L.nx} across × ${L.ny} down, ${PWd}) at ${prScaleText(L.perFt)}, taped together about ${num1(L.totW)} × ${num1(L.totH)} in`);
+  if (sides) parts.push(`${Math.ceil(sides / 2)} side view page${Math.ceil(sides / 2) === 1 ? "" : "s"} (${sides} drawing${sides === 1 ? "" : "s"}, two to a page)`);
+  if (sel.has("three")) parts.push("a 3D rendering page");
+  $("prInfo").textContent = parts.length ? "The PDF will have " + parts.join("; ") + "." : "Tick at least one page to include.";
 }
 // Text for the white margins (drawn after the style filter so it is always black)
 function marginText(ctx, t, x, y, size, align = "left", weight = 500) { ctx.save(); ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = "#111"; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); ctx.restore(); }
@@ -3033,17 +3072,24 @@ async function makePrintPdf() {
   const L = tileLayout($("prPaper").value, +$("prScale").value), theme = $("prTheme").value, D = PR.dpi, u = D / 96;
   const pages = [], cuts = job.items.filter((i) => i.type === "cut"), stairs = job.items.filter((i) => i.type === "steps");
   const real = planLook() === "real";
-  const what = $("prWhat").value, planPart = what !== "side", sidePart = what !== "plan";
-  const secBlocks = real ? (stairs.length ? stairs.length + 1 : 0) : cuts.length + stairs.length, secPages = Math.ceil(secBlocks / 2), total = (planPart ? (real ? 1 : 2) + L.nx * L.ny : 0) + (sidePart ? secPages : 0);
-  if (!total) throw new Error(sidePart && !planPart ? "there are no steps or section lines to show from the side" : "nothing to print");
+  const sel = printSel(), doCover = sel.has("cover"), doLegend = sel.has("legend") && !real, doPlan = sel.has("plan"), doThree = sel.has("three") && R3;
+  const blocks = [];
+  for (const k of sel) {
+    if (k === "side:all") blocks.push(["stairs", "all"]);
+    else if (k.startsWith("side:")) { const st = stairs.find((i) => i.id === k.slice(5)); if (st) blocks.push(real ? ["stairs", st.id] : ["steps", st]); }
+    else if (k.startsWith("cut:")) { const ct = cuts.find((i) => i.id === k.slice(4)); if (ct) blocks.push(["cut", ct]); }
+  }
+  const secPages = Math.ceil(blocks.length / 2), total = (doCover ? 1 : 0) + (doLegend ? 1 : 0) + (doPlan ? L.nx * L.ny : 0) + secPages + (doThree ? 1 : 0);
+  if (!total) throw new Error("tick at least one page to include");
+  let n = 0;
   const title = `${job.name || "Job"}${job.client ? " · " + job.client : ""}`, when = new Date().toLocaleDateString();
   const step = async (msg) => { $("prInfo").textContent = msg; await new Promise((r) => setTimeout(r, 0)); };
   const barFt = [1, 2, 4, 5, 10, 20, 40].find((f) => f * L.perFt >= 1.4) || 40, barIn = barFt * L.perFt;
   const addPage = async (c) => { const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9)); pages.push({ w: L.PW, h: L.PH, px: c.width, py: c.height, jpg: new Uint8Array(await b.arrayBuffer()) }); };
 
   // 1. cover: overview with the sheet map, and how to put it together
-  if (planPart) {
-  await step("Making the cover page…");
+  if (doCover) {
+  n++; await step("Making the cover page…");
   {
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
@@ -3072,11 +3118,11 @@ async function makePrintPdf() {
         y += ls.length * fs * 1.35 + 0.06 * D;
       });
     });
-    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Cover · sheet map and instructions"); pageFooter(x, L, title, 1, total); await addPage(c);
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Cover · sheet map and instructions"); pageFooter(x, L, title, n, total); await addPage(c);
   }
   }
   // 2. legend (the blueprint look only; the realistic look explains itself)
-  if (!real && planPart) {
+  if (doLegend) { n++;
     await step("Making the legend…");
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
@@ -3085,15 +3131,14 @@ async function makePrintPdf() {
       let lu = u * 1.25; while (lu > u * 0.8 && drawLegend(ctx, 0.3 * D, 0.7 * D, W - 0.6 * D, lu, ents, cols, false) > H - 0.9 * D) lu *= 0.92;
       drawLegend(ctx, 0.3 * D, 0.7 * D, W - 0.6 * D, lu, ents, cols);
     });
-    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Legend"); pageFooter(x, L, title, 2, total); await addPage(c);
+    x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, "Legend"); pageFooter(x, L, title, n, total); await addPage(c);
   }
   // 3. plan sheets at true scale
   const v = { s: L.k * D }, tileW = Math.round(L.pw * D), tileH = Math.round(L.ph * D);
   const targets = [];
   for (let i = 0; i < L.nx - 1; i++) for (let j = 0; j < L.ny; j++) for (const f of [0.25, 0.75]) targets.push([L.x0 + ((i + 1) * L.sx + PR.ov / 2) / L.k, L.y0 - (j * L.sy + f * L.sy) / L.k]);
   for (let j = 0; j < L.ny - 1; j++) for (let i = 0; i < L.nx; i++) for (const f of [0.25, 0.75]) targets.push([L.x0 + (i * L.sx + f * L.sx) / L.k, L.y0 - ((j + 1) * L.sy + PR.ov / 2) / L.k]);
-  let n = planPart ? (real ? 1 : 2) : 0;
-  if (planPart) for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
+  if (doPlan) for (let j = 0; j < L.ny; j++) for (let i = 0; i < L.nx; i++) {
     n++; await step(`Making plan sheet ${sheetName(i, j)} (${n} of ${total})…`);
     const [c, x] = newPage(L);
     v.ox = -(L.x0 + i * L.sx / L.k) * v.s; v.oy = (L.y0 - j * L.sy / L.k) * v.s;
@@ -3129,8 +3174,8 @@ async function makePrintPdf() {
     await addPage(c);
   }
   // 4. side view and step sections, two per page (not to scale)
-  const blocks = real ? (stairs.length ? [["stairs", "all"], ...stairs.slice().sort((a, b) => (a.elev || 0) - (b.elev || 0)).map((st) => ["stairs", st.id])] : []) : [...cuts.map((ct) => ["cut", ct]), ...stairs.map((st) => ["steps", st])];
-  for (let p0 = 0; sidePart && p0 < blocks.length; p0 += 2) {
+  // the chosen side views, in the order listed
+  for (let p0 = 0; p0 < blocks.length; p0 += 2) {
     n++; await step(`Making the sections page (${n} of ${total})…`);
     const [c, x] = newPage(L);
     const body = pageBody(L, theme, (ctx, W, H) => {
@@ -3143,6 +3188,13 @@ async function makePrintPdf() {
       });
     });
     x.drawImage(body, PR.m * D, PR.top * D); pageHeader(x, L, real ? "The steps from the side: every block and cap drawn to size" : "Side view and step sections (not to scale; read the measurements)"); pageFooter(x, L, title, n, total); await addPage(c);
+  }
+  if (doThree) { // the 3D view as last shown, fitted to the page
+    n++; await step("Adding the 3D rendering…");
+    R3.renderer.render(R3.scene, R3.camera);
+    const src = $("three"), [c, x] = newPage(L), bw = L.pw * D, bh = L.ph * D, k = Math.min(bw / src.width, bh / src.height);
+    x.drawImage(src, PR.m * D + (bw - src.width * k) / 2, PR.top * D + (bh - src.height * k) / 2, src.width * k, src.height * k);
+    pageHeader(x, L, "3D rendering"); pageFooter(x, L, title, n, total); await addPage(c);
   }
   await step("Saving the PDF…");
   return pdfFromJpegs(pages);
@@ -3168,12 +3220,15 @@ function pdfFromJpegs(pages) {
   return new Blob(parts, { type: "application/pdf" });
 }
 $("printBtn").onclick = prOpen;
-for (const id of ["prPaper", "prScale", "prTheme", "prWhat"]) $(id).onchange = prPreview;
+for (const id of ["prPaper", "prScale", "prTheme"]) $(id).onchange = prPreview;
 $("prCancel").onclick = () => { $("printDlg").hidden = true; };
 $("printDlg").addEventListener("click", (e) => { if (e.target.id === "printDlg") $("printDlg").hidden = true; });
 $("prGo").onclick = async () => {
   $("prGo").disabled = true;
-  try { const pdf = await makePrintPdf(), w = $("prWhat").value; await saveFile(slug(job.name || "plan") + (w === "plan" ? "_blueprint" : w === "side" ? "_side_views" : "_print") + ".pdf", pdf); $("printDlg").hidden = true; }
+  try {
+    const pdf = await makePrintPdf(), sel = [...printSel()], plan = sel.some((k) => ["cover", "plan", "legend"].includes(k)), side = sel.some((k) => k.startsWith("side:") || k.startsWith("cut:"));
+    await saveFile(slug(job.name || "plan") + (plan && !side && !sel.includes("three") ? "_blueprint" : side && !plan && !sel.includes("three") ? "_side_views" : "_print") + ".pdf", pdf); $("printDlg").hidden = true;
+  }
   catch (e) { $("prInfo").textContent = "Couldn't make the PDF: " + ((e && e.message) || e); }
   finally { $("prGo").disabled = false; }
 };
