@@ -696,6 +696,7 @@ const CATALOG = [
   // Poured and loose surfaces (per sq ft)
   { id: "concrete", brand: "Generic", line: "Concrete", name: 'Broom-finish concrete 4"', kind: "surface", L: 0, D: 0, H: 4, colors: ["Light Grey"], price: 12, pattern: "concrete" },
   { id: "gravel", brand: "Generic", line: "Aggregate", name: '¾" crushed gravel 3"', kind: "surface", L: 0, D: 0, H: 3, colors: ["Grey Mix"], price: 2.5, pattern: "gravel" },
+  { id: "gabion", brand: "Generic", line: "Gabion", name: 'Gabion basket (stones in a wire cage) 12"', kind: "surface", L: 0, D: 0, H: 12, colors: ["Grey Mix", "Granite Grey", "Sandstone"], price: 28, pattern: "gabion" },
   { id: "deck", brand: "Generic", line: "Wood", name: "Deck boards", kind: "surface", L: 72, D: 5.5, H: 1, colors: ["Cedar", "Dark Brown"], price: 14, pattern: "wood" },
 ];
 const KIND_LABEL = { block: "Wall / riser blocks", cap: "Caps & treads", solid: "Solid step units", paver: "Pavers (per sq ft)", slab: "Slabs (each)", surface: "Poured & loose (per sq ft)" };
@@ -1301,11 +1302,17 @@ function dimLine(ctx, v, it, ax, ay, bx, by, off, text, u) {
 // ---------- realistic plan: what the finished job looks like from above ----------
 // Short names on the picture ("Flight 3 - 12 risers @ 7.5\"" → "Flight 3"); the full name is in the Item panel
 const shortLabel = (t) => String(t || "").split(/\s+[-–(]\s*/)[0].slice(0, 30);
-const isGravel = (m) => !!m && (m.id === "gravel" || /gravel|crushed|rock|stone dust/i.test(m.name || ""));
+const isGabion = (m) => !!m && m.pattern === "gabion";
+const isGravel = (m) => !!m && !isGabion(m) && (m.id === "gravel" || /gravel|crushed|rock|stone dust/i.test(m.name || ""));
 function screenBox(v, it, x0, y0, x1, y1) { const ps = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([a, b]) => { const p = rotPt(it, a, b); return W2S(v, p.x, p.y); }); return [Math.min(...ps.map((p) => p[0])), Math.min(...ps.map((p) => p[1])), Math.max(...ps.map((p) => p[0])), Math.max(...ps.map((p) => p[1]))]; }
 function realSurface(ctx, v, it, m, color, x0, y0, x1, y1, u) {
   polyRect(ctx, v, it, x0, y0, x1, y1);
-  if (isGravel(m)) { const [a, b, c, d] = screenBox(v, it, x0, y0, x1, y1); ctx.save(); ctx.clip(); stonesIn(ctx, a, b, c - a, d - b, shade(hexOf(color), 1.05), hashStr(it.id), Math.max(1.2, v.s * 0.9)); ctx.restore(); }
+  if (isGabion(m)) { // fist-sized stones behind a square wire mesh, wire frame round the edge
+    const [a, b, c, d] = screenBox(v, it, x0, y0, x1, y1); ctx.save(); ctx.clip(); gabionStones(ctx, a, b, c - a, d - b, hexOf(color), hashStr(it.id), Math.max(2, v.s * 2.4));
+    const g = 3; if (v.s * g > 3 * u) { ctx.strokeStyle = "rgba(225,228,232,.75)"; ctx.lineWidth = Math.max(0.6, 0.7 * u); for (let x = x0 + g; x < x1 - 0.1; x += g) lineL(ctx, v, it, x, y0, x, y1); for (let y = y0 + g; y < y1 - 0.1; y += g) lineL(ctx, v, it, x0, y, x1, y); }
+    ctx.restore(); polyRect(ctx, v, it, x0, y0, x1, y1); ctx.strokeStyle = "#d9dde2"; ctx.lineWidth = 2 * u; ctx.stroke();
+  }
+  else if (isGravel(m)) { const [a, b, c, d] = screenBox(v, it, x0, y0, x1, y1); ctx.save(); ctx.clip(); stonesIn(ctx, a, b, c - a, d - b, shade(hexOf(color), 1.05), hashStr(it.id), Math.max(1.2, v.s * 0.9)); ctx.restore(); }
   else { ctx.fillStyle = hexOf(color); ctx.fill(); surfaceJoints(ctx, v, it, m, x0, y0, x1, y1, u); }
   polyRect(ctx, v, it, x0, y0, x1, y1); ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1 * u; ctx.stroke();
 }
@@ -2361,7 +2368,7 @@ const yd3 = (cuIn) => cuIn / 46656;          // cubic inches to cubic yards
 const KG_EACH = { "ab-classic": 34, "ab-stones": 34, "ab-rocks": 34, "ab-vertical": 34, pcm18: 28.3 };
 function unitKg(m) {
   if (KG_EACH[m.id]) return KG_EACH[m.id];
-  if (m.kind === "surface") return m.pattern === "gravel" ? 144 * m.H * 0.027 : m.pattern === "wood" ? 1.5 : 144 * m.H * 0.0393;
+  if (m.kind === "surface") return m.pattern === "gravel" || m.pattern === "gabion" ? 144 * m.H * 0.027 : m.pattern === "wood" ? 1.5 : 144 * m.H * 0.0393;
   if (perSqft(m)) return 144 * m.H * 0.0393 * 0.93; // per sq ft
   return m.L * m.D * m.H * 0.0393 * (m.kind === "block" ? 0.52 : 0.93);
 }
@@ -2863,6 +2870,7 @@ function sanitizeItem(raw, legacy) {
   }
   if (out.block) out.color = validColor(out.block, raw.color ?? d.color);
   if (out.cap) out.capColor = validColor(out.cap, raw.capColor ?? d.capColor);
+  if ((out.type === "landing" || out.type === "path") && /gabion/i.test(out.label) && out.surface === "gravel") out.surface = "gabion"; // named gabion but drawn as loose gravel
   if (out.surface) out.color = validColor(out.surface, raw.color ?? d.color);
   if (out.type === "landing" && out.block) out.blockColor = validColor(out.block, raw.blockColor ?? d.blockColor);
   if (out.type === "rail") { out.color = RAIL_COLORS.includes(raw.color) ? raw.color : "Cedar"; out.d = clamp(out.d, 2, 12); }
@@ -2982,6 +2990,7 @@ function drawMaterialPic(ctx, W, H, m, colorName, small) {
   if (m.kind === "surface" || (!m.L && !m.D)) { // poured or loose: a patch seen from above at an angle
     const x0 = pad, y0 = pad + (small ? 0 : 10), w = W - 2 * pad, h = H - y0 - pad - foot;
     if (m.pattern === "gravel") stonesIn(ctx, x0, y0, w, h, shade(hex, 0.95), seed, small ? 1.6 : 4);
+    else if (m.pattern === "gabion") { gabionStones(ctx, x0, y0, w, h, hex, seed, small ? 4 : 22); const g = small ? 8 : 40; ctx.strokeStyle = "rgba(225,228,232,.85)"; ctx.lineWidth = small ? 0.8 : 1.6; for (let k = g; k < w; k += g) { ctx.beginPath(); ctx.moveTo(x0 + k, y0); ctx.lineTo(x0 + k, y0 + h); ctx.stroke(); } for (let k = g; k < h; k += g) { ctx.beginPath(); ctx.moveTo(x0, y0 + k); ctx.lineTo(x0 + w, y0 + k); ctx.stroke(); } ctx.strokeStyle = "#cfd4da"; ctx.lineWidth = small ? 1.5 : 3; ctx.strokeRect(x0, y0, w, h); }
     else if (m.pattern === "wood") { for (let k = 0, bh = h / 7; k < 7; k++) { ctx.fillStyle = shade(hex, 0.9 + 0.2 * rand(seed + k)); ctx.fillRect(x0, y0 + k * bh, w, bh - 2); } }
     else { ctx.fillStyle = hex; ctx.fillRect(x0, y0, w, h); ctx.strokeStyle = "rgba(0,0,0,.08)"; for (let k = 0; k < w; k += 3) { ctx.beginPath(); ctx.moveTo(x0 + k, y0); ctx.lineTo(x0 + k + 2, y0 + h); ctx.stroke(); } }
     ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.strokeRect(x0, y0, w, h);
@@ -3035,7 +3044,7 @@ const photoList = (id) => (store.get("bsp.photos", {})[id] || []).concat((store.
 const photoSrc = (p) => p.startsWith("data:") ? p.slice(5) : "/_blob/" + p;
 function openMat(id) {
   const m = mat(id); if (!m) return; mdOpen = id; mdColor = (m.colors || [])[0];
-  $("mdTitle").textContent = `${m.brand === "Generic" ? "" : m.brand + " "}${m.line ? m.line + " " : ""}${m.name}`;
+  $("mdTitle").textContent = `${m.brand === "Generic" ? "" : m.brand + " "}${m.line && m.brand !== "Generic" ? m.line + " " : ""}${m.name}`;
   $("mdSub").textContent = `${KIND_LABEL[m.kind] || ""}${m.setback ? ` · ${m.setback}° setback per course` : ""}${m.note ? " · " + m.note : ""}`;
   $("mdColors").innerHTML = (m.colors || []).map((c) => `<button data-c="${escapeHtml(c)}" aria-pressed="${c === mdColor}"><i style="background:${hexOf(c)}"></i>${escapeHtml(c)}</button>`).join("");
   $("mdColors").querySelectorAll("[data-c]").forEach((b) => b.onclick = () => { mdColor = b.dataset.c; $("mdColors").querySelectorAll("[data-c]").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawMd(); });
@@ -3524,6 +3533,19 @@ function stonesIn(ctx, x, y, w, h, base, seed, size) {
   for (let k = 0; k < n; k++) { const r = size * (0.25 + 0.35 * rand(seed + k * 7)); ctx.fillStyle = shade("#9a9284", 0.75 + 0.5 * rand(seed + k * 13)); ctx.beginPath(); ctx.ellipse(x + rand(seed + k * 3) * w, y + rand(seed + k * 5) * h, r, r * 0.75, rand(seed + k) * 3, 0, 7); ctx.fill(); }
   ctx.restore();
 }
+// Gabion fill: rounded stones packed tight in the given colour, dark gaps between them
+function gabionStones(ctx, x, y, w, h, hex, seed, size) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = shade(hex, 0.3); ctx.fillRect(x, y, w, h);
+  const step = size * 0.95, rows = Math.ceil(h / (step * 0.8)) + 1, cols = Math.ceil(w / step) + 1;
+  if (rows * cols > 8000) { ctx.restore(); return stonesIn(ctx, x, y, w, h, shade(hex, 0.8), seed, size); }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { // stones on a staggered grid, jittered so they read as packed rock
+    const k = r * 977 + c, cx = x + (c + (r % 2) * 0.5) * step + (rand(seed + k * 3) - 0.5) * step * 0.5, cy = y + r * step * 0.8 + (rand(seed + k * 5) - 0.5) * step * 0.4;
+    const rx = size * (0.48 + 0.18 * rand(seed + k * 7)), ry = rx * (0.62 + 0.25 * rand(seed + k * 11)), a = rand(seed + k) * 3;
+    ctx.fillStyle = shade(hex, 0.68 + 0.5 * rand(seed + k * 13)); ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, a, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.beginPath(); ctx.ellipse(cx - rx * 0.2, cy - ry * 0.25, rx * 0.5, ry * 0.4, a, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
 // One concrete unit seen from the side: face colour, a lighter top edge, a darker outline
 function unitBox(ctx, x0, y0, x1, y1, hex, px) {
   const w = x1 - x0, h = y1 - y0; if (w <= 0 || h <= 0) return;
@@ -3591,9 +3613,9 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
       labels.push({ el, blocks, caps, off });
     } else {
       const lc = landingCalc(it), sm = lc.s, sH = sm ? Math.max(1.5, sm.H) : 2, g = Math.min(...seqGround(el).map((q) => q[1]));
-      if (/gabion/i.test(it.label || "")) {
+      if (isGabion(sm) || /gabion/i.test(it.label || "")) {
         const zb = Math.min(g, it.h - 1); const [a, b] = P(el.d0, it.h), [c2, d2] = P(el.d0 + el.len, zb);
-        stonesIn(ctx, a, b, c2 - a, d2 - b, "#8d8a84", seed, Math.max(2, sc * 2.2));
+        gabionStones(ctx, a, b, c2 - a, d2 - b, hexOf(it.color || "Grey Mix"), seed, Math.max(2, sc * 2.4));
         ctx.save(); ctx.strokeStyle = "rgba(60,60,60,.8)"; ctx.lineWidth = Math.max(1, sc * 0.25); ctx.strokeRect(a, b, c2 - a, d2 - b);
         for (let x = a; x < c2; x += Math.max(4, sc * 3)) { ctx.beginPath(); ctx.moveTo(x, b); ctx.lineTo(x, d2); ctx.stroke(); }
         for (let y = b; y < d2; y += Math.max(4, sc * 3)) { ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(c2, y); ctx.stroke(); } ctx.restore();
@@ -3730,9 +3752,14 @@ function surfaceTex(m, colorName) {
       const n = 8; for (let k = 0; k < n; k++) { x.fillStyle = shade(hex, 0.85 + 0.25 * Math.random()); x.fillRect(0, k * s / n + 2, s, s / n - 4); }
       speckle(x, s, 18);
     } else if (pat === "gravel") { speckle(x, s, 70, 0.3); }
+    else if (pat === "gabion") { // one tile = 24": stones about 4" across, wire mesh at 3"
+      x.fillStyle = shade(hex, 0.45); x.fillRect(0, 0, s, s);
+      for (let k = 0; k < 260; k++) { const cx = Math.random() * s, cy = Math.random() * s, r = 22 + Math.random() * 20; x.fillStyle = shade(hex, 0.55 + 0.4 * Math.random()); x.beginPath(); x.ellipse(cx, cy, r, r * (0.6 + 0.3 * Math.random()), Math.random() * 3, 0, 7); x.fill(); x.strokeStyle = "rgba(0,0,0,.45)"; x.lineWidth = 2; x.stroke(); }
+      x.strokeStyle = "#c9ced4"; x.lineWidth = 3; for (let k = 0; k <= 8; k++) { const q = k * s / 8; x.beginPath(); x.moveTo(q, 0); x.lineTo(q, s); x.moveTo(0, q); x.lineTo(s, q); x.stroke(); }
+    }
     else { speckle(x, s, 14, 0.9); x.strokeStyle = shade(hex, 0.7); x.lineWidth = 2; x.strokeRect(0, 0, s, s); }
   });
-  const tile = pat === "units" ? m.L * 4 : pat === "wood" ? 44 : pat === "flag" ? 72 : 48;
+  const tile = pat === "units" ? m.L * 4 : pat === "wood" ? 44 : pat === "flag" ? 72 : pat === "gabion" ? 24 : 48;
   return { tex, tile };
 }
 function init3d() {
@@ -3801,6 +3828,13 @@ function surfaceMesh(m, colorName, w, d, h) {
   const side = blockMat(colorName, true);
   const g = box(w, h, d, [side, side, top, side, side, side]); g.castShadow = false; return g;
 }
+// A gabion basket: the stones-and-wire texture on every face, each face tiled to its own size
+function gabionMesh(m, colorName, w, d, h) {
+  const { tex, tile } = surfaceTex(m, colorName); R3.temp.push(tex);
+  const face = (a, b) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(a / tile, b / tile); R3.temp.push(t); const mm = new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }); R3.temp.push(mm); return mm; };
+  const sx = face(d, h), sz = face(w, h), top = face(w, d);
+  return box(w, h, d, [sx, sx, top, top, sz, sz]);
+}
 function build3d() {
   if (!R3 || !dirty3d) return; dirty3d = false;
   const { world, tex } = R3;
@@ -3850,6 +3884,7 @@ function build3d() {
       case "path": { const m = mat(it.surface) || mat("cs-standard"); const g = surfaceMesh(m, it.color, it.w, it.d, Math.max(1, m.H * 0.6)); place(g, it, 0, 0, gz + Math.max(1, m.H * 0.6) / 2 + 0.05); break; }
       case "landing": {
         const lc = landingCalc(it), sm = lc.s || mat("cs-standard"), sH = Math.max(1, sm.H);
+        if (isGabion(sm) && !lc.edged) { const g = gabionMesh(sm, it.color, it.w, it.d, Math.max(1, it.h - lc.z0)); place(g, it, 0, 0, (it.h + lc.z0) / 2); break; }
         if (lc.edged) {
           const bm = blockMat(it.blockColor), cm = blockMat(it.capColor, true), bH = lc.b.H, top = it.h;
           const sides = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + lc.b.D], [-it.w / 2, it.d / 2 - lc.b.D, it.w / 2, it.d / 2], [-it.w / 2, -it.d / 2 + lc.b.D, -it.w / 2 + lc.b.D, it.d / 2 - lc.b.D], [it.w / 2 - lc.b.D, -it.d / 2 + lc.b.D, it.w / 2, it.d / 2 - lc.b.D]];
@@ -3971,7 +4006,7 @@ Item types:
     "block": riser block id (kind block or solid),"color","cap": cap/slab id or "" for none,"capColor","stepRise": inches per step when blocks are cut so block + cap = rise (0 = full block),
     "config": "straight" | "wrapL" | "wrapR" | "wrapLR" (steps wrap around the sides, pyramid style),"cheek": "none" | "under" | "left" | "right" | "both" (block side walls: "under" = hidden under the step edges, inside the stair width, from the ground up to each riser; left/right/both = cheek walls outside the stair)}
   Leave out tread and base; the app sets them. A flight's run is about (risers - 1) × 11 + 13 inches with 12" caps.
-- landing: {"type":"landing","x","y","w","d","h": top elevation,"rot","label","surface","color","edge": "caps" (block walls with cap border) or "none","block","blockColor","cap","capColor"}
+- landing: {"type":"landing","x","y","w","d","h": top elevation,"rot","label","surface","color","edge": "caps" (block walls with cap border) or "none","block","blockColor","cap","capColor"}. A gabion basket (stones in a wire cage) is a landing with "surface":"gabion","edge":"none", its "h" the basket top
 - path: {"type":"path","x","y","w","d","rot","label","surface","color","edging": "none" | "plastic"} walkway or patio at ground level; "plastic" = plastic edging holding gravel along the open sides
 - wall: {"type":"wall","x","y","w": length,"d": thickness,"h": height,"rot","label","block","color","cap","capColor"} a BLOCK retaining wall only
 - rail: {"type":"rail","x","y","w": length,"h": height (34 typical),"rot","label","color": "Cedar"|"Brown"|"Dark Brown"|"Weathered grey"|"Black (metal)","spacing": post spacing} a wood handrail on posts; never draw a handrail as a wall
