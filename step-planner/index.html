@@ -750,7 +750,7 @@ const EST_DEFAULTS = {
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
-  return { block: d.block, color: d.color, cap: d.cap, capColor: d.capColor, capOver: d.capOver, stepRise: d.stepRise, config: "straight", cheek: "none", cheekAbove: 8, elev: 0, infill: d.infill, stagger: "half" };
+  return { block: d.block, color: d.color, cap: d.cap, capColor: d.capColor, capOver: d.capOver, stepRise: d.stepRise, config: "straight", cheek: "none", cheekAbove: 8, elev: 0, infill: d.infill, stagger: "half", riserCut: "exact" };
 }
 function defaults(type, x, y) {
   const b = { id: newId(), type, x, y, rot: 0, label: "" }, d = (job && job.defaults) || DEFAULTS;
@@ -846,6 +846,9 @@ function stepCalc(it) {
   const P = build(it), D = P.D, L = P.L, cap = hasCap(P), { R: H, bH } = riserDims(P), cutting = cutMode(P);
   const capH = cap ? P.capH : 0, capD = cap ? P.capD : 0, capL = cap ? P.capL : 0, over = cap ? P.capOver : 0;
   const E = it.elev || 0, base = it.base || 0, tread = it.tread;
+  // "half": every block is cut once into two equal pieces; each piece is set lower into the compacted base behind the
+  // cap below (or shimmed up when short) so the part showing plus the cap makes the rise
+  const half = cutting && it.riserCut === "half", pH = half ? (P.H - 0.125) / 2 : bH, bury = half ? pH - bH : 0;
   const count = clamp(Math.round(((it.rise || 0) - base - bH - capH) / H) + 1, 1, 60);
   const run = (count - 1) * tread + Math.max(capD, over + D), yEnd = run / 2;
   const cheek = it.cheek || "none", cheekL = cheek === "left" || cheek === "both", cheekR = cheek === "right" || cheek === "both", under = cheek === "under";
@@ -864,7 +867,7 @@ function stepCalc(it) {
   };
   const xs = [];
   for (let i = 0; i < count; i++) {
-    const Y = -run / 2 + i * tread, z0 = base + i * H, z1 = z0 + bH;
+    const Y = -run / 2 + i * tread, z0 = base + i * H - bury, z1 = base + i * H + bH;
     const xl = -it.w / 2 + (wrapL ? i * tread : 0), xr = it.w / 2 - (wrapR ? i * tread : 0);
     xs.push([xl, xr]); minTopWidth = Math.min(minTopWidth, xr - xl);
     if (xr - xl < 6) break;
@@ -883,7 +886,7 @@ function stepCalc(it) {
   // Compacted fill, one column per step: from the ground up to the bottom of that step's riser. Where the ground is higher
   // than the riser (a flight cut into a bank) there is no fill; the step sits on a bench dug into the native soil.
   let fillVol = 0;
-  const colTop = (j) => E + (j ? base + j * H : Math.min(0, base));
+  const colTop = (j) => E + (j ? base + j * H : Math.min(0, base)) - Math.max(0, bury);
   for (let j = 0; j < xs.length; j++) {
     const [xl, xr] = xs[j], y0 = -run / 2 + j * tread + over, y1 = j < xs.length - 1 ? -run / 2 + (j + 1) * tread + over : yEnd;
     const gp = rotPt(it, (xl + xr) / 2, (y0 + y1) / 2), top = colTop(j), bottom = Math.min(natGround(gp.x, gp.y) + Math.min(0, base), top);
@@ -933,7 +936,8 @@ function stepCalc(it) {
   checks.push([H <= 7.75 && H >= 4 ? "ok" : "bad", `Riser ${fmtIn(H)} ${H > 7.75 ? "is over the 7¾\" max" : H < 4 ? "is under 4\"" : "(4\"–7¾\")"}`]);
   if (Math.abs(firstRise - H) > 0.25) checks.push(["bad", `First step is ${fmtIn(firstRise)} high, the rest are ${fmtIn(H)}. Set the bottom course at ${fmtIn(H - bH - capH)} so all risers match`]);
   if (cutting) {
-    checks.push([bH > 0 && bH <= P.H ? "ok" : "bad", bH > 0 && bH <= P.H ? `Cut each riser block to ${fmtIn(bH)} high (from ${fmtIn(P.H)}). With the ${fmtIn(capH)} cap that makes a ${fmtIn(H)} rise` : `A ${fmtIn(H)} rise needs a block taller than ${fmtIn(P.H)} under this cap`]);
+    if (half) checks.push(bury < -0.05 ? ["bad", `Half blocks are ${fmtIn(pH)}, ${fmtIn(-bury)} short of the ${fmtIn(bH)} needed under this cap. Shim each one up ${fmtIn(-bury)} on base, or cut to the exact height`] : [bury > 2 ? "warn" : "ok", `Cut each block in half (two ${fmtIn(pH)} pieces). ${bury > 0.05 ? `Set each half ${fmtIn(bury)} into the compacted base behind the cap below, so ${fmtIn(bH)} shows` : "Each half sits on the compacted base behind the cap below"}; with the ${fmtIn(capH)} cap that makes a ${fmtIn(H)} rise`]);
+    else checks.push([bH > 0 && bH <= P.H ? "ok" : "bad", bH > 0 && bH <= P.H ? `Cut each riser block to ${fmtIn(bH)} high (from ${fmtIn(P.H)}). With the ${fmtIn(capH)} cap that makes a ${fmtIn(H)} rise` : `A ${fmtIn(H)} rise needs a block taller than ${fmtIn(P.H)} under this cap`]);
     if (count > 1) checks.push(["warn", "Each riser above the first sits on compacted base behind the cap below. Compact the fill in lifts"]);
   }
   checks.push([tread >= 11 ? "ok" : tread >= 10 ? "warn" : "bad", `Tread ${fmtIn(tread)} ${tread >= 11 ? "(11\"+ recommended)" : tread >= 10 ? "meets the 10\" min, 11\"+ is easier" : "is under the 10\" min"}`]);
@@ -949,12 +953,12 @@ function stepCalc(it) {
   else checks.push(["ok", `Each step overlaps the one below by ${fmtIn(D - tread)}`]);
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
   // cut risers: one block gives as many pieces as fit in its height (⅛" saw kerf), e.g. two 3¾" halves from a 7⅝" block
-  t.perBlock = cutting && bH > 0 ? Math.max(1, Math.floor((P.H + 0.125) / (bH + 0.125) + 1e-6)) : 1;
+  t.perBlock = cutting && pH > 0 ? Math.max(1, Math.floor((P.H + 0.125) / (pH + 0.125) + 1e-6)) : 1;
   t.blocksBuy = Math.ceil(t.blocks / t.perBlock);
-  t.riserCuts = !cutting ? t.blockCuts : t.blocksBuy * (t.perBlock - (P.H - t.perBlock * (bH + 0.125) < 0.2 ? 1 : 0)); // saw cuts: halves need one cut per block
+  t.riserCuts = !cutting ? t.blockCuts : t.blocksBuy * (t.perBlock - (P.H - t.perBlock * (pH + 0.125) < 0.2 ? 1 : 0)); // saw cuts: halves need one cut per block
   if (t.perBlock > 1) checks.push(["ok", `Each block cut makes ${t.perBlock} riser pieces: ${t.blocksBuy} blocks for ${t.blocks} pieces`]);
   const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
-  return { count, H, bH, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, under, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
+  return { count, H, bH, pH, bury, half, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, under, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
 }
 function wallCalc(it) {
   const b = mat(it.block) || mat("ab-classic"), c = it.cap ? mat(it.cap) : null;
@@ -2087,6 +2091,7 @@ const colorOptions = (id) => ((mat(id) && mat(id).colors) || ["Grey"]).map((c) =
 const CONFIGS = [["straight", "Straight"], ["wrapL", "Wrap left side"], ["wrapR", "Wrap right side"], ["wrapLR", "Wrap both sides (pyramid)"]];
 const CHEEKS = [["none", "None"], ["under", "Under the step edges (inside the width)"], ["left", "Left"], ["right", "Right"], ["both", "Both sides"]];
 const STAGGER = [["half", "Half-block stagger"], ["none", "Stacked joints"]];
+const RISERCUT = [["exact", "Cut each block to the exact height"], ["half", "Cut blocks in half, set each half lower into the base"]];
 const EDGES = [["caps", "Block walls with cap border"], ["none", "Surface only (on grade or fill)"]];
 const EDGINGS = [["none", "None"], ["plastic", "Plastic edging (holds the gravel)"]];
 
@@ -2114,13 +2119,14 @@ function renderItemPane() {
       ${selectField("Riser block / step unit", "block", it, matOptions(["block", "solid"]))}${selectField("Colour", "color", it, colorOptions(it.block))}
       ${selectField("Cap / tread", "cap", it, matOptions(["cap", "slab"], "No cap"))}${it.cap ? selectField("Cap colour", "capColor", it, colorOptions(it.cap)) : "<span></span>"}
       ${it.cap ? field("Cap overhang", "capOver", it) + field("Rise per step (cut block + cap, 0 = full block)", "stepRise", it) : ""}
+      ${c.cutting ? selectField("Riser pieces", "riserCut", it, RISERCUT) + "<span></span>" : ""}
       ${selectField("Joints", "stagger", it, STAGGER)}${it.cap ? selectField("Tread infill (if any)", "infill", it, matOptions(["paver", "slab", "surface"])) : "<span></span>"}
       </div>`;
     h += `<h3>Configuration</h3><div class="grid2">${selectField("Shape", "config", it, CONFIGS)}${selectField("Cheek walls", "cheek", it, CHEEKS)}${it.cheek && it.cheek !== "none" && it.cheek !== "under" ? field("Cheek wall above tread", "cheekAbove", it) : ""}</div>`;
     h += `<dl class="stats"><div><dt>Risers</dt><dd>${c.count} × ${fmtIn(c.H)}</dd></div><div><dt>Total run</dt><dd>${fmtLen(c.run)}</dd></div>
       <div><dt>Blocks</dt><dd>${c.t.perBlock > 1 ? `${c.t.blocksBuy} cut into ${c.t.blocks} pieces` : `${c.t.blocks} (${c.cutting ? "all cut" : c.t.blockCuts + " cut"})`}</dd></div><div><dt>Caps</dt><dd>${c.cap ? c.t.caps + " (" + c.t.capCuts + " cut)" : "–"}</dd></div>
       ${c.cheekL || c.cheekR ? `<div><dt>Cheek wall blocks</dt><dd>${c.t.cheekBlocks}</dd></div><div><dt>Cheek wall caps</dt><dd>${c.t.cheekCaps}</dd></div>` : ""}
-      <div><dt>Top of steps</dt><dd>+${fmtLen(c.top)}</dd></div><div><dt>${c.cutting ? "Riser block cut to" : "Bottom course"}</dt><dd>${c.cutting ? fmtIn(c.bH) + " high" : c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
+      <div><dt>Top of steps</dt><dd>+${fmtLen(c.top)}</dd></div><div><dt>${c.cutting ? "Riser block cut to" : "Bottom course"}</dt><dd>${c.cutting ? fmtIn(c.pH) + " high" + (c.half && Math.abs(c.bury) > 0.05 ? `, set ${fmtIn(Math.abs(c.bury))} ${c.bury > 0 ? "into the base" : "up on shims"}` : "") : c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
     h += `<h3>Checks</h3>${checksHtml(c.checks)}<p class="note">Based on common residential limits (IRC / BC Building Code). Your local code decides.</p>`;
   } else if (t === "rail") {
     const rc = railCalc(it);
@@ -2861,7 +2867,7 @@ $("importJson").onchange = async (e) => {
 function afterLoad() { renderJobPane(); renderMaterials(); renderEstFields(); requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); commit(); }); }
 
 function num(v, d, min = -1e6, max = 1e6) { v = typeof v === "string" ? parseLen(v) : +v; return isFinite(v) ? clamp(v, min, max) : d; }
-const STR_OPTS = { edging: EDGINGS.map((c) => c[0]), config: CONFIGS.map((c) => c[0]), cheek: CHEEKS.map((c) => c[0]), stagger: STAGGER.map((c) => c[0]), edge: EDGES.map((c) => c[0]) };
+const STR_OPTS = { edging: EDGINGS.map((c) => c[0]), config: CONFIGS.map((c) => c[0]), cheek: CHEEKS.map((c) => c[0]), stagger: STAGGER.map((c) => c[0]), riserCut: RISERCUT.map((c) => c[0]), edge: EDGES.map((c) => c[0]) };
 function sanitizeItem(raw, legacy) {
   if (!raw || !TYPE_INFO[raw.type]) return null;
   const d = defaults(raw.type, 0, 0);
@@ -2969,7 +2975,7 @@ $("exportBtn").onclick = async () => {
   for (const st of job.items.filter((i) => i.type === "steps")) {
     const cc = stepCalc(st);
     if (cy > limit) break;
-    cy += 10; label(ctx, `${(st.label || "Steps").toUpperCase()}: ${cc.count} × ${fmtIn(cc.H)} RISERS, ${fmtIn(st.tread)} TREADS${cc.cutting ? `, BLOCKS CUT TO ${fmtIn(cc.bH)}` : ""}`, colX + 40, cy, 22, "left", BP.ink); cy += 34;
+    cy += 10; label(ctx, `${(st.label || "Steps").toUpperCase()}: ${cc.count} × ${fmtIn(cc.H)} RISERS, ${fmtIn(st.tread)} TREADS${cc.cutting ? (cc.half ? `, BLOCKS CUT IN HALF (${fmtIn(cc.pH)})${cc.bury > 0.05 ? `, SET ${fmtIn(cc.bury)} INTO BASE` : ""}` : `, BLOCKS CUT TO ${fmtIn(cc.bH)}`) : ""}`, colX + 40, cy, 22, "left", BP.ink); cy += 34;
     for (const [kind, msg] of cc.checks.filter(([kk]) => kk === "bad")) { if (cy > limit) break; label(ctx, "FIX: " + msg.slice(0, 70), colX + 40, cy, 20, "left", "#ffb4a8"); cy += 30; }
   }
   ctx.fillStyle = BP.band; ctx.fillRect(0, H - titleH, W, titleH);
@@ -3659,7 +3665,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
       const ax = (q) => P(L.el.d0 + (q.y0 + q.y1) / 2 + L.off, 0)[0], zc = (q) => P(0, (q.z0 + q.z1) / 2)[1];
       const top = P(0, c.top)[1], left = X + 20 * u;
       if (cq) callout(ctx, `Cap: ${matName(mat(it.cap))}\n${fmtIn(c.capH)} thick, ${fmtIn(c.over)} overhang`, left, top - 10 * u, ax(cq), zc(cq), u);
-      if (bq) callout(ctx, `Step block: ${matName(mat(it.block))}\n${c.cutting ? `cut down to ${fmtIn(c.bH)} high` : `${fmtIn(c.bH)} high`}`, left, top + 40 * u, ax(bq), zc(bq), u);
+      if (bq) callout(ctx, `Step block: ${matName(mat(it.block))}\n${c.half ? `cut in half, ${fmtIn(c.pH)} high${c.bury > 0.05 ? `,\nset ${fmtIn(c.bury)} into the base` : ""}` : c.cutting ? `cut down to ${fmtIn(c.bH)} high` : `${fmtIn(c.bH)} high`}`, left, top + 40 * u, ax(bq), zc(bq), u);
       const fl = c.fills.slice().sort((a, b) => (b.z1 - b.z0) - (a.z1 - a.z0))[0];
       if (fl && fl.z1 - fl.z0 > 4) callout(ctx, "Compacted gravel fill\n(under the steps)", left, top + 92 * u, P(L.el.d0 + (fl.y0 + fl.y1) / 2 + L.off, 0)[0], P(0, (fl.z0 + fl.z1) / 2)[1], u);
       if (!c.fills.length || c.fills.length < c.count) { const j = c.count - 1, y = -c.run / 2 + j * it.tread + c.over + 6; if (!c.fills.some((q) => q.col === j)) callout(ctx, "Native soil: the step sits on a\nbench dug into the bank", P(L.el.d0 + y + L.off, 0)[0] + 40 * u, P(0, c.colTop(j))[1] + 70 * u, P(L.el.d0 + y + L.off, 0)[0], P(0, c.colTop(j) - est.baseDepth - 8)[1], u); }
@@ -4008,7 +4014,7 @@ Coordinates: x = east, y = north, origin at the south-west corner of the work ar
 x,y is always the CENTER of an item. Material fields take an id from the material list below; colour fields take one of that material's colours.
 Item types:
 - steps: {"type":"steps","x","y","w": stair width,"rise": rise of this flight,"elev": elevation the flight starts at (0 at grade, or a landing's height),"rot","label",
-    "block": riser block id (kind block or solid),"color","cap": cap/slab id or "" for none,"capColor","stepRise": inches per step when blocks are cut so block + cap = rise (0 = full block),
+    "block": riser block id (kind block or solid),"color","cap": cap/slab id or "" for none,"capColor","stepRise": inches per step when blocks are cut so block + cap = rise (0 = full block),"riserCut": "exact" (cut each block to height) or "half" (cut blocks in half, set each half lower into the base so the rise comes out right),
     "config": "straight" | "wrapL" | "wrapR" | "wrapLR" (steps wrap around the sides, pyramid style),"cheek": "none" | "under" | "left" | "right" | "both" (block side walls: "under" = hidden under the step edges, inside the stair width, from the ground up to each riser; left/right/both = cheek walls outside the stair)}
   Leave out tread and base; the app sets them. A flight's run is about (risers - 1) × 11 + 13 inches with 12" caps.
 - landing: {"type":"landing","x","y","w","d","h": top elevation,"rot","label","surface","color","edge": "caps" (block walls with cap border) or "none","block","blockColor","cap","capColor"}. A gabion basket (stones in a wire cage) is a landing with "surface":"gabion","edge":"none", its "h" the basket top
