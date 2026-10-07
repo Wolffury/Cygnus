@@ -622,6 +622,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Hours per day <input id="cpHrs" inputmode="decimal"></label>
           <label class="f">Days to get materials <input id="cpLead" inputmode="decimal"></label>
         </div>
+        <label class="checkrow"><input type="checkbox" id="cpGst"> Charge GST</label>
         <label class="checkrow"><input type="checkbox" id="cpSide"> Side view of the stairway</label>
         <label class="checkrow"><input type="checkbox" id="cp3d"> 3D picture (open 3D Render first)</label>
         <label class="f">Scope of work (one item per line) <textarea id="cpScope" rows="9"></textarea></label>
@@ -790,7 +791,7 @@ const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
-  equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, pst: 7, deposit: 30, validDays: 30,
+  equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
   return { block: d.block, color: d.color, cap: d.cap, capColor: d.capColor, capOver: d.capOver, stepRise: d.stepRise, config: "straight", cheek: "none", cheekAbove: 8, elev: 0, infill: d.infill, stagger: "half", riserCut: "exact" };
@@ -2581,6 +2582,9 @@ function estimate() {
     L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
+  // Not charging GST: you still pay GST on what you buy (materials, rentals, delivery, ferry, dumping) and can't claim it
+  // back, so it becomes part of your cost of those lines. Labour has no GST.
+  if (!E.chargeGst && E.gst > 0) for (const l of lines) if (l.cat !== "Labour") { l.price = round2(l.price * (1 + E.gst / 100)); l.total = round2(l.qty * l.price); l.note = (l.note ? l.note + " · " : "") + `incl. ${E.gst}% GST you pay`; }
   const cats = {}; for (const l of lines) cats[l.cat] = round2((cats[l.cat] || 0) + l.total);
   const subtotal = round2(lines.reduce((s, l) => s + l.total, 0));
   const contingency = round2(subtotal * E.contingency / 100), factor = subtotal ? (1 + E.contingency / 100) * (1 + E.markup / 100) : 1;
@@ -2602,9 +2606,10 @@ function estimate() {
   }
   const beforeTax = round2(lines.reduce((s, l) => s + l.clientTotal, 0)), markup = round2(beforeTax - subtotal - contingency);
   const matClient = round2(lines.filter((l) => l.cat === "Materials" && !l.hidden).reduce((s, l) => s + l.clientTotal, 0));
-  const pst = round2(matClient * E.pst / 100), gst = round2(beforeTax * E.gst / 100);
+  const gstPct = E.chargeGst ? E.gst : 0; // GST can be left off (e.g. a small supplier not registered for GST)
+  const pst = round2(matClient / (E.chargeGst ? 1 : 1 + E.gst / 100) * E.pst / 100), gst = round2(beforeTax * gstPct / 100); // no PST on the GST you paid
   const total = round2(beforeTax + gst + pst), hours = lines.filter((l) => l.unit === "hr").reduce((s, l) => s + l.qty, 0);
-  return { lines, cats, subtotal, contingency, markup, beforeTax, factor, gst, pst, total, deposit: round2(total * E.deposit / 100), hours, E, w };
+  return { lines, cats, subtotal, contingency, markup, beforeTax, factor, gst, gstPct, pst, total, deposit: round2(total * E.deposit / 100), hours, E, w };
 }
 
 function quoteNo() { if (!job.quoteNo) { const d = new Date(); job.quoteNo = `Q-${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(Math.floor(Math.random() * 90) + 10)}`; } return job.quoteNo; }
@@ -2764,7 +2769,7 @@ function renderQuote() {
       <tr><td>Contingency ${q.E.contingency}%</td><td>${money(q.contingency)}</td></tr>
       <tr><td>Overhead &amp; profit ${q.E.markup}%</td><td>${money(q.markup)}</td></tr>
       <tr class="sub"><td>Before tax</td><td>${money(q.beforeTax)}</td></tr>
-      <tr><td>GST ${q.E.gst}%</td><td>${money(q.gst)}</td></tr>
+      <tr><td><label class="checkrow"><input type="checkbox" id="qGst"${q.E.chargeGst ? " checked" : ""}> Charge GST ${q.E.gst}%</label></td><td>${q.gstPct ? money(q.gst) : "not charged"}</td></tr>
       <tr><td>PST ${q.E.pst}% on materials</td><td>${money(q.pst)}</td></tr>
       <tr class="tot"><td>Total</td><td>${money(q.total)}</td></tr></tbody></table>
     <details id="clientView"${clientOpen ? " open" : ""}><summary>What the client sees${q.lines.some((l) => l.hidden) ? ` (${q.lines.filter((l) => l.hidden).length} lines hidden)` : ""}</summary>
@@ -2780,6 +2785,7 @@ function renderQuote() {
   $("quoteSummary").querySelectorAll("[data-cv]").forEach((b) => b.onchange = () => { const k = b.dataset.cv, cur = (job.hideLines || []).filter((x) => x !== k); setHide(b.checked ? cur : [...cur, k]); });
   $("cvSite").onclick = () => setHide([...(job.hideLines || []), ...q.lines.filter((l) => SITE_COSTS.test(l.desc)).map((l) => lineKey(l.desc))]);
   $("cvAll").onclick = () => setHide([]);
+  $("qGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; renderEstFields(); commit(); };
   $("cvLab").onchange = (e) => { snapshot(); job.clientLabour = e.target.value; clientOpen = true; commit(); };
   $("extraList").innerHTML = (job.extras || []).map((x, i) => `<button data-ex="${i}"><span>${escapeHtml(x.desc)}</span><span>${num1(x.qty)} × ${money(x.price)} · remove</span></button>`).join("") || '<p class="note">None yet.</p>';
   $("extraList").querySelectorAll("[data-ex]").forEach((b) => b.onclick = () => { snapshot(); job.extras.splice(+b.dataset.ex, 1); commit(); });
@@ -2822,7 +2828,7 @@ function quoteData() {
     scope: job.items.filter((i) => BUILT_TYPES.has(i.type)).map((i) => ({ item: i.label || TYPE_INFO[i.type].label, type: i.type, description: describe(i) })),
     lines: clientLines(q),
     totals: { cost: q.subtotal, contingency: q.contingency, overheadProfit: q.markup, beforeTax: q.beforeTax, gst: q.gst, pst: q.pst, total: q.total, deposit: q.deposit, labourHours: q.hours },
-    rates: { gstPercent: q.E.gst, pstPercent: q.E.pst, markupPercent: q.E.markup, contingencyPercent: q.E.contingency, depositPercent: q.E.deposit },
+    rates: { gstPercent: q.gstPct, pstPercent: q.E.pst, markupPercent: q.E.markup, contingencyPercent: q.E.contingency, depositPercent: q.E.deposit },
     terms: c.terms,
   };
 }
@@ -2855,7 +2861,7 @@ img{width:100%;border-radius:6px;border:1px solid #dde3ea;margin:8px 0}h2{font-s
 <h2>Project: ${e(qd.job.name)}</h2><ul>${qd.scope.map((s) => `<li><b>${e(s.item)}</b>: ${e(s.description)}</li>`).join("")}</ul>${qd.job.notes ? `<p class="muted">${e(qd.job.notes)}</p>` : ""}
 ${r3 ? `<h2>Rendering</h2><img src="${r3}" alt="3D rendering of the project">` : ""}<h2>Plan</h2><img src="${bp}" alt="Blueprint plan and section">
 <h2>Price</h2><table><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit price</th><th class="n">Amount</th></tr></thead><tbody>${rows}
-<tr><td colspan="3" class="n">Subtotal</td><td class="n">${money(qd.totals.beforeTax)}</td></tr><tr><td colspan="3" class="n">GST ${qd.rates.gstPercent}%</td><td class="n">${money(qd.totals.gst)}</td></tr>
+<tr><td colspan="3" class="n">Subtotal</td><td class="n">${money(qd.totals.beforeTax)}</td></tr>${qd.rates.gstPercent ? `<tr><td colspan="3" class="n">GST ${qd.rates.gstPercent}%</td><td class="n">${money(qd.totals.gst)}</td></tr>` : ""}
 <tr><td colspan="3" class="n">PST ${qd.rates.pstPercent}% (materials)</td><td class="n">${money(qd.totals.pst)}</td></tr><tr class="tot"><td colspan="3" class="n">Total (CAD)</td><td class="n">${money(qd.totals.total)}</td></tr>
 <tr><td colspan="3" class="n">Deposit ${qd.rates.depositPercent}% due on acceptance</td><td class="n">${money(qd.totals.deposit)}</td></tr></tbody></table>
 <h2>Terms</h2><p>${e(qd.terms)}</p><div class="sign"><div>Accepted by (client) &amp; date</div><div>${e(qd.company.name || "Contractor")} &amp; date</div></div></main></body></html>`;
@@ -3012,7 +3018,7 @@ function clientPages() {
     for (const l of ls) row([l.description, `${num1(l.quantity)} ${l.unit}`, money(l.unitPrice), money(l.lineTotal)]);
   }
   row(["Subtotal", "", "", money(qd.totals.beforeTax)], { weight: 600 });
-  row([`GST ${qd.rates.gstPercent}%`, "", "", money(qd.totals.gst)]);
+  if (qd.rates.gstPercent) row([`GST ${qd.rates.gstPercent}%`, "", "", money(qd.totals.gst)]);
   if (qd.totals.pst) row([`PST ${qd.rates.pstPercent}% on materials`, "", "", money(qd.totals.pst)]);
   row(["Total (CAD)", "", "", money(qd.totals.total)], { weight: 700, size: 27, fill: "#eef2f7" });
   row([`Deposit ${qd.rates.depositPercent}% due on signing`, "", "", money(qd.totals.deposit)], { weight: 600 });
@@ -3034,7 +3040,7 @@ function cpRender() {
 function cpFill() {
   const d = cdoc();
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
-  $("cpSide").checked = d.side; $("cp3d").checked = d.three && !!R3; $("cp3d").disabled = !R3;
+  $("cpGst").checked = !!job.est.chargeGst; $("cpSide").checked = d.side; $("cp3d").checked = d.three && !!R3; $("cp3d").disabled = !R3;
   $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? EXCL_AUTO;
 }
 const cpSave = () => store.set("bsp.current", job);
@@ -3042,6 +3048,7 @@ $("cpOpen").onclick = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); }
 $("cpClose").onclick = () => { $("cpDlg").hidden = true; };
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
+$("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
 $("cpSide").onchange = (e) => { cdoc().side = e.target.checked; cpSave(); cpRender(); };
 $("cp3d").onchange = (e) => { cdoc().three = e.target.checked; cpSave(); cpRender(); };
 for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
@@ -3135,15 +3142,15 @@ $("qCsv").onclick = () => {
   const base = { date: fmtDate(qd.date, c.dateFmt), validUntil: fmtDate(qd.validUntil, c.dateFmt), quoteNo: qd.quoteNumber, client: qd.client.name, siteAddress: qd.client.siteAddress, jobName: qd.job.name, company: qd.company.name,
     taxPct: c.taxRows === "pst" ? n2(qd.rates.gstPercent) : "", jobNotes: [qd.job.name, `Quote ${qd.quoteNumber}`, qd.job.notes].filter(Boolean).join(" · ") };
   const rowOf = (l) => {
-    const isMat = l.category === "Materials", taxCode = l.category === "Tax" ? "" : isMat ? "GST+PST" : "GST";
+    const isMat = l.category === "Materials", taxCode = l.category === "Tax" ? "" : [qd.rates.gstPercent ? "GST" : "", isMat && qd.rates.pstPercent ? "PST" : ""].filter(Boolean).join("+");
     const v = { ...base, category: l.category, item: l.description, description: l.note ? `${l.description} (${l.note})` : l.description, quantity: n2(l.quantity), unit: l.unit,
       unitPrice: n2(l.unitPrice), lineTotal: n2(l.lineTotal), unitCost: n2(l.unitCost ?? l.unitPrice), costTotal: n2(l.costTotal ?? l.lineTotal), taxCode,
-      gstRate: l.category === "Tax" ? "" : n2(qd.rates.gstPercent), pstRate: isMat ? n2(qd.rates.pstPercent) : "0.00", taxable: l.category === "Tax" ? "N" : "Y", note: l.note || "",
+      gstRate: l.category === "Tax" ? "" : n2(qd.rates.gstPercent), pstRate: isMat ? n2(qd.rates.pstPercent) : "0.00", taxable: l.category === "Tax" || !(qd.rates.gstPercent || (isMat && qd.rates.pstPercent)) ? "N" : "Y", note: l.note || "",
       details: (l.note || "").replace(/ · incl\. .*$/, ""), kind: l.category === "Labour" ? "Labour" : isMat ? "Materials" : "Other" };
     return c.columns.map((col) => esc(col.field ? v[col.field] ?? "" : ""));
   };
   const lines = qd.lines.slice();
-  if (c.taxRows === "rows") lines.push({ category: "Tax", description: `GST ${qd.rates.gstPercent}%`, quantity: 1, unit: "", unitPrice: qd.totals.gst, lineTotal: qd.totals.gst });
+  if (c.taxRows === "rows" && qd.totals.gst) lines.push({ category: "Tax", description: `GST ${qd.rates.gstPercent}%`, quantity: 1, unit: "", unitPrice: qd.totals.gst, lineTotal: qd.totals.gst });
   if ((c.taxRows === "rows" || c.taxRows === "pst") && qd.totals.pst) lines.push({ category: "Tax", description: `PST ${qd.rates.pstPercent}% on materials`, quantity: 1, unit: "", unitPrice: qd.totals.pst, lineTotal: qd.totals.pst });
   const csv = [c.columns.map((col) => esc(col.header)).join(","), ...lines.map((l) => rowOf(l).join(","))].join("\r\n") + "\r\n";
   saveFile(`${slug(job.name)}_${quoteNo()}_ledgerline.csv`, new Blob(["﻿" + csv], { type: "text/csv" }));
