@@ -842,6 +842,15 @@ function cutMode(P) { return hasCap(P) && (P.stepRise || 0) > P.capH; }
 function riserDims(P) { const R = cutMode(P) ? P.stepRise : P.H; return { R, bH: cutMode(P) ? P.stepRise - P.capH : P.H }; }
 function defaultBase(P) { const { R, bH } = riserDims(P); return R - bH - (hasCap(P) ? P.capH : 0); }
 
+// Whole units to buy for a list of piece lengths: full-length pieces take one unit each (or 1/perH when a unit is also
+// cut into perH pieces by height); shorter pieces of the same length share a unit as many as fit (an end piece can lose ⅛" to the saw).
+function unitsFor(lens, L, perH = 1) {
+  const groups = new Map(); let full = 0;
+  for (const l of lens) { if (l >= L - 0.05) full++; else { const k = Math.round(l * 8) / 8; groups.set(k, (groups.get(k) || 0) + 1); } }
+  let n = Math.ceil(full / perH);
+  for (const [l, c] of groups) n += Math.ceil(c / (perH * Math.max(1, Math.floor((L + 0.25) / l + 1e-6))));
+  return n;
+}
 function stepCalc(it) {
   const P = build(it), D = P.D, L = P.L, cap = hasCap(P), { R: H, bH } = riserDims(P), cutting = cutMode(P);
   const capH = cap ? P.capH : 0, capD = cap ? P.capD : 0, capL = cap ? P.capL : 0, over = cap ? P.capOver : 0;
@@ -954,9 +963,12 @@ function stepCalc(it) {
   if (count > 3) checks.push(["warn", "4 or more risers usually needs a handrail. Check local code"]);
   // cut risers: one block gives as many pieces as fit in its height (⅛" saw kerf), e.g. two 3¾" halves from a 7⅝" block
   t.perBlock = cutting && pH > 0 ? Math.max(1, Math.floor((P.H + 0.125) / (pH + 0.125) + 1e-6)) : 1;
-  t.blocksBuy = Math.ceil(t.blocks / t.perBlock);
+  // pieces cut short at the ends of a row come out of one unit together (two 9" ends from one 18" block or cap)
+  const lens = (kind, d) => pieces.filter((q) => q.kind === kind).map((q) => Math.abs(q.y1 - q.y0 - d) < 0.05 ? q.x1 - q.x0 : q.y1 - q.y0);
+  t.blocksBuy = unitsFor(lens("block", D), L, t.perBlock);
+  t.capsBuy = cap ? unitsFor(lens("cap", capD), capL, 1) : 0;
   t.riserCuts = !cutting ? t.blockCuts : t.blocksBuy * (t.perBlock - (P.H - t.perBlock * (pH + 0.125) < 0.2 ? 1 : 0)); // saw cuts: halves need one cut per block
-  if (t.perBlock > 1) checks.push(["ok", `Each block cut makes ${t.perBlock} riser pieces: ${t.blocksBuy} blocks for ${t.blocks} pieces`]);
+  if (t.perBlock > 1) checks.push(["ok", `Each block cut makes ${t.perBlock} riser pieces: ${t.blocksBuy} blocks for ${t.blocks} pieces (short end pieces share blocks)`]);
   const xw = it.w + (cheekL ? cw : 0) + (cheekR ? cw : 0), xc = ((cheekR ? cw : 0) - (cheekL ? cw : 0)) / 2;
   return { count, H, bH, pH, bury, half, cutting, D, L, cap, capH, capD, capL, over, run, top, base, E, gC, fillVol, colTop, under, pieces, fills, t, infillArea, checks, xw, xc, wrapL, wrapR, cheekL, cheekR, xs, P };
 }
@@ -2124,7 +2136,7 @@ function renderItemPane() {
       </div>`;
     h += `<h3>Configuration</h3><div class="grid2">${selectField("Shape", "config", it, CONFIGS)}${selectField("Cheek walls", "cheek", it, CHEEKS)}${it.cheek && it.cheek !== "none" && it.cheek !== "under" ? field("Cheek wall above tread", "cheekAbove", it) : ""}</div>`;
     h += `<dl class="stats"><div><dt>Risers</dt><dd>${c.count} × ${fmtIn(c.H)}</dd></div><div><dt>Total run</dt><dd>${fmtLen(c.run)}</dd></div>
-      <div><dt>Blocks</dt><dd>${c.t.perBlock > 1 ? `${c.t.blocksBuy} cut into ${c.t.blocks} pieces` : `${c.t.blocks} (${c.cutting ? "all cut" : c.t.blockCuts + " cut"})`}</dd></div><div><dt>Caps</dt><dd>${c.cap ? c.t.caps + " (" + c.t.capCuts + " cut)" : "–"}</dd></div>
+      <div><dt>Blocks</dt><dd>${c.t.perBlock > 1 ? `${c.t.blocksBuy} cut into ${c.t.blocks} pieces` : `${c.t.blocks} (${c.cutting ? "all cut" : c.t.blockCuts + " cut"})`}</dd></div><div><dt>Caps</dt><dd>${c.cap ? (c.t.capsBuy < c.t.caps ? `${c.t.capsBuy} for ${c.t.caps} pieces` : c.t.caps) + " (" + c.t.capCuts + " cut)" : "–"}</dd></div>
       ${c.cheekL || c.cheekR ? `<div><dt>Cheek wall blocks</dt><dd>${c.t.cheekBlocks}</dd></div><div><dt>Cheek wall caps</dt><dd>${c.t.cheekCaps}</dd></div>` : ""}
       <div><dt>Top of steps</dt><dd>+${fmtLen(c.top)}</dd></div><div><dt>${c.cutting ? "Riser block cut to" : "Bottom course"}</dt><dd>${c.cutting ? fmtIn(c.pH) + " high" + (c.half && Math.abs(c.bury) > 0.05 ? `, set ${fmtIn(Math.abs(c.bury))} ${c.bury > 0 ? "into the base" : "up on shims"}` : "") : c.base < 0 ? fmtIn(-c.base) + " buried" : "at grade"}</dd></div></dl>`;
     h += `<h3>Checks</h3>${checksHtml(c.checks)}<p class="note">Based on common residential limits (IRC / BC Building Code). Your local code decides.</p>`;
@@ -2431,7 +2443,7 @@ function takeoff() {
     if (it.type === "steps") {
       const c = stepCalc(it);
       addM(it.block, it.color, c.t.blocksBuy + c.t.cheekBlocks, use);
-      if (c.cap) { addM(it.cap, it.capColor, c.t.caps + c.t.cheekCaps, use); w.adhesiveCaps += c.t.caps + c.t.cheekCaps; }
+      if (c.cap) { addM(it.cap, it.capColor, c.t.capsBuy + c.t.cheekCaps, use); w.adhesiveCaps += c.t.caps + c.t.cheekCaps; }
       w.stepBlocks += c.t.blocks; w.wallBlocks += c.t.cheekBlocks; w.caps += c.t.caps + c.t.cheekCaps;
       w.cutPieces += c.t.riserCuts + c.t.capCuts + c.t.cheekCuts;
       if (c.infillArea > 0) surface(it.infill, firstColor(it.infill), c.infillArea, use);
