@@ -76,6 +76,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .modal { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modalbox { background: var(--panel); color: var(--fg); border-radius: 12px; padding: 16px 18px; width: min(560px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .modalbox h2 { margin: 0; }
+.modalbox.wide { width: min(1180px, 100%); height: 100%; }
+.cpwrap { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 14px; min-height: 0; flex: 1; }
+.cpside { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
+.cpside textarea { font: 13px/1.4 var(--font-body); }
+.cppages { overflow: auto; background: #6b737c; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; }
+.cppages img { width: min(100%, 760px); background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+@media (max-width: 860px) { .cpwrap { grid-template-columns: 1fr; } .modalbox.wide { height: auto; } }
+#cpPrint { display: none; }
+@media print {
+  body.cp-printing > *:not(#cpPrint) { display: none !important; }
+  body.cp-printing { overflow: visible; background: #fff; }
+  body.cp-printing #cpPrint { display: block; }
+  #cpPrint img { width: 100%; display: block; page-break-after: always; break-after: page; }
+  @page { size: letter; margin: 0; }
+}
 fieldset.views { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 0; grid-column: 1 / -1; }
 fieldset.views legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
 #prViews { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; margin-top: 8px; font-size: 14px; }
@@ -414,7 +429,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <div id="buyList"></div>
         <details id="supEdit"><summary>Suppliers and rental yards</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
-          <button class="btn primary" id="qHtml">Save quote</button>
+          <button class="btn primary" id="cpOpen">Client package: plan, scope, timeline &amp; quote</button>
+          <button class="btn" id="qHtml">Save quote</button>
           <button class="btn" id="qCsv">Export to Ledgerline (CSV)</button>
           <button class="btn" id="qJson">Export JSON</button>
         </div>
@@ -594,6 +610,33 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
   </div>
 </div>
 
+<div class="modal" id="cpDlg" hidden role="dialog" aria-modal="true" aria-labelledby="cpTitle">
+  <div class="modalbox wide">
+    <div class="row" style="justify-content:space-between"><h2 id="cpTitle">Client package</h2><button class="btn" id="cpClose" aria-label="Close">✕</button></div>
+    <div class="cpwrap">
+      <div class="cpside">
+        <p class="note">This is what your client gets: a simple plan, what's included, when it happens, and the price, with a place to sign. The price uses your choices under "What the client sees" on the Quote tab.</p>
+        <div class="grid2">
+          <label class="f">Start date <input type="date" id="cpStart"></label>
+          <label class="f">Crew size <input id="cpCrew" inputmode="decimal"></label>
+          <label class="f">Hours per day <input id="cpHrs" inputmode="decimal"></label>
+          <label class="f">Days to get materials <input id="cpLead" inputmode="decimal"></label>
+        </div>
+        <label class="checkrow"><input type="checkbox" id="cpSide"> Side view of the stairway</label>
+        <label class="checkrow"><input type="checkbox" id="cp3d"> 3D picture (open 3D Render first)</label>
+        <label class="f">Scope of work (one item per line) <textarea id="cpScope" rows="9"></textarea></label>
+        <div class="row"><button class="btn small" id="cpScopeReset">Rewrite from the plan</button></div>
+        <label class="f">Timeline (one step per line) <textarea id="cpTime" rows="8"></textarea></label>
+        <div class="row"><button class="btn small" id="cpTimeReset">Rewrite from the dates</button></div>
+        <label class="f">Not included (one per line) <textarea id="cpExcl" rows="4"></textarea></label>
+      </div>
+      <div class="cppages" id="cpPages" aria-label="Preview of the client package"></div>
+    </div>
+    <p class="note" id="cpInfo"></p>
+    <div class="row"><button class="btn primary" id="cpPdf">Save PDF (to print or send)</button><button class="btn" id="cpPrintBtn">Print</button><button class="btn" id="cpPics">Save pictures (for Ledgerline)</button></div>
+  </div>
+</div>
+<div id="cpPrint"></div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js" defer></script>
 <script>
@@ -1191,18 +1234,20 @@ function renderSheet(ctx, W, H, v, o) {
   const [x0w, y1w] = S2W(v, 0, 0), [x1w, y0w] = S2W(v, W, H);
   const step = v.s * 12 < 6 ? 60 : 12;
   ctx.lineWidth = 1 * u;
-  for (let gx = Math.floor(x0w / step) * step; gx <= x1w; gx += step) {
+  if (!o.clean) for (let gx = Math.floor(x0w / step) * step; gx <= x1w; gx += step) {
     ctx.strokeStyle = gx % 60 === 0 ? BP.grid5 : BP.grid;
     const [sx] = W2S(v, gx, 0); ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
   }
-  for (let gy = Math.floor(y0w / step) * step; gy <= y1w; gy += step) {
+  if (!o.clean) for (let gy = Math.floor(y0w / step) * step; gy <= y1w; gy += step) {
     ctx.strokeStyle = gy % 60 === 0 ? BP.grid5 : BP.grid;
     const [, sy] = W2S(v, 0, gy); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
   }
-  ctx.save(); ctx.setLineDash([10 * u, 6 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1.5 * u;
-  const [a1, b1] = W2S(v, 0, 0), [a2, b2] = W2S(v, job.site.w, job.site.d);
-  ctx.strokeRect(a1, b2, a2 - a1, b1 - b2); ctx.restore();
-  label(ctx, "WORK AREA " + fmtLen(job.site.w) + " × " + fmtLen(job.site.d), a1 + 6 * u, b2 - 8 * u, 11 * u, "left", BP.ink2);
+  if (!o.clean) {
+    ctx.save(); ctx.setLineDash([10 * u, 6 * u]); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1.5 * u;
+    const [a1, b1] = W2S(v, 0, 0), [a2, b2] = W2S(v, job.site.w, job.site.d);
+    ctx.strokeRect(a1, b2, a2 - a1, b1 - b2); ctx.restore();
+    label(ctx, "WORK AREA " + fmtLen(job.site.w) + " × " + fmtLen(job.site.d), a1 + 6 * u, b2 - 8 * u, 11 * u, "left", BP.ink2);
+  }
 
   if (o.inReal) drawRealGround(ctx, v, W, H, u);
   else if (hasTerrain()) drawElevationTint(ctx, v, W, H);
@@ -2817,6 +2862,212 @@ ${r3 ? `<h2>Rendering</h2><img src="${r3}" alt="3D rendering of the project">` :
   saveFile(`${slug(job.name)}_${quoteNo()}.html`, new Blob([html], { type: "text/html" }));
 };
 
+// ---------- client package: simple plan, scope, timeline and quote on letter pages ----------
+// The plan for a client: the built work, ground, water and plants, without measurements, contours, spot heights or grid,
+// fitted to the built work. Returns the height it wants for width w (the drawing is taller or wider to suit the job).
+function simplePlanBox(w, maxH) {
+  const b = builtBounds(); if (!b) return Math.round(maxH * 0.6);
+  return Math.round(clamp(w * (b.maxY - b.minY) / (b.maxX - b.minX), maxH * 0.45, maxH));
+}
+function builtBounds() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const it of job.items.filter((i) => ["steps", "landing", "path", "wall", "rail", "house", "unit"].includes(i.type))) {
+    const hw = (it.type === "steps" ? Math.max(it.w, stepCalc(it).xw) : it.w) / 2, hd = (it.type === "steps" ? stepCalc(it).run : it.d) / 2;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const q = rotPt(it, sx * hw, sy * hd); minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x); minY = Math.min(minY, q.y); maxY = Math.max(maxY, q.y); }
+  }
+  if (!isFinite(minX)) return null;
+  const pad = Math.max(60, 0.12 * Math.max(maxX - minX, maxY - minY));
+  return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+}
+function drawSimplePlan(ctx, X, Y, w, h, u) {
+  const b = builtBounds(), v = {};
+  if (b) { v.s = Math.min(w / (b.maxX - b.minX), h / (b.maxY - b.minY)); v.ox = X + w / 2 - (b.minX + b.maxX) / 2 * v.s; v.oy = Y + h / 2 + (b.minY + b.maxY) / 2 * v.s; }
+  else { fitView(w, h, v, 30); v.ox += X; v.oy += Y; }
+  const keep = job.items; job.items = keep.filter((i) => !["dim", "spot", "contour", "cut"].includes(i.type));
+  try { renderSheet(ctx, X + w, Y + h, v, { unit: u, section: false, selId: null, noChrome: true, real: true, clean: true }); } finally { job.items = keep; }
+  const [cx, cy] = [X + w - 50 * u, Y + 50 * u]; ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(cx, cy, 36 * u, 0, 7); ctx.fill(); ctx.restore(); drawCompass(ctx, cx, cy, 26 * u, u, "#1d2733", false);
+  const ft = [5, 10, 20, 40].find((f) => f * 12 * v.s >= 90 * u) || 40, bw = ft * 12 * v.s, bx = X + 20 * u, by = Y + h - 22 * u;
+  ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
+  ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
+}
+function cdoc() { return job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); }
+const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
+const listAnd = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+// Plain-language list of the work, written from the plan
+function scopeAuto() {
+  const out = [], its = job.items, q = estimate(), E = q.E, gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface)));
+  out.push("Lay out the stairway on site and confirm the levels with you before digging.");
+  out.push("Dig out for the work, put down a compacted gravel base under every step and landing, and haul away the extra soil.");
+  const flights = its.filter((i) => i.type === "steps" && stepCalc(i).count > 1), singles = its.filter((i) => i.type === "steps" && stepCalc(i).count === 1), all = [...flights, ...singles];
+  const same = (f) => new Set(all.map(f)).size === 1;
+  const build = (it) => { const c = stepCalc(it); return `${matName(mat(it.block))} risers${c.cap ? ` and ${matName(mat(it.cap))} caps glued down` : ""}`; };
+  if (flights.length) {
+    const cs = flights.map(stepCalc), n = cs.reduce((a, c) => a + c.count, 0);
+    out.push(flights.length > 1 ? `Stairway: ${n} steps in ${flights.length} flights (${listAnd(cs.map((c) => String(c.count)))} steps).` : `${cleanName(flights[0]) || "Steps"}: ${plural(n, "step")}.`);
+  }
+  if (singles.length) out.push(`${plural(singles.length, "single step")} between the ${singles.length > 1 ? "terraces" : "landings"}.`);
+  if (all.length) {
+    if (same((i) => i.w) && same((i) => stepCalc(i).H) && same((i) => i.tread)) { const c = stepCalc(all[0]); out.push(`Every step ${plainLen(all[0].w)} wide, ${fmtIn(c.H)} high, with an ${fmtIn(all[0].tread)} tread.`); }
+    else for (const it of all) { const c = stepCalc(it); out.push(`${cleanName(it) || "Steps"}: ${plainLen(it.w)} wide, ${fmtIn(c.H)} high, ${fmtIn(it.tread)} tread.`); }
+    out.push(same(build) ? `Built with ${build(all[0])}${all.some((i) => stepCalc(i).under) ? "; block walls under the step edges, hidden from view" : ""}.` : all.map((i) => `${cleanName(i)}: ${build(i)}.`).join(" "));
+  }
+  // landings and walkways, alike ones grouped
+  const groups = new Map();
+  for (const it of its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path")) {
+    const lc = it.type === "landing" ? landingCalc(it) : { s: mat(it.surface), edged: false };
+    const desc = `${plainLen(it.w)} × ${plainLen(it.d)}, ${matName(lc.s)}${it.color ? " in " + it.color : ""}${lc.edged ? ", with a block and cap border" : ""}${it.edging === "plastic" ? ", held with edging" : ""}`;
+    if (!groups.has(desc)) groups.set(desc, []); groups.get(desc).push(cleanName(it) || (it.type === "path" ? "Walkway" : "Landing"));
+  }
+  for (const [desc, names] of groups) {
+    const m = names.map((n) => n.match(/^(.*?)\s*\d+$/)), pre = m.every((x) => x && x[1] === m[0][1]) ? m[0][1] : null;
+    out.push(names.length === 1 ? `${names[0]}: ${desc}.` : pre ? `${names.length} ${pre.toLowerCase()}s, each ${desc}.` : `${listAnd(names)}: each ${desc}.`);
+  }
+  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")} (stones in a wire cage) at the bottom${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
+  for (const it of its.filter((i) => i.type === "wall")) { const wc = wallCalc(it); out.push(`${shortLabel(it.label) || "Retaining wall"}: ${plainLen(it.w)} long, ${plainLen(wc.top)} high, ${matName(wc.b)}${wc.c ? " with caps" : ""}, drain rock behind.`); }
+  const rails = its.filter((i) => i.type === "rail");
+  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); out.push(`Handrail: about ${ft} ft, ${r0.color || "cedar"} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete.`); }
+  out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
+  out.push("Clean up, and a walk-through with you when it's done.");
+  return out.join("\n");
+}
+const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
+// Working days from labour hours, by stage of the job
+function timelinePhases() {
+  const d = cdoc(), q = estimate(), perDay = Math.max(1, d.crew * d.hrs), hrs = { prep: 0, steps: 0, pave: 0, rail: 0 };
+  for (const l of q.lines.filter((l) => l.unit === "hr")) {
+    const k = /excavat|base and fill|hauling|wheelbarrow/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
+    hrs[k] += l.qty;
+  }
+  const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0;
+  return [
+    ["Site preparation", "layout, digging, gravel base, and moving materials to the work area", days(hrs.prep)],
+    ["Steps and walls", "building the steps, block walls and caps, bottom to top", days(hrs.steps)],
+    ["Landings and finishing", "pavers on the landings, gabion baskets, edging", days(hrs.pave)],
+    ["Handrail", "posts set in concrete, then the rails", days(hrs.rail)],
+    ["Clean-up and walk-through", "", 0.5],
+  ].filter((p) => p[2] > 0);
+}
+function nextMonday() { const t = new Date(); t.setDate(t.getDate() + Math.round(cdoc().lead || 0)); t.setDate(t.getDate() + ((8 - t.getDay()) % 7 || 7)); return t; }
+const isoDay = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (r.getDay() % 6) n--; } return r; }
+const dayName = (t) => t.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
+function timelineAuto() {
+  const d = cdoc(), start = d.start ? new Date(d.start + "T12:00") : nextMonday(), ph = timelinePhases(), out = [];
+  out.push(`On signing: we order the materials. Allow about ${plural(Math.round(d.lead), "day")} for them to arrive on site before we start.`);
+  let day = 0, t = new Date(start); while (!(t.getDay() % 6)) t.setDate(t.getDate() + 1);
+  for (const [name, what, n] of ph) {
+    const a = addWorkdays(t, Math.floor(day)), b = addWorkdays(t, Math.max(Math.floor(day), Math.ceil(day + n) - 1));
+    const first = Math.floor(day) + 1, last = Math.ceil(day + n);
+    out.push(`${first === last ? `Day ${first}` : `Days ${first}–${last}`} (${first === last ? dayName(a) : `${dayName(a)} – ${dayName(b)}`}): ${name}${what ? ": " + what : ""}.`);
+    day += n;
+  }
+  out.push(`About ${plural(Math.ceil(day), "working day")} on site with a crew of ${d.crew}. Rain days and material delays can move these dates; we'll keep you posted.`);
+  return out.join("\n");
+}
+// Lays text, pictures and the price table onto letter pages (150 dpi), starting a new page when one fills up
+function clientPages() {
+  const d = cdoc(), D = 150, W = 8.5 * D, H = 11 * D, M = 0.6 * D, CW = W - 2 * M, foot = 0.45 * D;
+  const qd = quoteData(), co = qd.company, pages = []; let c, x, y = 0;
+  const F = (size, weight = 400) => `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`;
+  const INK = "#1c2530", MUTED = "#5d6b7a", BLUE = "#173f73";
+  const page = () => { c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M; };
+  const room = (h) => { if (y + h > H - M - foot) page(); };
+  const text = (t, size = 26, o = {}) => {
+    const font = F(size, o.weight || 400), ind = o.indent || 0, lines = wrapLines(x, t, CW - ind, font), lh = size * 1.38;
+    for (const ln of lines) { room(lh); x.font = font; x.fillStyle = o.color || INK; x.textBaseline = "top"; x.textAlign = "left"; x.fillText(ln, M + ind, y); y += lh; }
+    y += o.after ?? size * 0.35;
+  };
+  const head = (t) => { room(110); y += 18; x.font = F(30, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(t.toUpperCase(), M, y); y += 42; x.fillStyle = BLUE; x.fillRect(M, y, CW, 3); y += 18; };
+  const bullets = (txt, mark = "•") => { for (const ln of String(txt || "").split("\n").map((l) => l.trim()).filter(Boolean)) { room(36); x.font = F(26); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(mark, M + 4, y); text(ln, 26, { indent: 36, after: 8 }); } };
+  const picture = (h, draw, caption) => { room(h + 50); x.save(); x.beginPath(); x.rect(M, y, CW, h); x.clip(); draw(x, M, y, CW, h); x.restore(); x.strokeStyle = "#cfd6de"; x.lineWidth = 2; x.strokeRect(M, y, CW, h); y += h + 8; if (caption) text(caption, 21, { color: MUTED, after: 14 }); };
+  page();
+  // letterhead
+  x.font = F(44, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(co.name || "Quote", M, y);
+  x.textAlign = "right"; x.font = F(28, 700); x.fillText(`Quote ${qd.quoteNumber}`, W - M, y + 6); x.font = F(21); x.fillStyle = MUTED; x.fillText(`Date ${qd.date} · Valid until ${qd.validUntil}`, W - M, y + 44); x.textAlign = "left";
+  y += 62; const contact = [co.address, co.phone, co.email].filter(Boolean).join(" · "); if (contact) text(contact, 21, { color: MUTED, after: 2 }); if (co.taxNumber) text(`GST/BN ${co.taxNumber}`, 21, { color: MUTED, after: 2 });
+  y += 8; x.fillStyle = BLUE; x.fillRect(M, y, CW, 5); y += 26;
+  text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 });
+  text(`Project: ${qd.job.name}`, 28, { weight: 600, after: 16 });
+  // the plan, realistic look, fitted to the box
+  picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
+  if (d.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
+  if (d.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
+  head("Scope of work"); bullets(d.scope ?? scopeAuto());
+  const ex = d.excl ?? EXCL_AUTO; if (ex.trim()) { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); bullets(ex, "–"); }
+  head("Timeline"); bullets(d.timeline ?? timelineAuto());
+  head("Price");
+  const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
+    const font = F(o.size || 23, o.weight || 400), lines = wrapLines(x, cells[0], cols[0] - 16, font), lh = (o.size || 23) * 1.35, h = lines.length * lh + 14;
+    room(h); if (o.fill) { x.fillStyle = o.fill; x.fillRect(M, y, CW, h); }
+    x.font = font; x.fillStyle = o.color || INK; x.textBaseline = "top";
+    lines.forEach((ln, k) => { x.textAlign = "left"; x.fillText(ln, M + 8, y + 7 + k * lh); });
+    let cx = M + cols[0]; for (let k = 1; k < 4; k++) { cx += cols[k]; if (cells[k]) { x.textAlign = "right"; x.fillText(cells[k], cx - 8, y + 7); } }
+    x.textAlign = "left"; y += h; x.fillStyle = "#dde3ea"; x.fillRect(M, y - 1, CW, 1);
+  };
+  row(["Item", "Qty", "Unit price", "Amount"], { weight: 700, fill: "#eef2f7" });
+  for (const cat of ["Materials", "Labour", "Equipment & disposal", "Other"]) {
+    const ls = qd.lines.filter((l) => l.category === cat); if (!ls.length) continue;
+    row([cat.toUpperCase(), "", "", ""], { weight: 700, size: 20, color: BLUE });
+    for (const l of ls) row([l.description, `${num1(l.quantity)} ${l.unit}`, money(l.unitPrice), money(l.lineTotal)]);
+  }
+  row(["Subtotal", "", "", money(qd.totals.beforeTax)], { weight: 600 });
+  row([`GST ${qd.rates.gstPercent}%`, "", "", money(qd.totals.gst)]);
+  if (qd.totals.pst) row([`PST ${qd.rates.pstPercent}% on materials`, "", "", money(qd.totals.pst)]);
+  row(["Total (CAD)", "", "", money(qd.totals.total)], { weight: 700, size: 27, fill: "#eef2f7" });
+  row([`Deposit ${qd.rates.depositPercent}% due on signing`, "", "", money(qd.totals.deposit)], { weight: 600 });
+  if (qd.terms) { head("Terms"); text(qd.terms, 23); }
+  room(200); y += 90; x.fillStyle = INK; x.fillRect(M, y, CW * 0.45, 2); x.fillRect(M + CW * 0.55, y, CW * 0.45, 2); y += 10;
+  x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "top"; x.fillText("Accepted by (client) and date", M, y); x.fillText(`${co.name || "Contractor"} and date`, M + CW * 0.55, y);
+  // footer on every page
+  pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(19); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(`${co.name || ""}${co.name ? " · " : ""}Quote ${qd.quoteNumber} · ${qd.job.name}`, M, H - M * 0.6); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.6); });
+  return pages;
+}
+let cpTimer = 0, cpPagesCache = null;
+function cpRender() {
+  clearTimeout(cpTimer);
+  cpTimer = setTimeout(() => {
+    try { cpPagesCache = clientPages(); $("cpPages").innerHTML = ""; for (const pg of cpPagesCache) { const im = new Image(); im.alt = "Client package page"; im.src = pg.toDataURL("image/jpeg", 0.8); $("cpPages").appendChild(im); } $("cpInfo").textContent = `${plural(cpPagesCache.length, "page")}, letter size. Quote total ${money(estimate().total)}.`; }
+    catch (e) { $("cpInfo").textContent = "Couldn't draw the preview: " + e.message; }
+  }, 250);
+}
+function cpFill() {
+  const d = cdoc();
+  $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
+  $("cpSide").checked = d.side; $("cp3d").checked = d.three && !!R3; $("cp3d").disabled = !R3;
+  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? EXCL_AUTO;
+}
+const cpSave = () => store.set("bsp.current", job);
+$("cpOpen").onclick = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
+$("cpClose").onclick = () => { $("cpDlg").hidden = true; };
+for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
+  $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
+$("cpSide").onchange = (e) => { cdoc().side = e.target.checked; cpSave(); cpRender(); };
+$("cp3d").onchange = (e) => { cdoc().three = e.target.checked; cpSave(); cpRender(); };
+for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
+$("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = scopeAuto(); cpSave(); cpRender(); };
+$("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
+async function cpJpegs() { const pages = cpPagesCache || clientPages(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
+$("cpPdf").onclick = async () => { try { cpPagesCache = clientPages(); saveFile(`${slug(job.name)}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
+$("cpPrintBtn").onclick = () => {
+  cpPagesCache = clientPages(); const box = $("cpPrint"); box.innerHTML = "";
+  for (const pg of cpPagesCache) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
+  document.body.classList.add("cp-printing");
+  const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  try { window.print(); } catch { done(); toast("This screen can't print directly. Tap Save PDF and print the PDF."); return; }
+  setTimeout(() => { if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 1500);
+};
+// Pictures to attach to the estimate in Ledgerline (its CSV import carries no pictures)
+$("cpPics").onclick = async () => {
+  const shots = [], jpg = (c) => new Promise((r) => c.toBlob(r, "image/jpeg", 0.88)), mk = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); draw(g, w, h); return c; };
+  { const pw = 1600, ph = simplePlanBox(pw, 2200); shots.push(["plan", mk(pw, ph, (g, w, h) => drawSimplePlan(g, 0, 0, w, h, 1.6))]); }
+  if (job.items.some((i) => i.type === "steps")) shots.push(["side_view", mk(2000, 1000, (g, w, h) => { renderStairs.client = true; try { renderStairs(g, 0, 0, w, h, 1.6, "all"); } finally { renderStairs.client = false; } })]);
+  if (R3) { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement; shots.push(["3d", mk(s.width, s.height, (g) => g.drawImage(s, 0, 0))]); }
+  for (const [name, c] of shots) await saveFile(`${slug(job.name)}_${quoteNo()}_${name}.jpg`, await jpg(c));
+  toast(`Saved ${plural(shots.length, "picture")}. In Ledgerline, open the estimate and attach them.`);
+};
+
 // ---------- Ledgerline CSV export ----------
 // One header row, then one row per line item, so it imports cleanly. Columns are configurable and can be
 // matched automatically to a sample CSV from another app.
@@ -2981,6 +3232,8 @@ function sanitizeJob(j) {
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
       equip: Array.isArray(j.equip) ? j.equip.slice(0, 40).filter((q) => q && typeof q === "object").map((q) => ({ id: String(q.id || "m").slice(0, 20), name: String(q.name || "Machine").slice(0, 80), use: q.use ? 1 : 0, yard: String(q.yard || "").slice(0, 40), rate: num(q.rate, 0, 0, 1e5), days: num(q.days, 1, 0, 1000) })) : undefined,
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
+      clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
+        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three }; })(),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
@@ -3712,7 +3965,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   // words on the drawing
   const T = (t, x, y, size, color = "#1d2733", weight = 600, align = "center") => { ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
   T(single ? `${shortLabel(els.find((e) => e.it.id === which).it.label) || "Steps"}: side view, cut down the middle` : "Whole stairway from the side (bottom on the left)", X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700, "left");
-  T(single ? "Every block and cap drawn to size, true scale" : "Pick one flight under Show to see its blocks", X + 16 * u, Y + 44 * u, 12.5 * u, "#3d4a57", 500, "left");
+  if (!renderStairs.client) T(single ? "Every block and cap drawn to size, true scale" : "Pick one flight under Show to see its blocks", X + 16 * u, Y + 44 * u, 12.5 * u, "#3d4a57", 500, "left");
   if (!single) {
     for (const el of els) {
       const [a, b] = P(el.d0 + el.len / 2, el.e);
