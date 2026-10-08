@@ -2794,6 +2794,7 @@ function takeoff() {
       if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") { w.paveSqft += ua / 144; if (!glued) { w.sandYd += yd3(ua * 1); w.polySqft += ua / 144; } }
       else if (m.kind === "solid") w.stepBlocks++; else w.wallBlocks++;
       if (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
+      if (!glued && !/channel|grate/i.test(m.name || "")) base(ua, it.h + (m.kind === "paver" || m.kind === "slab" ? 1 : 0)); // set on the ground: dig out and compact a gravel base under it
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
@@ -2850,7 +2851,7 @@ function estimateRaw() {
   L("Materials", "Handrail brackets, bolts and screws", w.railPosts, "set", E.railHardware);
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
   const hrs = (n) => ceilTo(n, 0.5);
-  L("Labour", "Excavation and grading", hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
+  L("Labour", `Excavation and grading${E.hrExcavYd >= 2 ? " (by hand)" : ""}`, hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
   if (w.gabMeshFt2) {
     L("Materials", "Gabion mesh: woven hex double-twist, Galfan + PVC (marine), 2.7/3.7 mm, 60×80 mm", ceilTo(w.gabMeshFt2 * 1.15 / 10.764 + 0.5, 0.5), "m²", E.meshM2); // +15% waste, plus ½ m² for cutting errors
     L("Materials", "Lacing wire, Galfan + PVC 2.2/3.2 mm (50 m coil)", Math.ceil(w.gabEdgeM * 1.4 / 50), "coil", E.lacingCoil);
@@ -2928,7 +2929,7 @@ const EST_FIELDS = [
   ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["plasticTopPerFt", "Plastic lumber 2x6 $/ft"], ["plasticRailPerFt", "Plastic lumber 2x4 $/ft"], ["paintPerGal", "Exterior paint $/gal"], ["primerPerGal", "Primer $/gal"], ["hrPaintSqft", "Hours per sq ft per coat of paint"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
-  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrPlanning", "Hours of free estimate and planning (not charged)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation (about 1 by machine, 3 by hand)"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrPlanning", "Hours of free estimate and planning (not charged)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
 function renderEstFields() {
   $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
@@ -3467,8 +3468,10 @@ const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repair
 // Working days from labour hours, by stage of the job
 function timelinePhases() {
   const d = cdoc(), q = estimate(), perDay = Math.max(1, d.crew * d.hrs), hrs = { prep: 0, steps: 0, pave: 0, rail: 0 };
+  const placedPavers = job.items.some((i) => i.type === "unit" && (mat(i.block) || {}).kind === "paver" && !unitOnUnit(i));
   for (const l of q.lines.filter((l) => l.unit === "hr")) {
-    const k = /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
+    const k = /channel/i.test(l.desc) || (placedPavers && /cutting/i.test(l.desc)) ? "pave" // channel drains go in with the paving; on a laid paver job most cuts are pavers
+      : /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
     hrs[k] += l.qty;
   }
   const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0, F = jobFacts();
