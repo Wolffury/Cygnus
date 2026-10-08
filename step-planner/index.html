@@ -2336,6 +2336,18 @@ const EDGINGS = [["none", "None"], ["plastic", "Plastic edging (holds the gravel
 function checksHtml(list) {
   return `<ul class="checks">${list.map(([k, m]) => `<li><span class="pill ${k}">${k === "ok" ? "OK" : k === "warn" ? "Check" : "Fix"}</span><span>${escapeHtml(m)}</span></li>`).join("")}</ul>`;
 }
+// what's built on the job: placed blocks and pavers grouped by material and colour, everything else one line each
+function hardscapeList() {
+  const out = [], groups = new Map();
+  for (const it of job.items) {
+    if (!BUILT_TYPES.has(it.type)) continue;
+    if (it.type !== "unit") { out.push(`<p>${escapeHtml(it.label || TYPE_INFO[it.type].label)}: ${escapeHtml(describe(it))}</p>`); continue; }
+    const m = mat(it.block), k = it.block + "|" + (it.color || ""), g = groups.get(k) || { m, color: it.color, n: 0, cut: 0, area: 0 };
+    g.n++; if (m && (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05)) g.cut++; g.area += unitArea(it) / 144; groups.set(k, g);
+  }
+  const rows = [...groups.values()].sort((a, b) => b.n - a.n).map((g) => `<p><b>${g.n} ×</b> ${escapeHtml(matName(g.m))}${g.color ? ` – ${escapeHtml(g.color)}` : ""}${g.cut ? `, ${g.cut} cut` : ""}${g.m && perSqft(g.m) ? ` (${num1(g.area)} sq ft)` : ""}</p>`);
+  return rows.concat(out).join("") || "<p>None yet.</p>";
+}
 function renderItemPane() {
   const pane = $("pItem");
   const it = job.items.find((i) => i.id === selId);
@@ -2343,7 +2355,7 @@ function renderItemPane() {
     const q = estimate();
     pane.innerHTML = `<h2>Nothing selected</h2><p>Tap an item on the blueprint to edit it, or use the Add tab to place steps, landings, walls, walkways, trees and more.</p>
       <dl class="stats"><div><dt>Items</dt><dd>${job.items.length}</dd></div><div><dt>Quote total</dt><dd>${money(q.total)}</dd></div></dl>
-      <h3>Hardscape on this job</h3>${job.items.filter((i) => BUILT_TYPES.has(i.type)).map((s) => `<p>${escapeHtml(s.label || TYPE_INFO[s.type].label)}: ${escapeHtml(describe(s))}</p>`).join("") || "<p>None yet.</p>"}`;
+      <h3>Hardscape on this job</h3>${hardscapeList()}`;
     return;
   }
   const t = it.type;
