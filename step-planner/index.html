@@ -4469,19 +4469,23 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   if (single) { const k = els.findIndex((e) => e.it.id === which); if (k < 0) return false; els = els.slice(Math.max(0, k - 1), k + 2); const d0 = els[0].d0; els.forEach((e) => { e.d0 -= d0; }); }
   const total = els.reduce((a, e) => Math.max(a, e.d0 + e.len), 0), est = { ...EST_DEFAULTS, ...job.est }, wl = waterLevel();
   const ground = els.flatMap((e) => seqGround(e));
+  // a little beach past the bottom and lawn past the top, so the drawing doesn't end in a cliff
+  const extA = single ? 0 : 36, extB = single ? 0 : 48;
+  if (!single) { ground.unshift([-extA, ground[0][1]]); ground.push([total + extB, ground[ground.length - 1][1]]); }
+  const span = total + extA + extB;
   let lo = Math.min(...ground.map((g) => g[1]), ...els.map((e) => e.s)) - est.baseDepth - 14, hi = Math.max(...els.map((e) => e.e)) + 30;
   if (wl != null && wl > lo) lo = Math.min(lo, wl - 12);
   const padL = 30 * u, padR = 30 * u, padT = 70 * u, padB = 48 * u;
-  const sc = Math.min((W - padL - padR) / total, (H - padT - padB) / (hi - lo));
-  const ox = X + padL + ((W - padL - padR) - total * sc) / 2, oy = Y + H - padB - ((H - padT - padB) - (hi - lo) * sc) / 2;
+  const sc = Math.min((W - padL - padR) / span, (H - padT - padB) / (hi - lo));
+  const ox = X + padL + ((W - padL - padR) - span * sc) / 2 + extA * sc, oy = Y + H - padB - ((H - padT - padB) - (hi - lo) * sc) / 2;
   const P = (d, z) => [ox + d * sc, oy - (z - lo) * sc];
   ctx.save(); ctx.beginPath(); ctx.rect(X, Y, W, H); ctx.clip();
   const sky = ctx.createLinearGradient(0, Y, 0, Y + H); sky.addColorStop(0, "#dce9f3"); sky.addColorStop(1, "#f4f7f9"); ctx.fillStyle = sky; ctx.fillRect(X, Y, W, H);
   // soil and the existing ground surface
   const gPoly = () => { ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, z); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); };
-  gPoly(); { const [a] = P(total, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(0, lo)[0], Y + H); ctx.closePath(); }
+  gPoly(); { const [a] = P(total + extB, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(-extA, lo)[0], Y + H); ctx.closePath(); }
   const soil = ctx.createLinearGradient(0, P(0, hi)[1], 0, Y + H); soil.addColorStop(0, "#9b7a55"); soil.addColorStop(1, "#6f5238"); ctx.fillStyle = soil; ctx.fill();
-  if (wl != null) { ctx.save(); gPoly(); const [a] = P(total, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(0, lo)[0], Y + H); ctx.closePath(); ctx.restore(); ctx.save(); ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, Math.max(z, wl)); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); for (let k = ground.length - 1; k >= 0; k--) { const [a, b] = P(ground[k][0], ground[k][1]); ctx.lineTo(a, b); } ctx.closePath(); ctx.fillStyle = "rgba(70,140,200,.55)"; ctx.fill(); ctx.restore(); }
+  if (wl != null) { ctx.save(); gPoly(); const [a] = P(total + extB, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(-extA, lo)[0], Y + H); ctx.closePath(); ctx.restore(); ctx.save(); ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, Math.max(z, wl)); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); for (let k = ground.length - 1; k >= 0; k--) { const [a, b] = P(ground[k][0], ground[k][1]); ctx.lineTo(a, b); } ctx.closePath(); ctx.fillStyle = "rgba(70,140,200,.55)"; ctx.fill(); ctx.restore(); }
   gPoly(); ctx.strokeStyle = "#5d8f37"; ctx.lineWidth = 4 * u; ctx.stroke();
   // each element
   const labels = [];
