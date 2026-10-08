@@ -1190,13 +1190,20 @@ function natGround(x, y) {
 const fmtElev = (z) => (z < -0.06 ? "−" : "+") + fmtLen(Math.abs(z));
 function waterLevel() { const sh = job.items.find((i) => i.type === "shore"); return sh ? sh.water || 0 : null; }
 
-// The 3D ground dug out for placed blocks and pavers: just under their tops inside, rising 1:1 to the natural ground around them,
-// so the finished work shows instead of being buried. Null when the job has no placed units.
+// The 3D ground dug out for placed blocks and pavers: just under their tops inside, a 6" shelf at that level around them (so the
+// coarse ground mesh can't poke over their edges), then rising 1:1 to the natural ground. dig.inside tells the ground under the work.
+// Null when the job has no placed units.
 function unitDigger() {
   const us = job.items.filter((i) => i.type === "unit" && (i.z || 0) > -1e4); if (!us.length) return null;
   const B = 24, R = 30, cells = new Map(), key = (cx, cy) => cx + "," + cy;
+  // blocks with something set on them (risers under caps, walls under treads) are hidden: the ground follows what's on top
+  const covered = new Set(), byCell = new Map(), ck = (u) => key(Math.floor(u.x / B), Math.floor(u.y / B));
+  for (const u of us) { const k = ck(u); if (!byCell.has(k)) byCell.set(k, []); byCell.get(k).push(u); }
+  for (const o of us) { const cx = Math.floor(o.x / B), cy = Math.floor(o.y / B);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const u of byCell.get(key(cx + i, cy + j)) || [])
+      if (u !== o && Math.abs((o.z || 0) - ((u.z || 0) + u.h)) < 0.6 && Math.hypot(o.x - u.x, o.y - u.y) < (Math.max(o.w, o.d) + Math.max(u.w, u.d)) / 2 - 0.5) covered.add(u); }
   for (const u of us) {
-    const poly = unitWorldPoly(u), xs = poly.map((p) => p.x), ys = poly.map((p) => p.y), e = { u, poly };
+    const poly = unitWorldPoly(u), xs = poly.map((p) => p.x), ys = poly.map((p) => p.y), e = { u, poly, hid: covered.has(u) };
     for (let cx = Math.floor((Math.min(...xs) - R) / B); cx <= Math.floor((Math.max(...xs) + R) / B); cx++)
       for (let cy = Math.floor((Math.min(...ys) - R) / B); cy <= Math.floor((Math.max(...ys) + R) / B); cy++) { const k = key(cx, cy); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(e); }
   }
@@ -1210,13 +1217,15 @@ function unitDigger() {
     }
     return inside ? 0 : d;
   };
-  return (x, y, z) => {
-    for (const { u, poly } of cells.get(key(Math.floor(x / B), Math.floor(y / B))) || []) {
-      const d = distTo(poly, x, y); if (d > R) continue;
-      z = Math.min(z, unitTopAt(u, x, y) - 0.75 + d);
-    }
+  const near = (x, y) => cells.get(key(Math.floor(x / B), Math.floor(y / B))) || [];
+  const dig = (x, y, z) => { // only the nearest work shapes the ground, so the bank beside a step meets that step, not the one below
+    const hits = []; let dmin = Infinity;
+    for (const { u, poly, hid } of near(x, y)) { if (hid) continue; const d = distTo(poly, x, y); if (d <= R) { hits.push([d, u]); dmin = Math.min(dmin, d); } }
+    for (const [d, u] of hits) if (d <= dmin + 4) z = Math.min(z, unitTopAt(u, x, y) - 0.75 + Math.max(0, d - 6));
     return z;
   };
+  dig.inside = (x, y) => near(x, y).some(({ poly }) => distTo(poly, x, y) < 0.5);
+  return dig;
 }
 // Finished ground: the natural ground, dug out where steps are set into it.
 function finishedAt(x, y) {
@@ -5181,6 +5190,20 @@ function blockMat(colorName, smooth) {
     return new THREE.MeshStandardMaterial({ map: t, roughness: smooth ? 0.78 : 0.93 });
   });
 }
+// top of a channel drain: a steel frame with slots across it about every inch
+function grateMat(colorName, len) {
+  const n = Math.max(4, Math.round(len));
+  return mat3("grate|" + colorName + "|" + n, () => {
+    const hex = hexOf(colorName), dark = /black/i.test(colorName || "");
+    const t = canvasTex(512, (x, s) => {
+      x.fillStyle = hex; x.fillRect(0, 0, s, s); speckle(x, s, 10, 0.5);
+      x.fillStyle = dark ? "#0b0c0d" : "#2a2d31"; const p = s / n, fr = s * 0.16;
+      for (let i = 0; i < n; i++) x.fillRect(i * p + p * 0.3, fr, p * 0.42, s - 2 * fr);
+      x.fillStyle = dark ? "rgba(255,255,255,.10)" : "rgba(255,255,255,.35)"; x.fillRect(0, fr * 0.45, s, 2); x.fillRect(0, s - fr * 0.45, s, 2);
+    });
+    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.5, metalness: 0.3 });
+  });
+}
 function box(w, h, d, m) { const g = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w, 0.05), Math.max(h, 0.05), Math.max(d, 0.05)), m); g.castShadow = true; g.receiveShadow = true; return g; }
 function surfaceMesh(m, colorName, w, d, h) {
   const { tex, tile } = surfaceTex(m, colorName); R3.temp.push(tex);
@@ -5218,16 +5241,25 @@ function build3d() {
     // shaped ground over the site and a margin around it
     const dig = unitDigger(), fine = dig ? 6 : 12, cap = dig ? 220 : 120;
     const m = 240, gw = job.site.w + 2 * m, gd = job.site.d + 2 * m, segX = Math.min(cap, Math.ceil(gw / fine)), segY = Math.min(cap, Math.ceil(gd / fine));
-    const geo = new THREE.PlaneGeometry(gw, gd, segX, segY), pos = geo.attributes.position;
+    const geo = new THREE.PlaneGeometry(gw, gd, segX, segY), pos = geo.attributes.position, kind = new Uint8Array(pos.count);
     let lo = Infinity;
     const grades = job.items.filter((i) => i.type === "grade"), stairs = job.items.filter((i) => i.type === "steps").map((i) => [i, stepCalc(i)]);
     const pads = job.items.filter((i) => i.type === "landing" || i.type === "path");
     const inStairs = (px, py) => stairs.some(([i, c]) => { const l = localOf(i, px, py); return Math.abs(l.x - c.xc) <= c.xw / 2 + 2 && Math.abs(l.y) <= c.run / 2 + 2; })
       || pads.some((i) => { const l = localOf(i, px, py); return Math.abs(l.x) <= i.w / 2 + 2 && Math.abs(l.y) <= i.d / 2 + 2; });
     const gradeLift = (px, py) => { let z = -Infinity; for (const g of grades) { const l = localOf(g, px, py), dx = Math.max(0, Math.abs(l.x) - g.w / 2), dy = Math.max(0, Math.abs(l.y) - g.d / 2); z = Math.max(z, g.h - Math.hypot(dx, dy) / 2); } return z; }; // falls 1 in 2 (about 27°) to the natural ground
-    for (let k = 0; k < pos.count; k++) { const px = pos.getX(k) + job.site.w / 2, py = pos.getY(k) + job.site.d / 2; let z = finishedAt(px, py); if (grades.length && !inStairs(px, py)) z = Math.max(z, gradeLift(px, py)); if (dig) z = dig(px, py, z); pos.setZ(k, z); lo = Math.min(lo, z); }
+    for (let k = 0; k < pos.count; k++) { const px = pos.getX(k) + job.site.w / 2, py = pos.getY(k) + job.site.d / 2; let z = finishedAt(px, py); if (grades.length && !inStairs(px, py)) z = Math.max(z, gradeLift(px, py)); if (dig) { const z0 = z; z = dig(px, py, z); kind[k] = dig.inside(px, py) ? 2 : z < z0 - 1 ? 1 : 0; } pos.setZ(k, z); lo = Math.min(lo, z); }
     geo.computeVertexNormals();
-    const tm = new THREE.Mesh(geo, mGrass); tm.rotation.x = -Math.PI / 2; tm.position.set(job.site.w / 2, 0, -job.site.d / 2); tm.receiveShadow = true; world.add(tm);
+    let gm = mGrass;
+    if (dig) { // triangles under the work show bedding and joint sand; the shelf and banks around it are finished in grass
+      const idx = geo.index.array, parts = [[], [], []];
+      for (let t = 0; t < idx.length; t += 3) { const a = kind[idx[t]], b = kind[idx[t + 1]], c = kind[idx[t + 2]]; parts[a === 2 && b === 2 && c === 2 ? 2 : 0].push(idx[t], idx[t + 1], idx[t + 2]); }
+      geo.setIndex(parts.flat()); geo.clearGroups(); let at = 0; parts.forEach((p, i) => { geo.addGroup(at, p.length, i); at += p.length; });
+      const mSand = mat3("sand", () => { const t = noiseTex("#a39d90", 26, 128, 0.8); t.repeat.set(40, 40); return new THREE.MeshStandardMaterial({ map: t, roughness: 1 }); });
+      const mBank = mat3("bank", () => { const t = noiseTex("#6d5640", 30, 128); t.repeat.set(40, 40); return new THREE.MeshStandardMaterial({ map: t, roughness: 1 }); });
+      gm = [mGrass, mBank, mSand];
+    }
+    const tm = new THREE.Mesh(geo, gm); tm.rotation.x = -Math.PI / 2; tm.position.set(job.site.w / 2, 0, -job.site.d / 2); tm.receiveShadow = true; world.add(tm);
     baseY = Math.min(0, lo) - 1;
     const wl = waterLevel();
     if (wl != null) {
@@ -5358,6 +5390,9 @@ function build3d() {
         if (Array.isArray(it.clip) && it.clip.length >= 3) { // cut piece: extrude its outline
           const sh = new THREE.Shape(it.clip.map(([x, y]) => new THREE.Vector2(x, y))), g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.05, it.h - 0.1), bevelEnabled: false }); g.rotateX(-Math.PI / 2);
           mesh = new THREE.Mesh(g, blockMat(it.color, smooth)); mesh.castShadow = true; mesh.receiveShadow = true; place(mesh, it, 0, 0, it.z || 0);
+        } else if (/grate/i.test((m || {}).name || "")) { // channel drain: steel body, slotted grate on top
+          const steel = blockMat(it.color, true);
+          mesh = box(it.w - 0.05, it.h - 0.05, it.d - 0.05, [steel, steel, grateMat(it.color, it.w), steel, steel, steel]); place(mesh, it, 0, 0, (it.z || 0) + it.h / 2);
         } else { mesh = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(mesh, it, 0, 0, (it.z || 0) + it.h / 2); }
         if (it.gx || it.gy) { // tilt to follow the slope: lift each corner by the slope times its plan offset
           const pos = mesh.geometry.attributes.position, a = -(it.rot || 0) * Math.PI / 180;
