@@ -1399,6 +1399,13 @@ function label(ctx, text, x, y, size, align = "center", color = BP.ink, weight =
   ctx.save(); ctx.font = `${weight} ${size}px "${font}", ui-monospace, monospace`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle";
   ctx.fillText(text, x, y); ctx.restore();
 }
+// a unit's outline: its rectangle, or the cut shape when it has one (clip: local [x, y] points)
+function unitPath(ctx, v, it) {
+  if (!Array.isArray(it.clip) || it.clip.length < 3) return polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2);
+  ctx.beginPath(); it.clip.forEach(([lx, ly], i) => { const p = rotPt(it, lx, ly), [sx, sy] = W2S(v, p.x, p.y); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }); ctx.closePath();
+}
+const clipArea = (pts) => Math.abs(pts.reduce((a, [x, y], i) => { const [x2, y2] = pts[(i + 1) % pts.length]; return a + x * y2 - x2 * y; }, 0)) / 2;
+const unitArea = (it) => Array.isArray(it.clip) && it.clip.length >= 3 ? clipArea(it.clip) : it.w * it.d;
 function polyRect(ctx, v, it, x0, y0, x1, y1) {
   const pts = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([lx, ly]) => { const p = rotPt(it, lx, ly); return W2S(v, p.x, p.y); });
   ctx.beginPath(); pts.forEach(([sx, sy], i) => i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy)); ctx.closePath();
@@ -1577,7 +1584,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         return true;
       }
       case "unit": {
-        polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2); ctx.fillStyle = shade(hexOf(it.color), 0.92 + clamp((it.z || 0) / 60, 0, 0.2)); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke();
+        unitPath(ctx, v, it); ctx.fillStyle = shade(hexOf(it.color), 0.92 + clamp((it.z || 0) / 60, 0, 0.2)); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke();
         return true;
       }
       case "tree": case "evergreen": case "shrub": {
@@ -1732,11 +1739,11 @@ function drawItem(ctx, v, it, u, sel) {
       break;
     }
     case "unit": {
-      const m = mat(it.block), cut = m && (it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05);
-      polyRect(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, it.d / 2);
+      const m = mat(it.block), cut = m && (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05);
+      unitPath(ctx, v, it);
       ctx.fillStyle = cut ? "rgba(255,200,87,.20)" : `rgba(234,242,252,${(0.12 + clamp((it.z || 0) / 40, 0, 1) * 0.25).toFixed(3)})`;
       ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.stroke();
-      ctx.lineWidth = 2.6 * u; lineL(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, -it.d / 2); // face side
+      if (!it.clip) { ctx.lineWidth = 2.6 * u; lineL(ctx, v, it, -it.w / 2, -it.d / 2, it.w / 2, -it.d / 2); } // face side
       if (v.s * Math.min(it.w, it.d) > 26 * u && it.z > 0.05) label(ctx, "+" + fmtLen(it.z), cx, cy, 9 * u, "center", BP.ink2);
       break;
     }
@@ -2729,10 +2736,10 @@ function takeoff() {
       base(it.w * it.d);
     } else if (it.type === "unit") {
       const m = mat(it.block); if (!m) continue;
-      addM(it.block, it.color, perSqft(m) ? it.w * it.d / 144 : 1, "Placed blocks");
-      if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") w.paveSqft += it.w * it.d / 144;
+      addM(it.block, it.color, perSqft(m) ? unitArea(it) / 144 : 1, "Placed blocks");
+      if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") w.paveSqft += unitArea(it) / 144;
       else if (m.kind === "solid") w.stepBlocks++; else w.wallBlocks++;
-      if (it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
+      if (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
@@ -3725,6 +3732,7 @@ function sanitizeItem(raw, legacy) {
   }
   if (out.type === "shore") out.side = raw.side === -1 ? -1 : 1;
   out.rot = ((out.rot % 360) + 360) % 360;
+  if (out.type === "unit" && Array.isArray(raw.clip) && raw.clip.length >= 3) { const pts = raw.clip.slice(0, 24).filter((p) => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1])).map(([x, y]) => [clamp(+x, -out.w, out.w), clamp(+y, -out.d, out.d)]); if (pts.length >= 3) out.clip = pts; }
   if (out.type === "unit" && raw.bend != null && isFinite(+raw.bend) && +raw.bend !== 0) out.bend = clamp(+raw.bend, -5000, 5000);
   for (const k of ["lox", "loy"]) if (raw[k] != null && isFinite(+raw[k]) && +raw[k] !== 0) out[k] = clamp(Math.round(+raw[k]), -5000, 5000);
   if (out.type === "steps") {
@@ -5146,7 +5154,10 @@ function build3d() {
       }
       case "unit": {
         const m = mat(it.block), smooth = m && (m.kind === "cap" || m.kind === "slab");
-        const bx = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(bx, it, 0, 0, (it.z || 0) + it.h / 2);
+        if (Array.isArray(it.clip) && it.clip.length >= 3) { // cut piece: extrude its outline
+          const sh = new THREE.Shape(it.clip.map(([x, y]) => new THREE.Vector2(x, y))), g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.05, it.h - 0.1), bevelEnabled: false }); g.rotateX(-Math.PI / 2);
+          const mesh = new THREE.Mesh(g, blockMat(it.color, smooth)); mesh.castShadow = true; mesh.receiveShadow = true; place(mesh, it, 0, 0, it.z || 0);
+        } else { const bx = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(bx, it, 0, 0, (it.z || 0) + it.h / 2); }
         break;
       }
       case "rock": {
