@@ -818,6 +818,8 @@ function edgingCalc(it) {
   return { ft: sides.reduce((a, [x0, y0, x1, y1]) => a + Math.hypot(x1 - x0, y1 - y0), 0) / 12, sides };
 }
 function drawEdging(ctx, v, it, u, color) { const e = edgingCalc(it); if (!e.sides.length) return; ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = Math.max(2.2 * u, 1 * v.s); ctx.lineCap = "round"; for (const [x0, y0, x1, y1] of e.sides) lineL(ctx, v, it, x0, y0, x1, y1); ctx.restore(); }
+// handrail post: rail height less the 2x6 cap and the flange on top, plus 24" set in the concrete footing (whole inches)
+function postLength(it) { return Math.ceil((it && it.h ? it.h : 34) - 2 + 24); }
 function railCalc(it) { const sp = Math.max(24, it.spacing || 48), posts = Math.ceil(it.w / sp) + 1; return { posts, ft: it.w / 12, sp }; }
 let uid = 1;
 const newId = () => "i" + Date.now().toString(36) + (uid++);
@@ -4230,29 +4232,46 @@ function mailSig() { const c = company(); return ["Thanks,", "", c.name || "[You
 function mailAuto(k) {
   const q = estimate(), E = q.E, dd = deliveryDates(), site = job.address || "[full site address]";
   const mats = q.lines.filter((l) => l.cat === "Materials" && l.qty > 0 && mailSup(l, E) === k);
+  const rails = job.items.filter((i) => i.type === "rail"), pl = postLength(rails[0]);
   const item = (l) => {
     const rail = /^handrail (cap )?rail, (2x\d)/i.exec(l.desc);
-    if (rail && l.unit === "ft") return `- ${Math.ceil(l.qty / 12)} × ${rail[2]} ${E.railPlastic ? "recycled plastic lumber" : "cedar"}, 12 ft (${rail[1] ? "cap rail" : "rail"})`;
-    if (/adhesive/i.test(l.desc)) return `- ${l.qty} × 10 oz tubes of concrete block / cap adhesive, rated for cool, damp weather (please advise what you stock)`;
+    if (rail && l.unit === "ft") return `- ${Math.ceil(l.qty / 12)} × ${rail[2]} ${E.railPlastic ? "recycled plastic lumber" : "cedar"}, 12 ft long (${rail[2] === "2x6" ? '1½" × 5½"' : '1½" × 3½"'} actual), for the ${rail[1] ? "cap rail" : "lower rail"}`;
+    if (/adhesive/i.test(l.desc)) return `- ${l.qty} × 10 oz (295 ml) tubes of concrete block / cap adhesive, rated for cool, damp weather`;
+    if (/^handrail posts, galvanized pipe/i.test(l.desc)) { const per = Math.max(1, Math.floor(252 / pl)), lengths = Math.ceil(l.qty / per);
+      return `- 2" galvanized steel pipe, schedule 40 (2⅜" outside diameter): ${lengths} × 21 ft lengths (${lengths * 21} ft), for ${l.qty} handrail posts cut ${plainLen(pl)} long. If you can cut it, I'd rather have ${l.qty} pieces at ${plainLen(pl)} (${Math.ceil(l.qty * pl / 12)} ft in all)`; }
+    if (/^handrail brackets/i.test(l.desc)) return [
+      `- ${l.qty} × slip-on (set-screw) galvanized flanges for 2" pipe (2⅜" OD), to sit on top of each post and screw up into the 2x6 cap rail`,
+      `- ${l.qty} × 2" galvanized U-bolts (fits 2⅜" OD pipe), ⅜" thread, legs about 5" long, with nuts and washers, to bolt the 2x4 rail to each post`,
+      `- 1 box (about 100) of #14 × 1¼" stainless steel screws, for the flanges into the cap rail`];
+    if (/^concrete for post footings/i.test(l.desc)) return `- ${l.qty} × 30 kg bags of concrete mix (fast-setting post mix is fine)`;
+    if (/perforated drain pipe/i.test(l.desc)) return `- ${Math.ceil(l.qty / 10)} × 10 ft lengths of 4" (100 mm) perforated drain pipe with filter sock (${l.qty} ft needed), plus 1 solid 4" end cap`;
+    if (/^filter fabric/i.test(l.desc)) return `- ${Math.ceil(l.qty)} sq ft of non-woven geotextile filter fabric, about 4 oz (135 g/m²), 6 ft wide roll`;
+    if (/^polymeric joint sand/i.test(l.desc)) return `- ${l.qty} × 22.7 kg (50 lb) bag${l.qty === 1 ? "" : "s"} of polymeric joint sand, grey`;
+    if (/^plastic edging/i.test(l.desc)) return `- ${Math.ceil(l.qty / 8)} × 8 ft lengths of plastic paver edge restraint (${l.qty} ft needed)`;
+    if (/^edging spikes/i.test(l.desc)) return `- ${l.qty} × 10" galvanized edging spikes (⅜")`;
+    if (/^exterior paint/i.test(l.desc)) return `- ${mailQty(l.qty, l.unit)} exterior 100% acrylic paint for plastic lumber and galvanized steel, colour [your colour]`;
+    if (/^primer/i.test(l.desc)) return `- ${mailQty(l.qty, l.unit)} bonding primer for plastic lumber and galvanized steel`;
+    const m = allMats().find((x) => x.L && l.desc.startsWith(`${x.brand} ${matName(x)}`));
+    if (m) return `- ${mailQty(l.qty, l.unit)} ${l.desc} (${m.kind === "paver" || m.kind === "slab" ? `each ${fmtIn(m.L)} long × ${fmtIn(m.D)} wide × ${fmtIn(m.H)} thick` : `each ${fmtIn(m.L)} wide × ${fmtIn(m.D)} deep × ${fmtIn(m.H)} high`}${l.unit === "ea" && m.perPallet ? `, ${m.perPallet} to a pallet` : ""})`;
     const d = /^[A-Z][a-z]/.test(l.desc) && !/^Abbotsford|^Belgard|^Allan/.test(l.desc) ? l.desc[0].toLowerCase() + l.desc.slice(1) : l.desc;
     return `- ${mailQty(l.qty, l.unit)} ${d}`;
   };
   if (k === "slegg") {
-    const kg = haulList().filter((x) => !(E.bulkSep && x.bulk)).reduce((a, x) => a + x.kg, 0), price = mats.filter((l) => l.unit === "ea" && /block|cap/i.test(l.desc) && l.price > 0);
+    const kg = haulList().filter((x) => !(E.bulkSep && x.bulk)).reduce((a, x) => a + x.kg, 0);
     return { subject: `Quote and order for delivery to ${/pender/i.test(site) ? "Pender Island" : site}, ${dayName(dd.hiab)}`,
       body: `Hi,
 
 Please quote the materials below, delivered by Hiab on ${longDay(dd.hiab)} to ${site}.
 
-${mats.map(item).join("\n")}
+${mats.flatMap(item).join("\n")}
 
 Delivery
-- One truck load${E.ferryIncl ? " with the ferry included" : ""}.${E.delivery ? ` I have ${money(E.delivery)} delivered; please confirm.` : ""}
+- One truck load${E.ferryIncl ? " with the ferry included" : ""}.
 - Total weight is about ${num1(kg / 1000)} tonnes. Please confirm your truck can take it in one load.
 - Please set the pallets as close to the top of the stair as the boom will reach.
 
 Please confirm
-${price.length ? `- Your prices on the block and caps. I have ${new Set(price.map((l) => l.price)).size === 1 ? `${money(price[0].price)} each` : price.map((l) => `${money(l.price)} for the ${/cap/i.test(l.desc) ? "caps" : "block"}`).join(" and ")}.\n` : ""}- Stock and lead time, so it's all on site by ${dayName(dd.hiab)}.
+- Stock and lead time, so it's all on site by ${dayName(dd.hiab)}.
 - Total delivered price, before tax.
 
 ${mailSig()}` };
@@ -4262,7 +4281,7 @@ ${mailSig()}` };
 
 I'm building a handrail on a beach stairway at ${site} and would like a price on recycled plastic lumber.
 
-${mats.map(item).join("\n")}
+${mats.flatMap(item).join("\n")}
 
 If you stock 16 ft lengths, please also quote those. I'll take whichever leaves less waste.
 
