@@ -586,6 +586,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Client <input id="jClient"></label>
         </div>
         <label class="f">Site address <input id="jAddr"></label>
+        <label class="f">Client email <input id="jEmail" type="email" inputmode="email" autocomplete="off"></label>
         <label class="f">North (degrees clockwise from the top of the plan) <input id="jNorth" inputmode="decimal"></label>
         <p class="note">Or drag the compass in the top corner of the blueprint until its arrow points to true north.</p>
         <label class="f">Blueprint style
@@ -2664,7 +2665,7 @@ $("cmAdd").onclick = () => {
 // ---------- job pane ----------
 function renderJobPane() {
   $("jNorth").value = Math.round(job.north || 0);
-  $("jName").value = job.name || ""; $("jClient").value = job.client || ""; $("jAddr").value = job.address || ""; $("jNotes").value = job.notes || "";
+  $("jName").value = job.name || ""; $("jClient").value = job.client || ""; $("jAddr").value = job.address || ""; $("jEmail").value = job.clientEmail || ""; $("jNotes").value = job.notes || "";
   $("jSW").value = fmtLen(job.site.w); $("jSD").value = fmtLen(job.site.d);
   const d = job.defaults;
   $("defFields").innerHTML = [
@@ -2688,7 +2689,7 @@ function renderJobPane() {
 }
 $("jTheme").addEventListener("change", (e) => { snapshot(); job.style = { ...job.style, theme: e.target.value }; applyTheme(); commit(); });
 $("jNorth").addEventListener("change", (e) => { const n = parseFloat(e.target.value); if (!isFinite(n)) { e.target.value = Math.round(job.north || 0); return; } snapshot(); job.north = ((Math.round(n) % 360) + 360) % 360; commit(); });
-const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jNotes", (v) => job.notes = v]];
+const jobBind = [["jName", (v) => job.name = v], ["jClient", (v) => job.client = v], ["jAddr", (v) => job.address = v], ["jEmail", (v) => job.clientEmail = v.trim()], ["jNotes", (v) => job.notes = v]];
 jobBind.forEach(([id, fn]) => $(id).addEventListener("change", (e) => { snapshot(); fn(e.target.value); commit(); }));
 [["jSW", "w"], ["jSD", "d"]].forEach(([id, k]) => $(id).addEventListener("change", (e) => {
   const n = parseLen(e.target.value); if (!(n > 0)) { toast("Couldn't read that measurement."); e.target.value = fmtLen(job.site[k]); return; }
@@ -3217,7 +3218,7 @@ function quoteData() {
   return {
     format: "block-step-planner.quote", version: 1, currency: "CAD", quoteNumber: quoteNo(), date: d.toISOString().slice(0, 10), validUntil: valid.toISOString().slice(0, 10),
     company: { name: c.name || "", phone: c.phone || "", email: c.email || "", address: c.address || "", taxNumber: c.taxNo || "" },
-    client: { name: job.client || "", siteAddress: job.address || "" }, job: { name: job.name || "", notes: job.notes || "" },
+    client: { name: job.client || "", siteAddress: job.address || "", email: job.clientEmail || "" }, job: { name: job.name || "", notes: job.notes || "" },
     scope: job.items.filter((i) => BUILT_TYPES.has(i.type)).map((i) => ({ item: i.label || TYPE_INFO[i.type].label, type: i.type, description: describe(i) })),
     lines: clientLines(q),
     totals: { cost: q.subtotal, contingency: q.contingency, overheadProfit: q.markup, beforeTax: q.beforeTax, gst: q.gst, pst: q.pst, total: q.total, deposit: q.deposit, labourHours: q.hours },
@@ -3539,7 +3540,7 @@ function clientPages() {
   x.textAlign = "right"; x.font = F(28, 700); x.fillText(`Quote ${qd.quoteNumber}`, W - M, y + 6); x.font = F(21); x.fillStyle = MUTED; x.fillText(`Date ${qd.date} · Valid until ${qd.validUntil}`, W - M, y + 44); x.textAlign = "left";
   y += 62; const contact = [co.address, co.phone, co.email].filter(Boolean).join(" · "); if (contact) text(contact, 21, { color: MUTED, after: 2 }); if (co.taxNumber) text(`GST/BN ${co.taxNumber}`, 21, { color: MUTED, after: 2 });
   y += 8; x.fillStyle = BLUE; x.fillRect(M, y, CW, 5); y += 26;
-  text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 });
+  text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 }); if (qd.client.email) text(qd.client.email, 24, { color: MUTED, after: 2 });
   text(`Project: ${qd.job.name}`, 28, { weight: 600, after: 16 });
   // the plan, realistic look, fitted to the box
   const on = d.parts;
@@ -3899,7 +3900,7 @@ function sanitizeJob(j) {
     const est = { ...EST_DEFAULTS }; for (const k of Object.keys(EST_DEFAULTS)) est[k] = num(j.est && j.est[k], EST_DEFAULTS[k], 0, 1e6);
     const prices = {}; for (const [k, v] of Object.entries(j.prices || {})) if (isFinite(+v) && +v >= 0) prices[String(k).slice(0, 40)] = +v;
     return {
-      v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
+      v: 2, name: String(j.name ?? s.name).slice(0, 80), client: String(j.client ?? "").slice(0, 80), address: String(j.address ?? "").slice(0, 120), clientEmail: String(j.clientEmail ?? "").slice(0, 120), notes: String(j.notes ?? "").slice(0, 600),
       quoteNo: String(j.quoteNo || "").slice(0, 30), defaults: defs, est, prices, custom, north: ((Math.round(num(j.north, 0, -720, 720)) % 360) + 360) % 360,
       style: { theme: j.style && THEMES[j.style.theme] ? j.style.theme : "blueprint", look: j.style && j.style.look === "blueprint" ? "blueprint" : "real" },
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
