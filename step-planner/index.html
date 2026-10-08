@@ -2810,7 +2810,16 @@ function takeoff() {
 const lineKey = (d) => String(d).split(/ \(| – /)[0].trim().slice(0, 80);
 // Lines a client usually doesn't need to see itemised: site handling, saws and consumables
 const SITE_COSTS = /cutting|wheelbarrow|hauling|ferry|delivery|haul-away|disposal|adhesive|spikes|wet saw|compactor|rammer|tamper|equipment:|brackets/i;
+// The quote, with any negotiating options switched on (job.neg) worked out on a copy: the job's own rates and items never change,
+// so switching an option off puts everything back exactly.
+let NEG_OPTS = [];
+function negLive(j = job) { return NEG_OPTS.filter((o) => j.neg && j.neg[o.k] && o.on(j)); }
 function estimate() {
+  const live = negLive(); if (!live.length) return estimateRaw();
+  const keep = job; job = { ...keep, est: { ...EST_DEFAULTS, ...keep.est }, items: keep.items.map((i) => ({ ...i })) };
+  try { live.forEach((o) => o.fn(job)); return estimateRaw(); } finally { job = keep; }
+}
+function estimateRaw() {
   const { mats, w, E } = takeoff(), waste = 1 + E.waste / 100;
   const lines = [];
   const L = (cat, desc, qty, unit, price, note = "") => { if (qty > 0) lines.push({ cat, desc, qty, unit, price, total: round2(qty * price), note }); };
@@ -3093,29 +3102,36 @@ const NEGOTIATE = [
   { k: "markup", g: "Margin", t: "Overhead & profit down to 15%", d: "Comes out of your profit.", on: (j) => ({ ...EST_DEFAULTS, ...j.est }).markup > 15, fn: (j) => { j.est.markup = 15; } },
   { k: "gst", g: "Tax", t: "Don't charge GST", d: "Only if you're not registered for GST (small supplier).", on: (j) => !!({ ...EST_DEFAULTS, ...j.est }).chargeGst, fn: (j) => { j.est.chargeGst = 0; } },
 ];
-function totalWith(fns) { const keep = job; job = JSON.parse(JSON.stringify(keep)); job.est = { ...EST_DEFAULTS, ...job.est }; try { fns.forEach((f) => f(job)); return estimate().total; } finally { job = keep; } }
+NEG_OPTS = NEGOTIATE;
+function totalWithNeg(neg) { const keep = job.neg; job.neg = neg; try { return estimate().total; } finally { job.neg = keep; } }
+function negSummary() { const n = negLive().length, el = $("negBox") && $("negBox").querySelector("summary"); if (el) el.textContent = `Room to negotiate (only you see this)${n ? ` · ${n} on` : ""}`; }
 function renderNegotiate() {
-  if (!$("negList")) return;
-  const base = estimate().total, live = NEGOTIATE.filter((o) => o.on(job));
-  if (!live.length) { $("negList").innerHTML = '<p class="note">Nothing left to give: every option is already in the quote.</p>'; return; }
-  const rows = live.map((o) => ({ o, save: round2(base - totalWith([o.fn])) })).filter((r) => r.save > 0.5);
+  negSummary(); if (!$("negList")) return;
+  const on = job.neg || {}, cur = estimate().total, live = NEGOTIATE.filter((o) => o.on(job));
+  if (!live.length) { $("negList").innerHTML = '<p class="note">No options for this job.</p>'; return; }
+  const full = totalWithNeg({}), off = (k) => { const n = { ...on }; delete n[k]; return n; };
+  const rows = live.map((o) => ({ o, isOn: !!on[o.k], save: round2(on[o.k] ? totalWithNeg(off(o.k)) - cur : cur - totalWithNeg({ ...on, [o.k]: true })) })).filter((r) => r.isOn || r.save > 0.5);
   const groups = ["Design", "Labour", "Margin", "Tax"].map((g) => [g, rows.filter((r) => r.o.g === g)]).filter(([, r]) => r.length);
-  const all = round2(base - totalWith(live.map((o) => o.fn)));
-  $("negList").innerHTML = `<p class="note">What each change takes off today's ${money(base)}. Held back for negotiating: nothing here is in the quote until you tap Apply (Undo takes it back).</p>
-    <table class="qt"><tbody>${groups.map(([g, r]) => `<tr class="cat"><td colspan="3" style="text-align:left">${g}</td></tr>` + r.map(({ o, save }) => `<tr><td>${escapeHtml(o.t)}<small>${escapeHtml(o.d)}</small></td><td>−${money(save)}</td><td><button class="btn small" data-neg="${o.k}">Apply</button></td></tr>`).join("")).join("")}
-    <tr class="sub"><td>All of them together</td><td>−${money(all)}</td><td>${money(round2(base - all))}</td></tr></tbody></table>
+  const allOn = Object.fromEntries(rows.map((r) => [r.o.k, true])), allTotal = totalWithNeg(allOn), nOn = rows.filter((r) => r.isOn).length;
+  $("negList").innerHTML = `<p class="note">Switch an option on to take it off the quote, off to put it back. Nothing in the job is changed, so you can try them in any mix.</p>
+    <p class="note"><b>Full price ${money(full)}</b>${nOn ? ` · with ${nOn} on: <b>${money(cur)}</b> (−${money(round2(full - cur))})` : " · none on"}</p>
+    <table class="qt"><tbody>${groups.map(([g, r]) => `<tr class="cat"><td colspan="2" style="text-align:left">${g}</td></tr>` + r.map(({ o, isOn, save }) => `<tr><td><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" data-neg="${o.k}"${isOn ? " checked" : ""} style="margin-top:3px"><span>${escapeHtml(o.t)}<small>${escapeHtml(o.d)}</small></span></label></td><td${isOn ? "" : ' style="opacity:.6"'}>−${money(save)}</td></tr>`).join("")).join("")}
+    <tr class="sub"><td>All of them on</td><td>${money(allTotal)}</td></tr></tbody></table>
+    <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="negAll">All on</button><button class="btn small" id="negNone">All off</button></p>
     ${(() => { const q = estimate(), t = haulList().reduce((a, x) => a + x.kg, 0) / 1000, h = Math.ceil(t * 0.5 * 2) / 2; if (t < 1) return "";
       return `<h3>Work you're not charging for</h3><p class="note">Talking points: real work in the job that isn't in the price.</p>
       <table class="qt"><tbody><tr><td>Unloading the truck and stacking material near the work by hand<small>About ${num1(t)} tonnes at roughly half an hour a tonne: ${num1(h)} hours</small></td><td>${money(round2(h * q.E.labourRate * q.factor))}</td></tr>
       ${q.E.hrPlanning > 0 ? `<tr><td>Free estimate and planning<small>Site visit, measuring, the plan and 3D model, quantities, schedule${(cdoc().tides || []).length ? " and tide notes" : ""}: ${num1(q.E.hrPlanning)} hours (set under Rates)</small></td><td>${money(round2(q.E.hrPlanning * q.E.labourRate * q.factor))}</td></tr>` : ""}
       <tr class="sub"><td>Together</td><td>${money(round2((h + (q.E.hrPlanning || 0)) * q.E.labourRate * q.factor))}</td></tr></tbody></table>`; })()}`;
-  $("negList").querySelectorAll("[data-neg]").forEach((b) => b.onclick = () => { const o = NEGOTIATE.find((x) => x.k === b.dataset.neg); snapshot(); job.est = { ...EST_DEFAULTS, ...job.est }; o.fn(job); commit(); renderEstFields(); toast(`Applied: ${o.t}. Undo takes it back.`); });
+  const set = (neg) => { snapshot(); job.neg = neg; commit(); };
+  $("negList").querySelectorAll("[data-neg]").forEach((b) => b.onchange = () => { const n = { ...on }; if (b.checked) n[b.dataset.neg] = true; else delete n[b.dataset.neg]; set(n); toast(b.checked ? "Taken off the quote. Switch it off to put it back." : "Back in the quote."); });
+  $("negAll").onclick = () => set({ ...on, ...allOn }); $("negNone").onclick = () => set({});
 }
 $("negBox").addEventListener("toggle", () => { if ($("negBox").open) renderNegotiate(); });
 function renderQuote() {
   renderBuy(); renderEquip(); renderMail();
   const q = estimate();
-  if ($("negBox") && $("negBox").open) renderNegotiate();
+  if ($("negBox") && $("negBox").open) renderNegotiate(); else negSummary();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
   const catRows = order.filter((c) => q.cats[c]).map((c) => `<tr><td>${c}</td><td>${money(q.cats[c])}</td></tr>`).join("");
   const detail = order.filter((c) => q.cats[c]).map((c) => `<tr class="cat"><td colspan="3">${c}</td></tr>` + q.lines.filter((l) => l.cat === c).map((l) => `<tr><td>${escapeHtml(l.desc)}<small>${escapeHtml(l.note)}</small></td><td>${num1(l.qty)} ${l.unit} × ${money(l.price)}</td><td>${money(l.total)}</td></tr>`).join("")).join("");
@@ -3890,6 +3906,7 @@ function sanitizeJob(j) {
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
+      neg: Object.fromEntries(Object.entries(j.neg && typeof j.neg === "object" ? j.neg : {}).filter(([k, v]) => v === true && /^[a-z0-9]{1,20}$/i.test(k)).slice(0, 40)),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
