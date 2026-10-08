@@ -313,6 +313,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <div class="three-tools" id="sideTools" hidden>
         <label>Show <select id="sideCut"></select></label>
         <label id="sideVEBox">Heights <select id="sideVE"><option value="1">True scale</option><option value="2">× 2</option><option value="5">× 5</option></select></label>
+        <label id="sideModeBox" hidden>View <select id="sideMode"><option value="cut">Cut through</option><option value="profile">Side profile</option></select></label>
         <button class="btn" id="shapeBtn" aria-pressed="false">Shape ground</button>
         <button class="btn" id="shapeDel" hidden>Delete point</button>
         <button class="btn primary" id="sideSave">Save side view</button>
@@ -3749,6 +3750,7 @@ function sanitizeItem(raw, legacy) {
   if (out.type === "shore") out.side = raw.side === -1 ? -1 : 1;
   out.rot = ((out.rot % 360) + 360) % 360;
   if (out.type === "unit" && Array.isArray(raw.clip) && raw.clip.length >= 3) { const pts = raw.clip.slice(0, 24).filter((p) => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1])).map(([x, y]) => [clamp(+x, -out.w, out.w), clamp(+y, -out.d, out.d)]); if (pts.length >= 3) out.clip = pts; }
+  if (out.type === "unit") for (const k of ["gx", "gy"]) if (raw[k] != null && isFinite(+raw[k]) && +raw[k] !== 0) out[k] = clamp(+raw[k], -1, 1); // surface slope (rise per inch, east / north)
   if (out.type === "unit" && raw.bend != null && isFinite(+raw.bend) && +raw.bend !== 0) out.bend = clamp(+raw.bend, -5000, 5000);
   for (const k of ["lox", "loy"]) if (raw[k] != null && isFinite(+raw[k]) && +raw[k] !== 0) out[k] = clamp(Math.round(+raw[k]), -5000, 5000);
   if (out.type === "steps") {
@@ -4306,6 +4308,8 @@ function unitOnUnit(it) {
   const z0 = it.z || 0; if (z0 < -1e4) return false;
   return job.items.some((o) => o !== it && o.type === "unit" && Math.abs((o.z || 0) + o.h - z0) < 0.3 && Math.hypot(o.x - it.x, o.y - it.y) < (Math.max(o.w, o.d) + Math.max(it.w, it.d)) / 2 - 0.5);
 }
+// top and bottom of a placed unit at a plan point (units can tilt to follow a slope)
+const unitTopAt = (it, x, y) => (it.z || 0) + it.h + (it.gx || 0) * (x - it.x) + (it.gy || 0) * (y - it.y);
 // world outline of a placed unit (its rectangle, or its cut shape)
 function unitWorldPoly(it) { const loc = Array.isArray(it.clip) && it.clip.length >= 3 ? it.clip : [[-it.w / 2, -it.d / 2], [it.w / 2, -it.d / 2], [it.w / 2, it.d / 2], [-it.w / 2, it.d / 2]]; return loc.map(([lx, ly]) => rotPt(it, lx, ly)); }
 // where the segment a→b passes through a convex outline: [t0, t1] along it, or null
@@ -4322,39 +4326,66 @@ function segThrough(a, b, poly) {
   }
   return t1 - t0 > 1e-6 ? [t0, t1] : null;
 }
-// Section in real colours: sky, soil, gravel base and every block, cap and paver the line cuts through, to size
-function renderProfileReal(ctx, X, Y, W, H, cut, u, ve) {
+// Section in real colours: sky, soil, gravel base and every block, cap and paver, to size.
+// mode "cut": what the line passes through. mode "profile": everything within 3 ft of the line, seen from the left side of it
+// (walking from its start to its end), far things behind near ones; near things on the viewer's side are drawn see-through.
+function renderProfileReal(ctx, X, Y, W, H, cut, u, ve, mode = "cut") {
   const { len, pts } = profileOf(cut), est = { ...EST_DEFAULTS, ...job.est }, a = { x: cut.x, y: cut.y }, b = { x: cut.x2, y: cut.y2 };
-  const hits = [];
-  for (const it of job.items) if (it.type === "unit") { const r = segThrough(a, b, unitWorldPoly(it)); if (r) hits.push({ it, s0: r[0] * len, s1: r[1] * len, z0: it.z || 0, z1: (it.z || 0) + it.h }); }
+  const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, lx = -uy, ly = ux; // along the line, and to its left
+  const S = (p) => (p.x - a.x) * ux + (p.y - a.y) * uy, Lt = (p) => (p.x - a.x) * lx + (p.y - a.y) * ly;
+  const hits = [], band = 36;
+  for (const it of job.items) if (it.type === "unit") {
+    const poly = unitWorldPoly(it);
+    if (mode === "cut") { const r = segThrough(a, b, poly); if (!r) continue; const p0 = { x: a.x + (b.x - a.x) * r[0], y: a.y + (b.y - a.y) * r[0] }, p1 = { x: a.x + (b.x - a.x) * r[1], y: a.y + (b.y - a.y) * r[1] };
+      hits.push({ it, s0: r[0] * len, s1: r[1] * len, t0: unitTopAt(it, p0.x, p0.y), t1: unitTopAt(it, p1.x, p1.y), depth: 0 }); }
+    else { const ss = poly.map(S), ls = poly.map(Lt); if (Math.min(...ls) > band || Math.max(...ls) < -band || Math.max(...ss) < 0 || Math.min(...ss) > len) continue;
+      const k0 = ss.indexOf(Math.min(...ss)), k1 = ss.indexOf(Math.max(...ss)); // the outline's two ends along the line; its top there
+      const tops = poly.map((p) => unitTopAt(it, p.x, p.y));
+      hits.push({ it, s0: ss[k0], s1: ss[k1], t0: tops[k0], t1: tops[k1], depth: (Math.min(...ls) + Math.max(...ls)) / 2, near: Math.max(...ls) > 0 && Math.min(...ls) > -2 }); }
+  }
+  for (const h of hits) { h.b0 = h.t0 - h.it.h; h.b1 = h.t1 - h.it.h; }
   let lo = Infinity, hi = -Infinity;
   for (const p of pts) { lo = Math.min(lo, p.ground); hi = Math.max(hi, p.ground); }
-  for (const h of hits) { lo = Math.min(lo, h.z0 - est.baseDepth); hi = Math.max(hi, h.z1); }
+  for (const h of hits) { lo = Math.min(lo, Math.min(h.b0, h.b1) - est.baseDepth); hi = Math.max(hi, h.t0, h.t1); }
   lo = Math.floor((lo - 12) / 12) * 12; hi = Math.ceil((hi + 18) / 12) * 12;
   const pl = 24 * u, pr = 24 * u, pt = 60 * u, pb = 30 * u;
   const sx = (W - pl - pr) / len, sy = Math.min(sx * ve, (H - pt - pb) / (hi - lo));
   const ox = X + pl + ((W - pl - pr) - len * sx) / 2, oz = Y + H - pb - ((H - pt - pb) - (hi - lo) * sy) / 2, P = (sv, z) => [ox + sv * sx, oz - (z - lo) * sy];
+  const quad = (h, top0, top1, bot0, bot1) => { const [x0, y0] = P(h.s0, top0), [x1, y1] = P(h.s1, top1), [x2, y2] = P(h.s1, bot1), [x3, y3] = P(h.s0, bot0); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); };
   ctx.save(); ctx.beginPath(); ctx.rect(X, Y, W, H); ctx.clip();
   const sky = ctx.createLinearGradient(0, Y, 0, Y + H); sky.addColorStop(0, "#dce9f3"); sky.addColorStop(1, "#f4f7f9"); ctx.fillStyle = sky; ctx.fillRect(X, Y, W, H);
-  // soil: up to the ground, or down to the bottom of the base where something is built lower than the ground
-  const built = (sv) => hits.filter((h) => sv >= h.s0 && sv <= h.s1);
-  const soilTop = (p) => { const hs = built(p.s); if (!hs.length) return p.ground; const bot = Math.min(...hs.map((h) => h.z0)) - est.baseDepth; return Math.min(p.ground, bot); };
+  // soil: in a cut, down to the bottom of the base wherever something is built; in a profile, the ground along the line
+  const built = (sv) => mode === "cut" ? hits.filter((h) => sv >= h.s0 && sv <= h.s1) : [];
+  const soilTop = (p) => { const hs = built(p.s); if (!hs.length) return p.ground; const bot = Math.min(...hs.map((h) => Math.min(h.b0, h.b1))) - est.baseDepth; return Math.min(p.ground, bot); };
   ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = P(p.s, soilTop(p)); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.lineTo(...P(len, lo - 100)); ctx.lineTo(...P(0, lo - 100)); ctx.closePath();
   const soil = ctx.createLinearGradient(0, P(0, hi)[1], 0, Y + H); soil.addColorStop(0, "#9b7a55"); soil.addColorStop(1, "#6f5238"); ctx.fillStyle = soil; ctx.fill();
   ctx.beginPath(); let on = false; pts.forEach((p) => { if (built(p.s).length) { on = false; return; } const [x, y] = P(p.s, p.ground); on ? ctx.lineTo(x, y) : ctx.moveTo(x, y); on = true; }); ctx.strokeStyle = "#5d8f37"; ctx.lineWidth = 4 * u; ctx.stroke();
-  // gravel base (and compacted fill up from the ground) under anything not sitting on another unit
-  for (const h of hits) { // only where it isn't resting on another unit
+  // far things first; in a profile the near side (left of the line) is drawn last and see-through
+  hits.sort((p, q) => mode === "cut" ? (Math.min(p.b0, p.b1) - Math.min(q.b0, q.b1)) : (q.depth - p.depth));
+  if (mode === "cut") for (const h of hits) { // gravel base wherever a unit isn't resting on another
     let free = [[h.s0, h.s1]];
-    for (const g of hits) if (g !== h && Math.abs(g.z1 - h.z0) < 0.6) free = free.flatMap(([p, q]) => g.s1 <= p || g.s0 >= q ? [[p, q]] : [[p, Math.max(p, g.s0)], [Math.min(q, g.s1), q]].filter(([m, n]) => n - m > 0.05));
-    for (const [p, q] of free) { const [x0, yt] = P(p, h.z0), [x1, yb] = P(q, h.z0 - est.baseDepth); stonesIn(ctx, x0, yt, x1 - x0, yb - yt, "#a9a294", hashStr(h.it.id), Math.max(1.2, sx * 0.9)); }
+    for (const g of hits) if (g !== h && Math.abs((g.t0 + g.t1) / 2 - (h.b0 + h.b1) / 2) < 0.6) free = free.flatMap(([p, q]) => g.s1 <= p || g.s0 >= q ? [[p, q]] : [[p, Math.max(p, g.s0)], [Math.min(q, g.s1), q]].filter(([m, n]) => n - m > 0.05));
+    for (const [p, q] of free) { const zb = (sv) => h.b0 + (h.b1 - h.b0) * (sv - h.s0) / Math.max(0.01, h.s1 - h.s0); const [x0, yt] = P(p, zb(p)), [x1] = P(q, 0), [, yb] = P(0, zb(p) - est.baseDepth); stonesIn(ctx, x0, yt, x1 - x0, yb - yt, "#a9a294", hashStr(h.it.id), Math.max(1.2, sx * 0.9)); }
   }
-  // the units, back to front by height
-  hits.sort((p, q) => p.z0 - q.z0);
-  for (const h of hits) { const m = mat(h.it.block), [x0, y0] = P(h.s0, h.z1), [x1, y1] = P(h.s1, h.z0); unitBox(ctx, x0, y0, x1, y1, m && m.kind === "cap" ? shade(hexOf(h.it.color), 1.1) : hexOf(h.it.color), sx * 3); }
+  for (const h of hits) {
+    if (mode === "profile" && h.near) continue; // the near side is shown as its surface line below
+    const m = mat(h.it.block), hex = m && m.kind === "cap" ? shade(hexOf(h.it.color), 1.1) : hexOf(h.it.color);
+    quad(h, h.t0, h.t1, h.b0, h.b1); ctx.fillStyle = hex; ctx.fill(); ctx.strokeStyle = "rgba(40,40,40,.7)"; ctx.lineWidth = Math.max(0.6, Math.min(1.4, sx * 0.36)); ctx.stroke();
+  }
+  if (mode === "profile") { // the near side's surface: the highest top at each point along the line, as one line with a light tint under it
+    const near = hits.filter((h) => h.near), env = [];
+    for (let sv = 0; sv <= len; sv += 1) { let top = -Infinity; for (const h of near) if (sv >= h.s0 && sv <= h.s1) top = Math.max(top, h.t0 + (h.t1 - h.t0) * (sv - h.s0) / Math.max(0.01, h.s1 - h.s0)); env.push([sv, top]); }
+    const runs = []; let cur = null; for (const e of env) { if (e[1] > -Infinity) { (cur = cur || []).push(e); } else if (cur) { runs.push(cur); cur = null; } } if (cur) runs.push(cur);
+    for (const r of runs) {
+      ctx.beginPath(); r.forEach(([sv, z], k) => { const [x, y] = P(sv, z); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); for (let k = r.length - 1; k >= 0; k--) { const [x, y] = P(r[k][0], r[k][1] - 2.375); ctx.lineTo(x, y); } ctx.closePath();
+      ctx.fillStyle = "rgba(232,89,12,.22)"; ctx.fill();
+      ctx.beginPath(); r.forEach(([sv, z], k) => { const [x, y] = P(sv, z); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.strokeStyle = "#e8590c"; ctx.lineWidth = 3 * u; ctx.setLineDash([8 * u, 5 * u]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
   ctx.restore(); ctx.save();
   const T = (t, x, y, size, color = "#1d2733", weight = 600, align = "left") => { ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
-  T(`Section ${cut.label || ""}: cut through the ground and everything built on it`, X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700);
-  T(`${hits.length} blocks and pavers cut by the line · real colours and sizes${ve > 1.01 ? ` · heights × ${num1(ve)}` : ""}`, X + 16 * u, Y + 42 * u, 12 * u, "#3d4a57", 500);
+  T(mode === "cut" ? `Section ${cut.label || ""}: cut through the ground and everything built on it` : `Side profile along line ${cut.label || ""}: everything within 3 ft, seen from the left of the line`, X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700);
+  T(mode === "cut" ? `${hits.length} blocks and pavers cut by the line · real colours and sizes${ve > 1.01 ? ` · heights × ${num1(ve)}` : ""}` : `Dashed orange: the surface on the near side (left of the line) · where it and the steps behind don't meet is the side blocking${ve > 1.01 ? ` · heights × ${num1(ve)}` : ""}`, X + 16 * u, Y + 42 * u, 12 * u, "#3d4a57", 500);
   const ft = [1, 2, 5, 10, 20].find((f) => f * 12 * sx > 70 * u) || 20, bx = X + W - 30 * u - ft * 12 * sx, by = Y + H - 16 * u;
   ctx.fillStyle = "#1d2733"; for (let k = 0; k < 4; k++) { if (k % 2 === 0) ctx.fillRect(bx + k * ft * 3 * sx, by, ft * 3 * sx, 5 * u); } ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1 * u; ctx.strokeRect(bx, by, ft * 12 * sx, 5 * u);
   T(`${ft} ft`, bx + ft * 6 * sx, by - 8 * u, 11 * u, "#1d2733", 700, "center");
@@ -4883,7 +4914,8 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   return true;
 }
 // ---------- shape the ground from the side view ----------
-let shapeGround = false, shapeSel = null, shapeDrag = null;
+let shapeGround = false, shapeSel = null, shapeDrag = null, sideMode = "cut";
+$("sideMode").onchange = (e) => { sideMode = e.target.value; drawSide(); };
 // spot heights that sit on the stair line, with their distance along the side view
 function sideSpots(els) {
   const out = [];
@@ -4938,7 +4970,8 @@ function drawSide() {
     label(ctx, "On the Blueprint, tap Ground → Section line and drag across the site.", w / 2, h / 2 + 14, 13, "center", BP.ink2, 500, "IBM Plex Sans");
     return;
   }
-  if (planLook() === "real") { cv.style.filter = ""; renderProfileReal(ctx, 0, 0, w, h, cut, 1, sideVE); } else renderProfile(ctx, 0, 0, w, h, cut, 1, sideVE);
+  $("sideModeBox").hidden = planLook() !== "real";
+  if (planLook() === "real") { cv.style.filter = ""; renderProfileReal(ctx, 0, 0, w, h, cut, 1, sideVE, sideMode); } else renderProfile(ctx, 0, 0, w, h, cut, 1, sideVE);
 }
 $("v3d").onclick = () => setView("3d");
 let lastW = 0;
@@ -5229,10 +5262,16 @@ function build3d() {
       }
       case "unit": {
         const m = mat(it.block), smooth = m && (m.kind === "cap" || m.kind === "slab");
+        let mesh;
         if (Array.isArray(it.clip) && it.clip.length >= 3) { // cut piece: extrude its outline
           const sh = new THREE.Shape(it.clip.map(([x, y]) => new THREE.Vector2(x, y))), g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.05, it.h - 0.1), bevelEnabled: false }); g.rotateX(-Math.PI / 2);
-          const mesh = new THREE.Mesh(g, blockMat(it.color, smooth)); mesh.castShadow = true; mesh.receiveShadow = true; place(mesh, it, 0, 0, it.z || 0);
-        } else { const bx = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(bx, it, 0, 0, (it.z || 0) + it.h / 2); }
+          mesh = new THREE.Mesh(g, blockMat(it.color, smooth)); mesh.castShadow = true; mesh.receiveShadow = true; place(mesh, it, 0, 0, it.z || 0);
+        } else { mesh = box(it.w - 0.15, it.h - 0.1, it.d - 0.15, blockMat(it.color, smooth)); place(mesh, it, 0, 0, (it.z || 0) + it.h / 2); }
+        if (it.gx || it.gy) { // tilt to follow the slope: lift each corner by the slope times its plan offset
+          const pos = mesh.geometry.attributes.position, a = -(it.rot || 0) * Math.PI / 180;
+          for (let k = 0; k < pos.count; k++) { const lx = pos.getX(k), ly = -pos.getZ(k), dx = lx * Math.cos(a) - ly * Math.sin(a), dy = lx * Math.sin(a) + ly * Math.cos(a); pos.setY(k, pos.getY(k) + (it.gx || 0) * dx + (it.gy || 0) * dy); }
+          pos.needsUpdate = true; mesh.geometry.computeVertexNormals();
+        }
         break;
       }
       case "rock": {
