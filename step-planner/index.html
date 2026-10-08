@@ -1326,9 +1326,11 @@ function renderSheet(ctx, W, H, v, o) {
 
   if (o.section) {
     const st = job.items.find((i) => i.id === o.selId && i.type === "steps") || job.items.find((i) => i.type === "steps");
+    const groundSel = job.items.some((i) => i.id === o.selId && ["contour", "spot", "shore"].includes(i.type)); // reshaping the ground: show the whole stairway on it, live
     if (st) {
       const bw = Math.min(380 * u, W * 0.44), bh = Math.min(230 * u, H * 0.42);
-      if (o.inReal) { ctx.save(); ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1.5 * u; renderStairs(ctx, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u * 0.62, st.id); ctx.strokeRect(W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh); ctx.restore(); }
+      if (groundSel) { ctx.save(); ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1.5 * u; renderStairs.client = true; try { renderStairs(ctx, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u * 0.62, "all"); } finally { renderStairs.client = false; } ctx.strokeRect(W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh); ctx.restore(); }
+      else if (o.inReal) { ctx.save(); ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1.5 * u; renderStairs(ctx, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u * 0.62, st.id); ctx.strokeRect(W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh); ctx.restore(); }
       else drawSection(ctx, st, W - bw - 16 * u, H - bh - (o.titleH || 16 * u), bw, bh, u);
     }
   }
