@@ -1195,7 +1195,14 @@ function waterLevel() { const sh = job.items.find((i) => i.type === "shore"); re
 // coarse ground mesh can't poke over their edges), then rising 1:1 to the natural ground. dig.inside tells the ground under the work.
 // Null when the job has no placed units.
 function unitDigger() {
-  const us = job.items.filter((i) => i.type === "unit" && (i.z || 0) > -1e4); if (!us.length) return null;
+  const us = job.items.filter((i) => i.type === "unit" && (i.z || 0) > -1e4);
+  // drawn steps (every block, cap and infill piece) and landings, terraces and gabion baskets dig out the same way
+  const solids = [];
+  for (const it of job.items) {
+    if (it.type === "steps") { const c = stepCalc(it); for (const q of c.pieces) solids.push({ poly: [[q.x0, q.y0], [q.x1, q.y0], [q.x1, q.y1], [q.x0, q.y1]].map(([lx, ly]) => rotPt(it, lx, ly)), top: q.z1 }); }
+    else if (it.type === "landing") solids.push({ poly: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => rotPt(it, sx * it.w / 2, sy * it.d / 2)), top: it.h });
+  }
+  if (!us.length && !solids.length) return null;
   const B = 24, R = 30, cells = new Map(), key = (cx, cy) => cx + "," + cy;
   // blocks with something set on them (risers under caps, walls under treads) are hidden: the ground follows what's on top
   const covered = new Set(), byCell = new Map(), ck = (u) => key(Math.floor(u.x / B), Math.floor(u.y / B));
@@ -1203,8 +1210,9 @@ function unitDigger() {
   for (const o of us) { const cx = Math.floor(o.x / B), cy = Math.floor(o.y / B);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const u of byCell.get(key(cx + i, cy + j)) || [])
       if (u !== o && Math.abs((o.z || 0) - ((u.z || 0) + u.h)) < 0.6 && Math.hypot(o.x - u.x, o.y - u.y) < (Math.max(o.w, o.d) + Math.max(u.w, u.d)) / 2 - 0.5) covered.add(u); }
-  for (const u of us) {
-    const poly = unitWorldPoly(u), xs = poly.map((p) => p.x), ys = poly.map((p) => p.y), e = { u, poly, hid: covered.has(u) };
+  const ents = us.map((u) => ({ poly: unitWorldPoly(u), top: (x, y) => unitTopAt(u, x, y), hid: covered.has(u) })).concat(solids.map((o) => ({ poly: o.poly, top: () => o.top, hid: false })));
+  for (const e of ents) {
+    const poly = e.poly, xs = poly.map((p) => p.x), ys = poly.map((p) => p.y);
     for (let cx = Math.floor((Math.min(...xs) - R) / B); cx <= Math.floor((Math.max(...xs) + R) / B); cx++)
       for (let cy = Math.floor((Math.min(...ys) - R) / B); cy <= Math.floor((Math.max(...ys) + R) / B); cy++) { const k = key(cx, cy); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(e); }
   }
@@ -1221,8 +1229,8 @@ function unitDigger() {
   const near = (x, y) => cells.get(key(Math.floor(x / B), Math.floor(y / B))) || [];
   const dig = (x, y, z) => { // only the nearest work shapes the ground, so the bank beside a step meets that step, not the one below
     const hits = []; let dmin = Infinity;
-    for (const { u, poly, hid } of near(x, y)) { if (hid) continue; const d = distTo(poly, x, y); if (d <= R) { hits.push([d, u]); dmin = Math.min(dmin, d); } }
-    for (const [d, u] of hits) if (d <= dmin + 4) z = Math.min(z, unitTopAt(u, x, y) - 0.75 + Math.max(0, d - 6));
+    for (const e of near(x, y)) { if (e.hid) continue; const d = distTo(e.poly, x, y); if (d <= R) { hits.push([d, e]); dmin = Math.min(dmin, d); } }
+    for (const [d, e] of hits) if (d <= dmin + 4) z = Math.min(z, e.top(x, y) - 0.75 + Math.max(0, d - 6));
     return z;
   };
   dig.inside = (x, y) => near(x, y).some(({ poly }) => distTo(poly, x, y) < 0.5);
