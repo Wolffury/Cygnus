@@ -3086,7 +3086,13 @@ function valueAuto() {
   const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.filter((i) => i.type === "drain"), rails = its.filter((i) => i.type === "rail");
   const w0 = flights[0], c0 = cs[0], years = 40;
   if (steps) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
-  if (steps && climb > 1) out.push(`What it works out to: about ${money(q.total / steps)} a step and ${money(q.total / climb)} per vertical foot of the ${Math.round(climb)} ft climb. Over ${years} years of use that's about ${money(q.total / years)} a year, or ${money(q.total / years / 12)} a month.`);
+  { const land = its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path").length, railFt = Math.round(rails.reduce((a, i) => a + i.w / 12, 0)), more = [];
+    if (land) more.push(`${plural(land, "landing and terrace").replace("landing and terraces", "landings and terraces")}`);
+    if (railFt) more.push(`${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
+    if (has(/delivery/i)) more.push("delivery to the island"); if (has(/wheelbarrow|hauling/i)) more.push("moving every block and bag down the slope by machine");
+    out.push(`What it works out to: spread over ${years} years of use, about $${Math.round(q.total / years / 12).toLocaleString("en-CA")} a month for safe access to your beach${climb > 1 ? ` down a ${Math.round(climb)} ft bank` : ""}. The price covers far more than the steps: ${listAnd(more)}.`);
+    const kg = haulList().reduce((a, x) => a + x.kg, 0), lb = kg * 2.20462;
+    if (lb > 2000) out.push(`By weight: about ${num1(kg / 1000)} tonnes (${Math.round(lb / 1000).toLocaleString("en-CA")},000 lb) of block, stone and gravel, brought over to the island and set by hand on a steep bank. That's about ${Math.round(q.total / lb * 100)}¢ a pound, delivered and installed.`); }
   if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ", with a handrail the whole way" : ""}. Steady, even steps are what make a long stair easy on the knees, coming up from the beach with a load.`);
   const built = [`${fmtIn(E.baseDepth)} of compacted gravel under every step and landing`];
   if (cs.some((c) => c.under)) built.push("block walls hidden under the step edges to keep the steps firmly in place");
