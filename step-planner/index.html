@@ -3119,6 +3119,7 @@ function valueAuto() {
   const has = (re) => lines.some((l) => re.test(l.desc)), qty = (re) => { const l = lines.find((x) => re.test(x.desc)); return l ? l.qty : 0; };
   const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.filter((i) => i.type === "drain"), rails = its.filter((i) => i.type === "rail");
   const w0 = flights[0], c0 = cs[0], years = 75;
+  if (steps) out.push(bestLine(E));
   if (steps) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
   if (steps) out.push(lifeLine());
   { const land = its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path").length, railFt = Math.round(rails.reduce((a, i) => a + i.w / 12, 0)), more = [];
@@ -3149,6 +3150,16 @@ function valueAuto() {
   out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
   out.push("Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it.");
   return out.join("\n");
+}
+// the headline: best stair for the money, nothing skimped
+function bestLine(E) {
+  const its = job.items, save = ["following the existing route", "measuring every block and tonne from a scaled plan instead of guessing", `ordering everything on ${E.bulkSep ? "one truck load plus one local gravel delivery" : "one truck load"}`];
+  const keep = [`a full ${fmtIn(E.baseDepth)} compacted gravel base`];
+  if (its.some((i) => i.type === "drain")) keep.push("proper drainage");
+  keep.push("every cap glued down");
+  if (its.some((i) => i.type === "rail")) keep.push("handrail posts set in concrete");
+  if (its.some((i) => i.type === "landing" && isGabion(mat(i.surface)))) keep.push("marine-grade baskets at the beach");
+  return `The best stairway for this bank at the lowest price it can be built for, with no corners cut. The savings come from smart planning: ${listAnd(save)}. They don't come from cheaper materials or shortcuts: ${listAnd(keep)} are all part of the price.`;
 }
 // how long it lasts, part by part (built correctly, Gulf Islands climate)
 function lifeLine() {
