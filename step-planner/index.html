@@ -400,6 +400,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <button data-add="wall"><b>Retaining wall</b><span>Block wall with caps</span></button>
           <button data-add="rail"><b>Handrail</b><span>Wood rail on posts</span></button>
           <button data-add="drain"><b>Drain line</b><span>Perforated pipe in drain rock</span></button>
+          <button data-add="edge"><b>Paver edge restraint</b><span>A line of plastic edging, any angle</span></button>
         </div>
         <h3>Site &amp; environment</h3>
         <div class="addgrid">
@@ -825,11 +826,11 @@ const TYPE_INFO = {
   steps: { label: "Steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
   house: { label: "House" }, grade: { label: "Upper grade" }, rail: { label: "Handrail" }, unit: { label: "Block" }, dim: { label: "Measurement" },
-  shore: { label: "Shoreline" }, drain: { label: "Drain line" }, contour: { label: "Contour" }, spot: { label: "Spot elevation" }, cut: { label: "Section line" },
+  shore: { label: "Shoreline" }, drain: { label: "Drain line" }, edge: { label: "Paver edge restraint" }, contour: { label: "Contour" }, spot: { label: "Spot elevation" }, cut: { label: "Section line" },
 };
 const LINE_TYPES = new Set(["shore", "contour"]);
 const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade", "unit", "rail"]);
-const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail", "drain"]);
+const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail", "drain", "edge"]);
 // Handrail finishes: wood rails on posts (posts are galvanized pipe unless the whole rail is metal)
 const RAIL_COLORS = ["Cedar", "Brown", "Dark Brown", "Weathered grey", "Black (metal)"];
 // Edging along the open sides of a walkway or landing; a side that meets steps needs none (the step holds the gravel)
@@ -881,6 +882,7 @@ function defaults(type, x, y) {
     case "spot": return { ...b, elev: 0 };
     case "cut": return { ...b, x2: x + 120, y2: y, label: "A" };
     case "drain": return { ...b, x2: x, y2: y - 120, w: 12, depth: 18, outlet: "pad", label: "Drain line" };
+    case "edge": return { ...b, x2: x, y2: y - 96, label: "Edge restraint" };
   }
   return b;
 }
@@ -1093,6 +1095,7 @@ function itemSize(it) {
   if (it.type === "cut") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "dim") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "drain") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: it.w, xc: 0 };
+  if (it.type === "edge") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 2, xc: 0 };
   if (it.type === "steps") { const c = stepCalc(it); return { w: c.xw, d: c.run, xc: c.xc }; }
   if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d, xc: 0 };
   return { w: it.canopy, d: it.canopy, xc: 0 };
@@ -1108,6 +1111,7 @@ function hitTest(px, py) {
   const order = drawOrder().slice().reverse();
   for (const it of order) {
     if (it.type === "drain") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= Math.max(it.w / 2, 16 / view2d.s)) return it; continue; }
+    if (it.type === "edge") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= 14 / view2d.s) return it; continue; }
     if (it.type === "dim" || it.type === "cut") {
       // a measurement is drawn off to the side of the points it measures: grab it by the line you see (or its number), finger-sized
       const tol = 22 / view2d.s, len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), off = it.type === "dim" ? it.off ?? 12 : 0;
@@ -1262,7 +1266,7 @@ function planBounds() {
   let minX = 0, minY = 0, maxX = job.site.w, maxY = job.site.d;
   for (const it of job.items) {
     if (it.pts) { const [a, b, c, d] = bboxPts(it.pts); minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d); continue; }
-    if (it.type === "cut" || it.type === "dim" || it.type === "drain") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
+    if (it.type === "cut" || it.type === "dim" || it.type === "drain" || it.type === "edge") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
   return { minX, minY, maxX, maxY };
 }
 function fitView(W, H, v = view2d, pad = 60) {
@@ -1599,6 +1603,13 @@ function drawItemReal(ctx, v, it, u, sel) {
         return true;
       }
       case "spot": case "cut": return true; // survey marks: shown in the blueprint look only
+      case "edge": {
+        const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), L = Math.hypot(it.x2 - it.x, it.y2 - it.y);
+        ctx.save(); ctx.lineCap = "round"; ctx.strokeStyle = "#1f2226"; ctx.lineWidth = Math.max(3 * u, 1.5 * v.s); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        ctx.fillStyle = "#c9ccd0"; for (let t = 6; t < L; t += 12) { const px = ax + (bx - ax) * t / L, py = ay + (by - ay) * t / L; ctx.beginPath(); ctx.arc(px, py, Math.max(1.2 * u, 0.4 * v.s), 0, 7); ctx.fill(); } ctx.restore(); // spikes every foot
+        realLabel(ctx, `${shortLabel(tag) || "Edge restraint"} (${plainLen(L)})`, bx + (it.x2 < it.x ? -60 : 60) * u, by, 10 * u, u);
+        return true;
+      }
       case "drain": {
         const dc = drainCalc(it), f = dc.frame, h = dc.L / 2, [bx, by] = W2S(v, it.x2, it.y2), pr = Math.max(6 * u, it.w * 1.1 * v.s);
         ctx.save(); polyRect(ctx, v, f, -it.w / 2, -h, it.w / 2, h); const [a, b, c, d] = screenBox(v, f, -it.w / 2, -h, it.w / 2, h); ctx.clip(); stonesIn(ctx, a, b, c - a, d - b, "#c9c6bf", hashStr(it.id), Math.max(1.2, v.s * 1.1)); ctx.restore();
@@ -1766,6 +1777,14 @@ function drawItem(ctx, v, it, u, sel) {
         label(ctx, it.label || "A", px - nx * 12 * u, py - ny * 12 * u, 13 * u, "center", BP.sel, 700);
       }
       break;
+    }
+    case "edge": {
+      const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), L = Math.hypot(it.x2 - it.x, it.y2 - it.y);
+      ctx.save(); ctx.strokeStyle = BP.ink; ctx.lineWidth = 2.5 * u; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      const nx = -(by - ay) / (Math.hypot(bx - ax, by - ay) || 1), ny = (bx - ax) / (Math.hypot(bx - ax, by - ay) || 1); ctx.lineWidth = 1 * u;
+      for (let t = 6; t < L; t += 12) { const px = ax + (bx - ax) * t / L, py = ay + (by - ay) * t / L; ctx.beginPath(); ctx.moveTo(px - nx * 4 * u, py - ny * 4 * u); ctx.lineTo(px + nx * 4 * u, py + ny * 4 * u); ctx.stroke(); }
+      { const west = it.x2 < it.x; nameLabel(ctx, v, it, `${(shortLabel(it.label) || "EDGE RESTRAINT").toUpperCase()} · ${fmtLen(L)}`, bx + (west ? -10 : 10) * u, by, 10 * u, west ? "right" : "left", BP.ink2); }
+      ctx.restore(); break;
     }
     case "drain": {
       const dc = drainCalc(it), f = dc.frame, h = dc.L / 2;
@@ -1986,7 +2005,7 @@ function handlesOf(it) {
     const len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), m = rotPt({ x: it.x, y: it.y, rot: -ang * 180 / Math.PI }, len / 2, it.off ?? 12);
     return hs.concat([{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }, { kind: "off", x: m.x, y: m.y }]);
   }
-  if (it.type === "cut" || it.type === "drain") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  if (it.type === "cut" || it.type === "drain" || it.type === "edge") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
   if (LINE_TYPES.has(it.type)) return it.pts.map((p, idx) => ({ kind: "pt", idx, x: p[0], y: p[1] }));
   if (it.type === "spot") return [];
   if (!RECT_TYPES.has(it.type)) { hs.push({ kind: "radius", x: it.x + it.canopy / 2, y: it.y }); return hs; }
@@ -2194,7 +2213,7 @@ plan.addEventListener("pointermove", (e) => {
   if (snap) { nx = Math.round(nx); ny = Math.round(ny); }
   if (!drag.moved) { if (Math.hypot(nx - drag.item.x, ny - drag.item.y) * view2d.s < 4) return; snapshot(); drag.moved = true; }
   const it = drag.item;
-  if (it.type === "dim" || it.type === "cut" || it.type === "drain") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
+  if (it.type === "dim" || it.type === "cut" || it.type === "drain" || it.type === "edge") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
   if (it.pts) { const dx = nx - it.x, dy = ny - it.y; it.pts = it.pts.map(([x, y]) => [x + dx, y + dy]); }
   it.x = nx; it.y = ny;
   if (it.type === "unit" && snap) snapUnit(it);
@@ -2389,6 +2408,11 @@ function renderItemPane() {
   } else if (t === "spot") {
     h = `<h2>Spot elevation</h2><div class="grid2">${field("Elevation", "elev", it)}${field("East (x)", "x", it)}${field("North (y)", "y", it)}</div>
       <p class="note">A measured ground height, e.g. from a level or laser. Use negative values below the datum.</p>`;
+  } else if (t === "edge") {
+    const L = Math.hypot(it.x2 - it.x, it.y2 - it.y);
+    h = `<h2>Paver edge restraint</h2><label class="f">Name<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>
+      <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(L)}</dd></div><div><dt>Spikes</dt><dd>${Math.ceil(L / 12)} (one a foot)</dd></div></dl>
+      <p class="note">Plastic paver edging held with spikes, priced with the other edging under Rates. Drag the round ends to place it, at any angle.</p>`;
   } else if (t === "drain") {
     const dc = drainCalc(it);
     h = `<h2>Drain line</h2><label class="f">Name<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>
@@ -2478,6 +2502,7 @@ function describe(it) {
   if (it.type === "steps") { const c = stepCalc(it); return `${c.count} risers, ${fmtLen(it.w)} wide, ${matName(mat(it.block))}${it.cap ? " + " + matName(mat(it.cap)) : ""}${it.config !== "straight" ? ", " + CONFIGS.find((x) => x[0] === it.config)[1].toLowerCase() : ""}`; }
   if (it.type === "wall") return `${fmtLen(it.w)} long, ${fmtLen(wallCalc(it).top)} high, ${matName(mat(it.block))}`;
   if (it.type === "rail") return `${fmtLen(it.w)} long, ${fmtLen(it.h)} high, ${it.color} wood, ${railCalc(it).posts} posts`;
+  if (it.type === "edge") return `${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))} of plastic paver edging with spikes`;
   if (it.type === "drain") return `${fmtLen(drainCalc(it).L)} of 4" perforated pipe in drain rock, to a rock outlet`;
   if (it.type === "unit") { const m = mat(it.block); return `${matName(m)} ${it.color || ""}${m && (it.w < (m.L || it.w) - 0.05 || it.h < m.H - 0.05) ? ", cut to " + fmtIn(it.w) + " × " + fmtIn(it.h) : ""}`; }
   if (it.type === "landing" || it.type === "path") return `${fmtLen(it.w)} × ${fmtLen(it.d)}, ${matName(mat(it.surface))} ${it.color || ""}`;
@@ -2711,6 +2736,8 @@ function takeoff() {
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
+    } else if (it.type === "edge") {
+      w.edgeFt += Math.hypot(it.x2 - it.x, it.y2 - it.y) / 12;
     } else if (it.type === "drain") {
       const dc = drainCalc(it); w.trenchYd += dc.rockYd; w.excavYd += dc.rockYd; w.pipeFt += dc.ft * 1.1; w.fabricSqft += dc.fabricSqft; w.drainFt += dc.ft;
     }
