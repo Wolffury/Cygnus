@@ -81,7 +81,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cpside { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
 .cpside textarea { font: 13px/1.4 var(--font-body); }
 .cppages { overflow: auto; background: #6b737c; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 0; }
-.cppages img { width: min(100%, 760px); background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.cppages figure { margin: 0; width: min(100%, 760px); position: relative; }
+.cppages img { width: 100%; display: block; background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.cppages figure.off img { opacity: .3; }
+.cppages figcaption { position: absolute; top: 8px; right: 8px; background: rgba(23,63,115,.92); color: #fff; border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+.cppages figcaption label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 @media (max-width: 860px) { .cpwrap { grid-template-columns: 1fr; } .modalbox.wide { height: auto; } }
 #cpPrint { display: none; }
 @media print {
@@ -282,6 +286,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <span class="sync" id="syncState" hidden></span>
     <button class="btn" id="undoBtn" title="Undo">Undo</button>
     <button class="btn" id="exportBtn">Export sheet</button>
+    <button class="btn primary" id="cpTop">Client package</button>
     <button class="btn" id="printBtn">Print</button>
   </header>
 
@@ -423,13 +428,13 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
 
       <div class="pane" id="pQuote" role="tabpanel" hidden>
         <h2>Estimate &amp; quote</h2>
+        <button class="btn primary" id="cpOpen">Client package: preview, pick pages, print or PDF</button>
         <div id="quoteSummary"></div>
         <h3>Where to buy</h3>
         <p class="note">Pick who you buy each material from. A supplier's price goes straight into the quote; type a price to update it (it is remembered for that supplier). Suppliers and prices below were found online in Oct 2026: always confirm stock and price before ordering.</p>
         <div id="buyList"></div>
         <details id="supEdit"><summary>Suppliers and rental yards</summary><div id="supList"></div><button class="btn" id="supAdd">Add a supplier</button></details>
         <div class="row">
-          <button class="btn primary" id="cpOpen">Client package: plan, scope, timeline &amp; quote</button>
           <button class="btn" id="qHtml">Save quote</button>
           <button class="btn" id="qCsv">Export to Ledgerline (CSV)</button>
           <button class="btn" id="qJson">Export JSON</button>
@@ -594,6 +599,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
 <div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
   <div class="modalbox">
     <h2 id="prTitle">Print on regular paper</h2>
+    <div class="row"><b>For the client?</b> <button class="btn primary small" id="prClient">Open the client package instead</button><span class="note">plan, scope, timeline and price, ready to sign</span></div>
     <p class="note">Makes a PDF to print at home or the office. Tick the pages you want: the blueprint split over sheets at a true scale to tape together, any of the side views, and the 3D rendering. Your choices are remembered.</p>
     <div class="grid3">
       <fieldset class="views"><legend>Pages to include</legend>
@@ -615,7 +621,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <div class="row" style="justify-content:space-between"><h2 id="cpTitle">Client package</h2><button class="btn" id="cpClose" aria-label="Close">✕</button></div>
     <div class="cpwrap">
       <div class="cpside">
-        <p class="note">This is what your client gets: a simple plan, what's included, when it happens, and the price, with a place to sign. The price uses your choices under "What the client sees" on the Quote tab.</p>
+        <p class="note">This is what your client gets. Tick the parts to include on the left; each page on the right also has its own tick to leave it out of the PDF or print. The price uses your choices under "What the client sees" on the Quote tab.</p>
         <div class="grid2">
           <label class="f">Start date <input type="date" id="cpStart"></label>
           <label class="f">Crew size <input id="cpCrew" inputmode="decimal"></label>
@@ -623,8 +629,10 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Days to get materials <input id="cpLead" inputmode="decimal"></label>
         </div>
         <label class="checkrow"><input type="checkbox" id="cpGst"> Charge GST</label>
-        <label class="checkrow"><input type="checkbox" id="cpSide"> Side view of the stairway</label>
-        <label class="checkrow"><input type="checkbox" id="cp3d"> 3D picture (open 3D Render first)</label>
+        <fieldset class="views"><legend>What goes in</legend>
+          <div class="row"><button class="btn small" id="cpAllParts">Everything</button><button class="btn small" id="cpPriceOnly">Just the price</button></div>
+          <div id="cpParts" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin-top:6px;font-size:14px"></div>
+        </fieldset>
         <label class="f">Scope of work (one item per line) <textarea id="cpScope" rows="9"></textarea></label>
         <div class="row"><button class="btn small" id="cpScopeReset">Rewrite from the plan</button></div>
         <label class="f">Timeline (one step per line) <textarea id="cpTime" rows="8"></textarea></label>
@@ -2896,7 +2904,10 @@ function drawSimplePlan(ctx, X, Y, w, h, u) {
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
   ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
 }
-function cdoc() { return job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); }
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS_ON = { plan: true, side: true, three: false, scope: true, excl: true, time: true, price: true, terms: true };
+function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
+let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
 const listAnd = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
@@ -2996,12 +3007,14 @@ function clientPages() {
   text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 });
   text(`Project: ${qd.job.name}`, 28, { weight: 600, after: 16 });
   // the plan, realistic look, fitted to the box
-  picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
-  if (d.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
-  if (d.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
-  head("Scope of work"); bullets(d.scope ?? scopeAuto());
-  const ex = d.excl ?? EXCL_AUTO; if (ex.trim()) { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); bullets(ex, "–"); }
-  head("Timeline"); bullets(d.timeline ?? timelineAuto());
+  const on = d.parts;
+  if (on.plan) picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
+  if (on.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
+  if (on.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
+  if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
+  const ex = d.excl ?? EXCL_AUTO; if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
+  if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
+  if (on.price) {
   head("Price");
   const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
     const font = F(o.size || 23, o.weight || 400), lines = wrapLines(x, cells[0], cols[0] - 16, font), lh = (o.size || 23) * 1.35, h = lines.length * lh + 14;
@@ -3022,9 +3035,12 @@ function clientPages() {
   if (qd.totals.pst) row([`PST ${qd.rates.pstPercent}% on materials`, "", "", money(qd.totals.pst)]);
   row(["Total (CAD)", "", "", money(qd.totals.total)], { weight: 700, size: 27, fill: "#eef2f7" });
   row([`Deposit ${qd.rates.depositPercent}% due on signing`, "", "", money(qd.totals.deposit)], { weight: 600 });
+  }
+  if (on.terms) {
   if (qd.terms) { head("Terms"); text(qd.terms, 23); }
   room(200); y += 90; x.fillStyle = INK; x.fillRect(M, y, CW * 0.45, 2); x.fillRect(M + CW * 0.55, y, CW * 0.45, 2); y += 10;
   x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "top"; x.fillText("Accepted by (client) and date", M, y); x.fillText(`${co.name || "Contractor"} and date`, M + CW * 0.55, y);
+  }
   // footer on every page
   pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(19); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(`${co.name || ""}${co.name ? " · " : ""}Quote ${qd.quoteNumber} · ${qd.job.name}`, M, H - M * 0.6); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.6); });
   return pages;
@@ -3033,32 +3049,53 @@ let cpTimer = 0, cpPagesCache = null;
 function cpRender() {
   clearTimeout(cpTimer);
   cpTimer = setTimeout(() => {
-    try { cpPagesCache = clientPages(); $("cpPages").innerHTML = ""; for (const pg of cpPagesCache) { const im = new Image(); im.alt = "Client package page"; im.src = pg.toDataURL("image/jpeg", 0.8); $("cpPages").appendChild(im); } $("cpInfo").textContent = `${plural(cpPagesCache.length, "page")}, letter size. Quote total ${money(estimate().total)}.`; }
+    try {
+      const n0 = cpPagesCache ? cpPagesCache.length : 0; cpPagesCache = clientPages(); if (cpPagesCache.length !== n0) cpSkip = new Set();
+      $("cpPages").innerHTML = "";
+      cpPagesCache.forEach((pg, k) => {
+        const f = document.createElement("figure"); f.className = cpSkip.has(k) ? "off" : "";
+        f.innerHTML = `<figcaption><label><input type="checkbox"${cpSkip.has(k) ? "" : " checked"}> Page ${k + 1}</label></figcaption>`;
+        const im = new Image(); im.alt = `Client package page ${k + 1}`; im.src = pg.toDataURL("image/jpeg", 0.8); f.appendChild(im);
+        f.querySelector("input").onchange = (e) => { if (e.target.checked) cpSkip.delete(k); else cpSkip.add(k); f.className = e.target.checked ? "" : "off"; cpInfoText(); };
+        $("cpPages").appendChild(f);
+      });
+      cpInfoText();
+    }
     catch (e) { $("cpInfo").textContent = "Couldn't draw the preview: " + e.message; }
   }, 250);
+}
+function cpInfoText() { const n = cpPagesCache.length, k = n - cpSkip.size; $("cpInfo").textContent = `${k === n ? plural(n, "page") : `${k} of ${n} pages ticked`}, letter size. Quote total ${money(estimate().total)}.`; }
+const cpChosen = () => cpPagesCache.filter((_, k) => !cpSkip.has(k));
+function renderCpParts() {
+  const d = cdoc();
+  $("cpParts").innerHTML = CP_PARTS.map(([k, t]) => `<label class="checkrow"><input type="checkbox" data-part="${k}"${d.parts[k] ? " checked" : ""}${k === "three" && !R3 ? " disabled" : ""}> ${t}${k === "three" && !R3 ? " (open 3D Render first)" : ""}</label>`).join("");
+  $("cpParts").querySelectorAll("[data-part]").forEach((b) => b.onchange = () => { cdoc().parts[b.dataset.part] = b.checked; cpSave(); cpRender(); });
 }
 function cpFill() {
   const d = cdoc();
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
-  $("cpGst").checked = !!job.est.chargeGst; $("cpSide").checked = d.side; $("cp3d").checked = d.three && !!R3; $("cp3d").disabled = !R3;
+  $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
   $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? EXCL_AUTO;
 }
 const cpSave = () => store.set("bsp.current", job);
-$("cpOpen").onclick = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
+const cpShow = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
+$("cpOpen").onclick = cpShow; $("cpTop").onclick = cpShow;
+$("prClient").onclick = () => { $("printDlg").hidden = true; cpShow(); };
 $("cpClose").onclick = () => { $("cpDlg").hidden = true; };
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
 $("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
-$("cpSide").onchange = (e) => { cdoc().side = e.target.checked; cpSave(); cpRender(); };
-$("cp3d").onchange = (e) => { cdoc().three = e.target.checked; cpSave(); cpRender(); };
+$("cpAllParts").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k !== "three" || !!R3; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
+$("cpPriceOnly").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k === "price" || k === "terms"; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
 for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
 $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = scopeAuto(); cpSave(); cpRender(); };
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
-async function cpJpegs() { const pages = cpPagesCache || clientPages(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
-$("cpPdf").onclick = async () => { try { cpPagesCache = clientPages(); saveFile(`${slug(job.name)}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
+async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
+$("cpPdf").onclick = async () => { try { if (!cpChosen().length) { toast("Tick at least one page."); return; } saveFile(`${slug(job.name)}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
 $("cpPrintBtn").onclick = () => {
-  cpPagesCache = clientPages(); const box = $("cpPrint"); box.innerHTML = "";
-  for (const pg of cpPagesCache) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
+  if (!cpChosen().length) { toast("Tick at least one page."); return; }
+  const box = $("cpPrint"); box.innerHTML = "";
+  for (const pg of cpChosen()) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
   document.body.classList.add("cp-printing");
   const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); };
   window.addEventListener("afterprint", done);
@@ -3240,7 +3277,7 @@ function sanitizeJob(j) {
       equip: Array.isArray(j.equip) ? j.equip.slice(0, 40).filter((q) => q && typeof q === "object").map((q) => ({ id: String(q.id || "m").slice(0, 20), name: String(q.name || "Machine").slice(0, 80), use: q.use ? 1 : 0, yard: String(q.yard || "").slice(0, 40), rate: num(q.rate, 0, 0, 1e5), days: num(q.days, 1, 0, 1000) })) : undefined,
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
-        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three }; })(),
+        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three, parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
