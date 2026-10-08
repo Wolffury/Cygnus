@@ -431,6 +431,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <h2>Estimate &amp; quote</h2>
         <button class="btn primary" id="cpOpen">Client package: preview, pick pages, print or PDF</button>
         <div id="quoteSummary"></div>
+        <details id="negBox"><summary>Room to negotiate (only you see this)</summary><div id="negList"></div></details>
         <h3>Where to buy</h3>
         <p class="note">Pick who you buy each material from. A supplier's price goes straight into the quote; type a price to update it (it is remembered for that supplier). Suppliers and prices below were found online in Oct 2026: always confirm stock and price before ordering.</p>
         <div id="buyList"></div>
@@ -2854,9 +2855,40 @@ function renderEquip() {
 }
 $("eqAdd").onclick = () => { snapshot(); job.equip = [...(Array.isArray(job.equip) ? job.equip : DEFAULT_EQUIP()), { id: "m" + Date.now().toString(36), name: "New machine", use: 1, yard: "", rate: 0, days: 1 }]; commit(); };
 let clientOpen = false;
+// Ways to bring the price down, held back for negotiating. Each is worked out on a copy of the job, so the
+// savings follow the current quote; Apply makes the change for real.
+const NEGOTIATE = [
+  { k: "borders", g: "Design", t: "Drop the block-and-cap borders on the terraces and landings", d: "Pavers on compacted base with edging, soil banked against the sides. The stair looks and works the same.",
+    on: (j) => j.items.some((i) => i.type === "landing" && i.edge === "caps" && !isGabion(mat(i.surface))), fn: (j) => { for (const i of j.items) if (i.type === "landing" && i.edge === "caps" && !isGabion(mat(i.surface))) { i.edge = "none"; i.edging = "plastic"; } } },
+  { k: "posts", g: "Design", t: "Handrail posts every 6 ft instead of 4 ft", d: "Fewer posts, footings and holes. Check the rail span and local code.",
+    on: (j) => j.items.some((i) => i.type === "rail" && (i.spacing || 48) < 72), fn: (j) => { for (const i of j.items) if (i.type === "rail") i.spacing = 72; } },
+  { k: "gabbuy", g: "Design", t: "Buy ready-made gabion baskets", d: "Instead of building them from mesh.",
+    on: (j) => !!(j.est || {}).gabionDiy && j.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))), fn: (j) => { j.est.gabionDiy = 0; } },
+  { k: "cut", g: "Labour", t: "Cutting at 5 minutes a cut", d: "Only if that's how fast you cut.", on: (j) => ({ ...EST_DEFAULTS, ...j.est }).hrCut > 0.08, fn: (j) => { j.est.hrCut = 0.08; } },
+  { k: "set", g: "Labour", t: "Caps in 12 minutes, riser pieces in 18", d: "Only if that's how fast you set them.", on: (j) => { const E = { ...EST_DEFAULTS, ...j.est }; return E.hrCap > 0.2 || E.hrStepBlock > 0.3; }, fn: (j) => { j.est.hrCap = Math.min(j.est.hrCap ?? 0.25, 0.2); j.est.hrStepBlock = Math.min(j.est.hrStepBlock ?? 0.35, 0.3); } },
+  { k: "barrow", g: "Labour", t: "Wheelbarrow trips of 8 minutes", d: "Have the Hiab set the pallets close to the top of the stair.", on: (j) => { const E = { ...EST_DEFAULTS, ...j.est }; return E.barrow && E.barrowMin > 8; }, fn: (j) => { j.est.barrowMin = 8; } },
+  { k: "cont", g: "Margin", t: "Contingency down to 2%", d: "Once the quantities are firm.", on: (j) => ({ ...EST_DEFAULTS, ...j.est }).contingency > 2, fn: (j) => { j.est.contingency = 2; } },
+  { k: "markup", g: "Margin", t: "Overhead & profit down to 15%", d: "Comes out of your profit.", on: (j) => ({ ...EST_DEFAULTS, ...j.est }).markup > 15, fn: (j) => { j.est.markup = 15; } },
+  { k: "gst", g: "Tax", t: "Don't charge GST", d: "Only if you're not registered for GST (small supplier).", on: (j) => !!({ ...EST_DEFAULTS, ...j.est }).chargeGst, fn: (j) => { j.est.chargeGst = 0; } },
+];
+function totalWith(fns) { const keep = job; job = JSON.parse(JSON.stringify(keep)); job.est = { ...EST_DEFAULTS, ...job.est }; try { fns.forEach((f) => f(job)); return estimate().total; } finally { job = keep; } }
+function renderNegotiate() {
+  if (!$("negList")) return;
+  const base = estimate().total, live = NEGOTIATE.filter((o) => o.on(job));
+  if (!live.length) { $("negList").innerHTML = '<p class="note">Nothing left to give: every option is already in the quote.</p>'; return; }
+  const rows = live.map((o) => ({ o, save: round2(base - totalWith([o.fn])) })).filter((r) => r.save > 0.5);
+  const groups = ["Design", "Labour", "Margin", "Tax"].map((g) => [g, rows.filter((r) => r.o.g === g)]).filter(([, r]) => r.length);
+  const all = round2(base - totalWith(live.map((o) => o.fn)));
+  $("negList").innerHTML = `<p class="note">What each change takes off today's ${money(base)}. Held back for negotiating: nothing here is in the quote until you tap Apply (Undo takes it back).</p>
+    <table class="qt"><tbody>${groups.map(([g, r]) => `<tr class="cat"><td colspan="3" style="text-align:left">${g}</td></tr>` + r.map(({ o, save }) => `<tr><td>${escapeHtml(o.t)}<small>${escapeHtml(o.d)}</small></td><td>−${money(save)}</td><td><button class="btn small" data-neg="${o.k}">Apply</button></td></tr>`).join("")).join("")}
+    <tr class="sub"><td>All of them together</td><td>−${money(all)}</td><td>${money(round2(base - all))}</td></tr></tbody></table>`;
+  $("negList").querySelectorAll("[data-neg]").forEach((b) => b.onclick = () => { const o = NEGOTIATE.find((x) => x.k === b.dataset.neg); snapshot(); job.est = { ...EST_DEFAULTS, ...job.est }; o.fn(job); commit(); renderEstFields(); toast(`Applied: ${o.t}. Undo takes it back.`); });
+}
+$("negBox").addEventListener("toggle", () => { if ($("negBox").open) renderNegotiate(); });
 function renderQuote() {
   renderBuy(); renderEquip();
   const q = estimate();
+  if ($("negBox") && $("negBox").open) renderNegotiate();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
   const catRows = order.filter((c) => q.cats[c]).map((c) => `<tr><td>${c}</td><td>${money(q.cats[c])}</td></tr>`).join("");
   const detail = order.filter((c) => q.cats[c]).map((c) => `<tr class="cat"><td colspan="3">${c}</td></tr>` + q.lines.filter((l) => l.cat === c).map((l) => `<tr><td>${escapeHtml(l.desc)}<small>${escapeHtml(l.note)}</small></td><td>${num1(l.qty)} ${l.unit} × ${money(l.price)}</td><td>${money(l.total)}</td></tr>`).join("")).join("");
