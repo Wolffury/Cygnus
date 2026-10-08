@@ -295,6 +295,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     </div>
     <div class="spacer"></div>
     <span class="sync" id="syncState" hidden></span>
+    <button class="btn" id="themeBtn" aria-label="Switch dark or light background">Dark</button>
     <button class="btn" id="jobsTop">My jobs</button>
     <button class="btn" id="newTop">New job</button>
     <button class="btn" id="undoBtn" title="Undo">Undo</button>
@@ -631,6 +632,11 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <div class="row" style="justify-content:space-between"><h2 id="jobsTitle">My jobs</h2><div class="row"><button class="btn primary" id="jobsNew">New job</button><button class="btn" id="jobsClose" aria-label="Close">✕</button></div></div>
     <p class="note">Every plan you've saved. Opening one saves the job you have open first, so nothing is lost. Saved jobs sync between your devices.</p>
     <div id="jobsCards"></div>
+    <h3>Backup on your computer</h3>
+    <p class="note">One file with all your jobs, rates, prices, materials, suppliers and company details. On a PC in Chrome or Edge you pick the folder and file name. If your browser can't, it goes to your Downloads folder (turn on "Ask where to save each file" in the browser's download settings to choose).</p>
+    <label class="f">File name <input id="bkName" autocomplete="off"></label>
+    <div class="row"><button class="btn primary" id="bkSave">Back up to a file</button><label class="btn">Restore from a file<input type="file" id="bkLoad" accept=".json,application/json" hidden></label></div>
+    <label class="checkrow" style="font-size:14px"><input type="checkbox" id="bkSettings"> When restoring, also replace my rates, prices, materials, suppliers and company details</label>
   </div>
 </div>
 <div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
@@ -3528,7 +3534,51 @@ function renderJobsDlg() {
   $("jobsCards").querySelectorAll("[data-jdel]").forEach((b) => b.onclick = () => { if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Tap again to delete"; b.classList.add("danger"); return; } store.set("bsp.jobs", jobsSaved().filter((x) => x.name !== b.dataset.jdel)); renderJobs(); renderJobsDlg(); toast("Deleted " + b.dataset.jdel); });
 }
 function startNewJob() { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); $("jobsDlg").hidden = true; showPane("pJob"); setTimeout(() => { const n = $("jName"); if (n) { n.focus(); n.select(); } }, 300); toast(kept ? `Saved "${was}" in My jobs. Type a name for the new job.` : "New job started. Type a name for it."); }
-$("jobsTop").onclick = () => { renderJobsDlg(); $("jobsDlg").hidden = false; };
+// dark or light background, remembered on this device only
+function applyUiTheme(t) {
+  const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light"; $("themeBtn").textContent = dark ? "Light" : "Dark";
+}
+{ let t = ""; try { t = localStorage.getItem("bsp-ui-theme") || ""; } catch {} applyUiTheme(t); }
+$("themeBtn").onclick = () => { const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; try { localStorage.setItem("bsp-ui-theme", t); } catch {} applyUiTheme(t); };
+$("jobsTop").onclick = () => { renderJobsDlg(); $("bkName").value = `Block Step Planner backup ${isoDay(new Date())}`; $("jobsDlg").hidden = false; };
+// save with a "Save as" box where the browser allows it (Chrome / Edge on a PC), otherwise the normal download
+async function saveAsFile(name, blob) {
+  if (window.showSaveFilePicker && !window.AndroidBridge) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "Block Step Planner file", accept: { "application/json": [".json"] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close(); toast(`Saved ${h.name}`); return;
+    } catch (e) { if (e && e.name === "AbortError") return; } // cancelled; anything else (not allowed here) falls through to a download
+  }
+  await saveFile(name, blob);
+}
+const BACKUP_KEYS = ["jobs", "library", "prices", "company", "csvmap", "defaults", "est", "suppliers", "suppliersRemoved"];
+$("bkSave").onclick = () => {
+  keepCurrent();
+  const data = { app: "Block Step Planner", kind: "backup", v: 1, saved: new Date().toISOString(), current: job };
+  for (const k of BACKUP_KEYS) data[k] = store.get("bsp." + k, null);
+  const name = (($("bkName").value || "").trim() || `Block Step Planner backup ${isoDay(new Date())}`).replace(/[\\/:*?"<>|]+/g, "-").replace(/\.json$/i, "") + ".json";
+  saveAsFile(name, new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+};
+$("bkLoad").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let data; try { data = JSON.parse(await f.text()); } catch { toast("That file isn't a Block Step Planner backup."); return; }
+  if (data && Array.isArray(data.items)) data = { kind: "backup", jobs: [{ name: data.name, saved: Date.now(), job: data }] }; // a single job file works too
+  if (!data || data.kind !== "backup" || !Array.isArray(data.jobs)) { toast("That file isn't a Block Step Planner backup."); return; }
+  keepCurrent();
+  const list = jobsSaved(), names = new Set(list.map((x) => x.name)); let added = 0;
+  for (const x of [...data.jobs, ...(data.current && data.current.items ? [{ name: data.current.name, saved: Date.parse(data.saved) || Date.now(), job: data.current }] : [])]) {
+    if (!x || !x.job || !Array.isArray(x.job.items)) continue;
+    const same = list.find((y) => y.name === x.name);
+    if (same && JSON.stringify(same.job) === JSON.stringify(x.job)) continue; // already here, unchanged
+    let nm = x.name || "Job"; if (names.has(nm)) nm += " (from backup)"; while (names.has(nm)) nm += "+";
+    names.add(nm); list.push({ name: nm, saved: x.saved || Date.now(), job: { ...x.job, name: nm } }); added++;
+  }
+  store.set("bsp.jobs", list.slice(0, 40));
+  if ($("bkSettings").checked) for (const k of BACKUP_KEYS) if (k !== "jobs" && data[k] != null) store.set("bsp." + k, data[k]);
+  renderJobs(); renderJobsDlg(); renderEstFields(); renderMaterials();
+  toast(`Restored ${plural(added, "job")} from ${f.name}${$("bkSettings").checked ? ", and your settings" : ""}. Open them from the list.`);
+};
 $("jobsClose").onclick = () => { $("jobsDlg").hidden = true; };
 $("jobsDlg").addEventListener("click", (e) => { if (e.target === $("jobsDlg")) $("jobsDlg").hidden = true; });
 $("jobsNew").onclick = startNewJob; $("newTop").onclick = startNewJob;
