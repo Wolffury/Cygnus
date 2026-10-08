@@ -2227,6 +2227,59 @@ plan.addEventListener("wheel", (e) => {
   view2d.ox = e.offsetX - (e.offsetX - view2d.ox) * r; view2d.oy = e.offsetY - (e.offsetY - view2d.oy) * r; view2d.s = ns; drawPlan();
 }, { passive: false });
 
+// ---------- curve a row of blocks or pavers ----------
+// The row: placed units at the same height, touching end to end in one line (no branches)
+function unitRow(it) {
+  const pool = job.items.filter((i) => i.type === "unit" && Math.abs((i.z || 0) - (it.z || 0)) < 0.1);
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 2 * 1.15 + 1;
+  const nb = new Map(pool.map((a) => [a.id, pool.filter((b) => b !== a && near(a, b))]));
+  const seen = new Set([it.id]), q = [it];
+  while (q.length) { const a = q.shift(); for (const b of nb.get(a.id)) if (!seen.has(b.id)) { seen.add(b.id); q.push(b); } }
+  const units = pool.filter((a) => seen.has(a.id));
+  if (units.length < 3) return { error: "Curve needs a row of at least 3 blocks or pavers touching end to end." };
+  if (units.some((a) => nb.get(a.id).length > 2)) return { error: "This is an area, not a single row. Curve works on one row of blocks or pavers at a time." };
+  const ends = units.filter((a) => nb.get(a.id).length === 1);
+  if (ends.length !== 2) return { error: "Couldn't find the two ends of this row." };
+  const order = [ends[0]]; while (order.length < units.length) { const nx = nb.get(order[order.length - 1].id).find((b) => !order.includes(b)); if (!nx) break; order.push(nx); }
+  if (order.length !== units.length) return { error: "Couldn't follow this row from end to end." };
+  const a = order[0], b = order[order.length - 1]; if (b.x < a.x - 0.01 || (Math.abs(b.x - a.x) <= 0.01 && b.y < a.y)) order.reverse(); // steady left-to-right order, so the bend side stays put
+  return { units: order };
+}
+// Arc through the row: rises h from the line between the ends' midpoint, row length A kept. Returns the pose at distance d from the middle.
+function arcR(A, h) { if (Math.abs(h) < 0.01) return Infinity; let lo = A / Math.PI * 1.0001, hi = 1e7; for (let k = 0; k < 90; k++) { const m = (lo + hi) / 2; if (m * (1 - Math.cos(A / m / 2)) > Math.abs(h)) lo = m; else hi = m; } return (lo + hi) / 2; }
+function arcPose(F, A, h, d) {
+  const R = arcR(A, h), sg = Math.sign(h) || 1;
+  if (!isFinite(R)) return { x: F.cx + F.ux * d, y: F.cy + F.uy * d, tan: Math.atan2(F.uy, F.ux) };
+  const f = d / R, along = R * Math.sin(f), out = Math.abs(h) - R + R * Math.cos(f);
+  return { x: F.cx + F.ux * along + F.nx * sg * out, y: F.cy + F.uy * along + F.ny * sg * out, tan: Math.atan2(F.uy * Math.cos(f) - F.ny * sg * Math.sin(f), F.ux * Math.cos(f) - F.nx * sg * Math.sin(f)) };
+}
+// Everything needed to re-bend a row: its frame, each unit's distance along it, starting poses, and anything stacked on it
+function curveSession(it) {
+  const r = unitRow(it); if (r.error) return r;
+  const units = r.units, A0 = units[0], B0 = units[units.length - 1], h0 = +A0.bend || 0;
+  const cx = (A0.x + B0.x) / 2, cy = (A0.y + B0.y) / 2; let ux = B0.x - A0.x, uy = B0.y - A0.y; const c = Math.hypot(ux, uy) || 1; ux /= c; uy /= c;
+  const F = { cx, cy, ux, uy, nx: -uy, ny: ux };
+  let s;
+  if (Math.abs(h0) < 0.01) s = units.map((p) => (p.x - cx) * ux + (p.y - cy) * uy);
+  else { const R0 = (c * c / 4 + h0 * h0) / (2 * Math.abs(h0)), sg = Math.sign(h0), ox = cx + F.nx * sg * (Math.abs(h0) - R0), oy = cy + F.ny * sg * (Math.abs(h0) - R0);
+    s = units.map((p) => { const vx = p.x - ox, vy = p.y - oy; return Math.atan2(vx * ux + vy * uy, (vx * F.nx + vy * F.ny) * sg) * R0; }); }
+  const A = s[s.length - 1] - s[0], mid = (s[0] + s[s.length - 1]) / 2, d = s.map((v) => v - mid);
+  const start = units.map((p, k) => ({ rot: p.rot || 0, tan: arcPose(F, A, h0, d[k]).tan }));
+  const ids = new Set(units.map((u) => u.id)), stacked = [];
+  for (const o of job.items) if (o.type === "unit" && !ids.has(o.id) && (o.z || 0) > (it.z || 0) + 0.1) { // carried along by the row unit it sits on
+    let best = null, bd = Infinity; for (const p of units) { const dd = Math.hypot(o.x - p.x, o.y - p.y); if (dd < bd) { bd = dd; best = p; } }
+    if (best && bd <= Math.max(best.w, best.d) * 0.75) { const l = localOf(best, o.x, o.y); stacked.push({ o, base: best, lx: l.x, ly: l.y, drot: (o.rot || 0) - (best.rot || 0) }); }
+  }
+  return { units, F, A, d, start, stacked, h0, maxH: A / Math.PI * 0.98 };
+}
+function applyCurve(S, h) {
+  h = clamp(h, -S.maxH, S.maxH);
+  S.units.forEach((p, k) => { const q = arcPose(S.F, S.A, h, S.d[k]); p.x = Math.round(q.x * 1000) / 1000; p.y = Math.round(q.y * 1000) / 1000;
+    p.rot = Math.round((((S.start[k].rot - (q.tan - S.start[k].tan) * 180 / Math.PI) % 360) + 360) % 360 * 100) / 100; p.bend = Math.round(h * 100) / 100; });
+  for (const st of S.stacked) { const q = rotPt(st.base, st.lx, st.ly); st.o.x = Math.round(q.x * 1000) / 1000; st.o.y = Math.round(q.y * 1000) / 1000; st.o.rot = ((((st.base.rot || 0) + st.drot) % 360) + 360) % 360; }
+  return h;
+}
+
 // ---------- panels ----------
 function showPane(id) {
   for (const b of document.querySelectorAll(".tabs button")) { const on = b.dataset.pane === id; b.setAttribute("aria-selected", on); $(b.dataset.pane).hidden = !on; }
@@ -2320,7 +2373,8 @@ function renderItemPane() {
       ${field("Length", "w", it)}${field("Depth", "d", it)}${field("Height", "h", it)}${field("Sits at elevation", "z", it)}${field("Rotation °", "rot", it, "deg")}</div>
       <p class="note">${cuts.length ? "Cut: " + cuts.join(", ") + "." : "Full block, no cuts."} The thick edge is the face. Drag the handles to cut it shorter.</p>
       <div class="row"><button class="btn" id="unitNext">Add next in row</button><button class="btn" id="unitStack">Stack on top</button></div>
-      <div class="row"><label class="f" style="flex:1">Repeat along the row<input id="unitRepeat" inputmode="numeric" placeholder="e.g. 6"></label><button class="btn" id="unitRepeatGo" style="align-self:flex-end">Add</button></div>`;
+      <div class="row"><label class="f" style="flex:1">Repeat along the row<input id="unitRepeat" inputmode="numeric" placeholder="e.g. 6"></label><button class="btn" id="unitRepeatGo" style="align-self:flex-end">Add</button></div>
+      <h3>Curve this row</h3><div id="curveBox"></div>`;
   } else if (t === "shore") {
     h = `<h2>Shoreline</h2><label class="f">Label<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>
       <div class="grid2">${field("Water level (elevation)", "water", it)}<span></span></div>
@@ -2371,6 +2425,21 @@ function renderItemPane() {
   $("toSide") && ($("toSide").onclick = () => { const c = job.items.find((i) => i.type === "cut"); if (it.type === "cut") sideCutId = it.id; else if (!c) { toast("Draw a section line first: Ground tool → Section line."); return; } setView("side"); });
   $("flipWater") && ($("flipWater").onclick = () => { snapshot(); it.side = -(it.side || 1); commit(); });
   if (t === "unit") {
+    { const S0 = curveSession(it), box = $("curveBox");
+      if (S0.error) box.innerHTML = `<p class="note">${escapeHtml(S0.error)}</p>`;
+      else {
+        const lim = Math.floor(S0.maxH), riseTxt = (v) => Math.abs(v) < 0.5 ? "straight" : `${plainLen(Math.abs(v))} rise${v < 0 ? ", bent the other way" : ""}`;
+        box.innerHTML = `<p class="note">${S0.units.length} in this row, ${plainLen(S0.A + Math.max(S0.units[0].w, S0.units[0].d))} long. Drag to bend it into an arc; the spacing along the row stays the same.${S0.stacked.length ? ` The ${plural(S0.stacked.length, "block")} stacked on it move${S0.stacked.length === 1 ? "s" : ""} with it.` : ""}</p>
+          <label class="f">Bend: <span id="curveVal">${riseTxt(S0.h0)}</span><input type="range" id="curveR" min="${-lim}" max="${lim}" step="1" value="${Math.round(S0.h0)}" style="width:100%"></label>
+          <div class="row"><button class="btn small" id="curveFlip">Bend the other way</button><button class="btn small" id="curveStraight">Straighten</button><button class="btn small" id="curveHalf">Half circle</button></div>`;
+        let S = null; const rng = $("curveR");
+        const go = (v, done) => { if (!S) { snapshot(); S = curveSession(it); } const hv = applyCurve(S, v); $("curveVal").textContent = riseTxt(hv); if (done) { S = null; commit(); } else drawPlan(); };
+        rng.addEventListener("input", () => go(+rng.value, false));
+        rng.addEventListener("change", () => go(+rng.value, true));
+        $("curveFlip").onclick = () => go(-(+it.bend || 0), true);
+        $("curveStraight").onclick = () => go(0, true);
+        $("curveHalf").onclick = () => go((Math.sign(+it.bend || 1)) * S0.maxH, true);
+      } }
     const copyAt = (lx, dz) => { const p = rotPt(it, lx, 0); return { ...it, id: newId(), x: Math.round(p.x * 8) / 8, y: Math.round(p.y * 8) / 8, z: (it.z || 0) + dz }; };
     $("unitNext").onclick = () => { snapshot(); const c = copyAt(it.w, 0); job.items.push(c); selId = c.id; commit(); };
     $("unitStack").onclick = () => { snapshot(); const c = copyAt(it.w / 2, it.h); job.items.push(c); selId = c.id; commit(); };
@@ -3627,6 +3696,7 @@ function sanitizeItem(raw, legacy) {
   }
   if (out.type === "shore") out.side = raw.side === -1 ? -1 : 1;
   out.rot = ((out.rot % 360) + 360) % 360;
+  if (out.type === "unit" && raw.bend != null && isFinite(+raw.bend) && +raw.bend !== 0) out.bend = clamp(+raw.bend, -5000, 5000);
   for (const k of ["lox", "loy"]) if (raw[k] != null && isFinite(+raw[k]) && +raw[k] !== 0) out[k] = clamp(Math.round(+raw[k]), -5000, 5000);
   if (out.type === "steps") {
     out.w = Math.max(out.w, 12);
