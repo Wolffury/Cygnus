@@ -490,6 +490,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <h3>Getting it there</h3>
         <label class="f">How it gets there <select id="hMode"><option value="0">Supplier's delivery truck</option><option value="1">I haul it with my truck and trailer</option></select></label>
         <div class="grid2" id="hTruck">
+          <label class="f">Delivery $ per truck load <input id="fDel" inputmode="decimal"></label>
+          <label class="f">Ferry <select id="fIncl"><option value="0">Added on top of delivery</option><option value="1">Included in the delivery price</option></select></label>
           <label class="f">Ferry $ per foot, one way (0 = no ferry) <input id="fPerFt" inputmode="decimal"></label>
           <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
           <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
@@ -799,7 +801,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -2629,12 +2631,13 @@ function estimate() {
       const yards = suppliers();
       for (const q of job.equip) if (q.use && q.days > 0 && q.rate > 0) { const y = yards.find((x) => x.id === q.yard); L("Equipment & disposal", `${q.name}${y ? `, rented from ${y.name}` : ""}`, q.days, q.days === 1 ? "day" : "days", q.rate); }
     } else L("Equipment & disposal", "Equipment: rammer compactor, wet saw, mini excavator", 1, "lot", E.equipment);
-    L("Equipment & disposal", "Material delivery", 1, "lot", E.delivery);
+    const loads = E.haulSelf ? 1 : Math.max(1, Math.ceil(E.ferryLoads || 1));
+    L("Equipment & disposal", `Material delivery to site${!E.haulSelf && E.ferryIncl && E.ferryPerFt > 0 ? ", ferry included" : ""}`, loads, loads === 1 ? "load" : "loads", E.delivery);
     if (E.haulSelf) {
       const hp = haulPlan(E);
       L("Equipment & disposal", `Ferry with my truck and ${num1(E.rigFt)} ft rig (${hp.trips} trips, about ${num1(hp.kg / 1000)} t at ${num1(hp.pay / 1000)} t a trip; return free)`, hp.trips, "trip", round2(hp.fare));
       L("Labour", `Hauling materials (${hp.trips} trips × ${num1(E.hrsPerTrip)} h)`, ceilTo(hp.trips * E.hrsPerTrip, 0.5), "hr", E.labourRate);
-    } else if (E.ferryPerFt > 0) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
+    } else if (E.ferryPerFt > 0 && !E.ferryIncl) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
     L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
@@ -2674,7 +2677,7 @@ const EST_FIELDS = [
   ["gst", "GST %"], ["pst", "PST on materials %"], ["deposit", "Deposit %"], ["validDays", "Quote valid (days)"],
   ["baseDepth", 'Base depth (in)'], ["basePerTon", "Road base $/ton"], ["drainPerYd", "Drain rock $/yd³"], ["sandPerYd", "Bedding sand $/yd³"],
   ["polyBag", "Polymeric sand $/bag"], ["adhesive", "Adhesive $/tube"], ["capsPerTube", "Caps per tube"], ["equipment", "Equipment $ (lot)"],
-  ["delivery", "Delivery $ (lot)"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
+  ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
   ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
@@ -2738,7 +2741,8 @@ function renderBuy() {
     commit(); renderMaterials();
   });
   // ferry
-  const F = [["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
+  $("fIncl").value = String((job.est || {}).ferryIncl ? 1 : 0); $("fIncl").onchange = () => { snapshot(); job.est = { ...job.est, ferryIncl: +$("fIncl").value }; commit(); };
+  const F = [["fDel", "delivery"], ["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
   const E2 = { ...EST_DEFAULTS, ...job.est };
   if (document.activeElement !== $("bDay")) $("bDay").value = E2.barrowDay;
   for (const [el, k] of [["bKg", "barrowKg"], ["bMin", "barrowMin"], ["bHrs", "barrowHrsDay"]]) { const inp = $(el); if (document.activeElement !== inp) inp.value = E2[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = E2[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
