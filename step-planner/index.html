@@ -3492,19 +3492,22 @@ function jobsSaved() { return store.get("bsp.jobs", []); }
 function renderJobs() {
   const list = jobsSaved();
   $("jobList").innerHTML = list.length ? list.map((j, i) => `<button data-i="${i}"><span>${escapeHtml(j.name || "Untitled")}</span><span>${new Date(j.saved).toLocaleDateString()}</span></button>`).join("") : '<p class="note">No saved jobs on this tablet yet.</p>';
-  $("jobList").querySelectorAll("button").forEach((b) => b.onclick = () => { snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(list[+b.dataset.i].job))); selId = null; afterLoad(); toast("Opened " + (job.name || "job")); });
+  $("jobList").querySelectorAll("button").forEach((b) => b.onclick = () => { const pick = list[+b.dataset.i]; if (pick.name !== job.name) keepCurrent(); snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(pick.job))); selId = null; afterLoad(); toast("Opened " + (job.name || "job")); });
 }
-$("saveJob").onclick = () => {
+// put the open job in Saved jobs (replacing an older copy with the same name)
+function keepCurrent() {
+  if (!job.items.length) return false;
   const list = jobsSaved().filter((j) => j.name !== job.name);
-  list.unshift({ name: job.name, saved: Date.now(), job }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); toast("Saved " + (job.name || "job"));
-};
+  list.unshift({ name: job.name, saved: Date.now(), job: JSON.parse(JSON.stringify(job)) }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); return true;
+}
+$("saveJob").onclick = () => { keepCurrent(); toast("Saved " + (job.name || "job")); };
 function freshJob() {
   const j = { ...sampleJob(), name: "New job", client: "", notes: "", items: [], quoteNo: "" };
   j.defaults = { ...DEFAULTS, ...store.get("bsp.defaults", {}) }; j.est = { ...EST_DEFAULTS, ...store.get("bsp.est", {}) };
   j.prices = { ...store.get("bsp.prices", {}) }; j.custom = store.get("bsp.library", []);
   return j;
 }
-$("newJob").onclick = () => { snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); toast("Started a new job. Tap Undo to go back."); };
+$("newJob").onclick = () => { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); toast(kept ? `Saved "${was}" in Saved jobs and started a new job. Name it on the Job tab.` : "Started a new job."); };
 $("exportJson").onclick = () => saveFile(slug(job.name) + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
 $("importJson").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
