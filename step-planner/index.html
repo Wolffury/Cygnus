@@ -313,6 +313,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <div class="three-tools" id="sideTools" hidden>
         <label>Show <select id="sideCut"></select></label>
         <label id="sideVEBox">Heights <select id="sideVE"><option value="1">True scale</option><option value="2">× 2</option><option value="5">× 5</option></select></label>
+        <button class="btn" id="shapeBtn" aria-pressed="false">Shape ground</button>
+        <button class="btn" id="shapeDel" hidden>Delete point</button>
         <button class="btn primary" id="sideSave">Save side view</button>
       </div>
       <div class="stage-tools" id="planTools">
@@ -4339,12 +4341,15 @@ function stairSequence() {
   return els;
 }
 // natural ground along an element, as [distance along the view, height]
+// plan point t inches along an element of the stair sequence
+function seqPoint(el, t) {
+  if (el.kind === "steps") return rotPt(el.it, 0, -el.len / 2 + t);
+  const a = (el.dir || 0) * Math.PI / 180; return { x: el.it.x + Math.sin(a) * (t - el.len / 2), y: el.it.y + Math.cos(a) * (t - el.len / 2) };
+}
 function seqGround(el, step = 6) {
   const out = [];
   for (let t = 0; t <= el.len + 0.01; t += Math.min(step, el.len || step)) {
-    let p;
-    if (el.kind === "steps") p = rotPt(el.it, 0, -el.len / 2 + t);
-    else { const a = el.dir * Math.PI / 180; p = { x: el.it.x + Math.sin(a) * (t - el.len / 2), y: el.it.y + Math.cos(a) * (t - el.len / 2) }; }
+    const p = seqPoint(el, t);
     out.push([el.d0 + t, natGround(p.x, p.y)]);
     if (!el.len) break;
   }
@@ -4667,6 +4672,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   const soil = ctx.createLinearGradient(0, P(0, hi)[1], 0, Y + H); soil.addColorStop(0, "#9b7a55"); soil.addColorStop(1, "#6f5238"); ctx.fillStyle = soil; ctx.fill();
   if (wl != null) { ctx.save(); gPoly(); const [a] = P(total + extB, lo); ctx.lineTo(a, Y + H); ctx.lineTo(P(-extA, lo)[0], Y + H); ctx.closePath(); ctx.restore(); ctx.save(); ctx.beginPath(); ground.forEach(([d, z], k) => { const [a, b] = P(d, Math.max(z, wl)); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); for (let k = ground.length - 1; k >= 0; k--) { const [a, b] = P(ground[k][0], ground[k][1]); ctx.lineTo(a, b); } ctx.closePath(); ctx.fillStyle = "rgba(70,140,200,.55)"; ctx.fill(); ctx.restore(); }
   gPoly(); ctx.strokeStyle = "#5d8f37"; ctx.lineWidth = 4 * u; ctx.stroke();
+
   // each element
   const labels = [];
   for (const el of els) {
@@ -4716,7 +4722,11 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
       }
     }
   }
-  ctx.restore(); ctx.save();
+  if (ctx.canvas === $("side")) { // the big side view: remember how to turn a tap back into a place and height, and show the ground points
+    renderStairs.map = { els, total, ox, oy, sc, lo, P };
+    if (shapeGround) for (const sp of sideSpots(els)) { const [a, b] = P(sp.d, sp.it.elev || 0); ctx.beginPath(); ctx.arc(a, b, (sp.it.id === shapeSel ? 9 : 7) * u, 0, 7); ctx.fillStyle = sp.it.id === shapeSel ? "#e8590c" : "#fff"; ctx.fill(); ctx.lineWidth = 2.5 * u; ctx.strokeStyle = "#e8590c"; ctx.stroke();
+      if (sp.it.id === shapeSel) { ctx.font = `700 ${12 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = "#1d2733"; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(fmtElev(sp.it.elev || 0), a, b - 12 * u); } }
+  }  ctx.restore(); ctx.save();
   // words on the drawing
   const T = (t, x, y, size, color = "#1d2733", weight = 600, align = "center") => { ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
   T(single ? `${shortLabel(els.find((e) => e.it.id === which).it.label) || "Steps"}: side view, cut down the middle` : "Whole stairway from the side (bottom on the left)", X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700, "left");
@@ -4762,6 +4772,43 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   ctx.restore();
   return true;
 }
+// ---------- shape the ground from the side view ----------
+let shapeGround = false, shapeSel = null, shapeDrag = null;
+// spot heights that sit on the stair line, with their distance along the side view
+function sideSpots(els) {
+  const out = [];
+  for (const it of job.items.filter((i) => i.type === "spot")) {
+    let best = null;
+    for (const el of els) for (let t = 0; t <= el.len + 0.01; t += 3) { const q = seqPoint(el, t), dd = Math.hypot(q.x - it.x, q.y - it.y); if (!best || dd < best.dd) best = { dd, d: el.d0 + t }; if (!el.len) break; }
+    if (best && best.dd <= 18) out.push({ it, d: best.d });
+  }
+  return out;
+}
+function sidePlace(sx, sy) { // screen point on the side view → distance along, height, and the plan point under it
+  const m = renderStairs.map; if (!m) return null;
+  const d = clamp((sx - m.ox) / m.sc, 0, m.total), z = m.lo + (m.oy - sy) / m.sc;
+  const el = m.els.find((e) => d >= e.d0 && d <= e.d0 + e.len) || m.els[m.els.length - 1];
+  return { d, z, p: seqPoint(el, clamp(d - el.d0, 0, el.len)) };
+}
+$("shapeBtn").onclick = () => { shapeGround = !shapeGround; shapeSel = null; $("shapeBtn").setAttribute("aria-pressed", shapeGround); $("shapeBtn").classList.toggle("primary", shapeGround); $("shapeDel").hidden = true;
+  $("hint").textContent = shapeGround ? "Shape ground: drag the ground line up or down. Each drag sets a ground height (spot) at that point on the plan" : ""; drawSide(); };
+$("shapeDel").onclick = () => { if (!shapeSel) return; snapshot(); job.items = job.items.filter((i) => i.id !== shapeSel); shapeSel = null; $("shapeDel").hidden = true; commit(); drawSide(); toast("Ground point deleted. Tap Undo to bring it back."); };
+$("side").addEventListener("pointerdown", (e) => {
+  if (!shapeGround || !renderStairs.map) return;
+  const r = $("side").getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, pl = sidePlace(sx, sy); if (!pl) return;
+  const m = renderStairs.map, hit = sideSpots(m.els).find((sp) => { const [a, b] = m.P(sp.d, sp.it.elev || 0); return Math.hypot(a - sx, b - sy) <= 18; });
+  snapshot();
+  let it = hit && hit.it;
+  if (!it) { it = defaults("spot", Math.round(pl.p.x * 4) / 4, Math.round(pl.p.y * 4) / 4); it.elev = Math.round(pl.z * 2) / 2; job.items.push(it); }
+  shapeSel = it.id; shapeDrag = { it, moved: !hit }; $("shapeDel").hidden = false; $("side").setPointerCapture(e.pointerId); drawSide(); e.preventDefault();
+});
+$("side").addEventListener("pointermove", (e) => {
+  if (!shapeDrag) return;
+  const r = $("side").getBoundingClientRect(), pl = sidePlace(e.clientX - r.left, e.clientY - r.top); if (!pl) return;
+  shapeDrag.it.elev = Math.round(pl.z * 2) / 2; shapeDrag.moved = true; liveTip("ground at " + fmtElev(shapeDrag.it.elev), e.clientX - r.left, e.clientY - r.top); drawSide();
+});
+const shapeEnd = () => { if (!shapeDrag) return; shapeDrag = null; commit(); drawSide(); };
+$("side").addEventListener("pointerup", shapeEnd); $("side").addEventListener("pointercancel", shapeEnd);
 function drawSide() {
   if (view !== "side") return;
   const cv = $("side"), { w, h, dpr } = sizeCanvas(cv), ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4772,7 +4819,7 @@ function drawSide() {
     + cuts.map((c) => opt(c.id, `Ground section ${c.label || ""}`)).join("");
   const stairs = sideCutId && sideCutId.startsWith("stairs:") && flights.length;
   $("sideVEBox").hidden = !!stairs; cv.style.filter = stairs ? "" : (themeFilter() === "none" ? "" : themeFilter());
-  $("hint").textContent = stairs ? "Real colours and sizes. Pick a single flight under Show to see every block up close" : "Side view along the section line · exaggerate heights to read small slopes";
+  $("hint").textContent = stairs ? (shapeGround ? "Shape ground: drag the ground line up or down. Each point sets the ground height at that spot on the plan" : "Real colours and sizes. Pick a single flight under Show to see every block up close") : "Side view along the section line · exaggerate heights to read small slopes";
   if (stairs) { const wch = sideCutId.slice(7); if (renderStairs(ctx, 0, 0, w, h, 1, wch === "all" || flights.some((f) => f.id === wch) ? wch : "all")) return; }
   const cut = currentCut();
   if (!cut) {
