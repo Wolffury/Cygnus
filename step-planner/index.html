@@ -2995,8 +2995,8 @@ function drawSimplePlan(ctx, X, Y, w, h, u) {
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
   ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
 }
-const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["price", "Price"], ["terms", "Terms and signatures"]];
-const CP_PARTS_ON = { plan: true, side: true, three: false, scope: true, excl: true, time: true, price: true, terms: true };
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS_ON = { plan: true, side: true, three: false, scope: true, excl: true, time: true, tides: true, price: true, terms: true };
 function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
@@ -3123,6 +3123,21 @@ function clientPages() {
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
   const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
   if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
+  if (on.tides && d.tides && d.tides.length) {
+    head("Tides at the beach");
+    if (d.tideNote) text(d.tideNote, 21, { color: MUTED, after: 12 });
+    const ap = (hm) => { let [h, m] = hm.split(":").map(Number); const s = h < 12 ? "am" : "pm"; h = h % 12 || 12; return `${h}:${String(m).padStart(2, "0")}${s}`; };
+    for (const r of d.tides) {
+      const dn = dayName(new Date(r.date + "T12:00"));
+      const tl = r.tides.map(([tm, k, h]) => `${k} ${ap(tm)} ${h.toFixed(1)} m`);
+      room(34); x.font = F(21, 600); x.fillStyle = INK; x.textBaseline = "top"; x.fillText(dn, M, y);
+      x.font = F(18); x.fillStyle = MUTED; x.fillText(r.phase || "", M, y + 25);
+      x.font = `400 20px "IBM Plex Mono", ui-monospace, monospace`; x.fillStyle = INK; x.fillText(tl.slice(0, 2).join("   "), M + CW * 0.22, y + 2); if (tl.length > 2) x.fillText(tl.slice(2).join("   "), M + CW * 0.22, y + 27);
+      if (r.wmin) { x.textAlign = "right"; x.font = F(18); x.fillStyle = MUTED; x.fillText(`lowest 8–4: ${r.wmin[1].toFixed(1)} m`, W - M, y + 2); x.textAlign = "left"; }
+      y += 52; x.fillStyle = "#e6ebef"; x.fillRect(M, y - 6, CW, 1);
+    }
+    y += 10;
+  }
   if (on.price) {
   head("Price");
   const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
@@ -3388,7 +3403,9 @@ function sanitizeJob(j) {
       equip: Array.isArray(j.equip) ? j.equip.slice(0, 40).filter((q) => q && typeof q === "object").map((q) => ({ id: String(q.id || "m").slice(0, 20), name: String(q.name || "Machine").slice(0, 80), use: q.use ? 1 : 0, yard: String(q.yard || "").slice(0, 40), rate: num(q.rate, 0, 0, 1e5), days: num(q.days, 1, 0, 1000) })) : undefined,
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
-        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three, parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
+        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
+          tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
+          tideNote: t(d.tideNote, 1500), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
