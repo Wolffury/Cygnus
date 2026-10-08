@@ -3153,7 +3153,7 @@ function valueAuto() {
 }
 // the headline: best stair for the money, nothing skimped
 function bestLine(E) {
-  const its = job.items, save = ["following the existing route", "measuring every block and tonne from a scaled plan instead of guessing", `ordering everything on ${E.bulkSep ? "one truck load plus one local gravel delivery" : "one truck load"}`];
+  const its = job.items, save = ["following the existing route", "measuring every block and tonne from a scaled plan instead of guessing", `ordering everything on ${E.bulkSep ? "one truck load plus one gravel delivery brought over from town" : "one truck load"}`];
   const keep = [`a full ${fmtIn(E.baseDepth)} compacted gravel base`];
   if (its.some((i) => i.type === "drain")) keep.push("proper drainage");
   keep.push("every cap glued down");
