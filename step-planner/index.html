@@ -1190,6 +1190,34 @@ function natGround(x, y) {
 const fmtElev = (z) => (z < -0.06 ? "−" : "+") + fmtLen(Math.abs(z));
 function waterLevel() { const sh = job.items.find((i) => i.type === "shore"); return sh ? sh.water || 0 : null; }
 
+// The 3D ground dug out for placed blocks and pavers: just under their tops inside, rising 1:1 to the natural ground around them,
+// so the finished work shows instead of being buried. Null when the job has no placed units.
+function unitDigger() {
+  const us = job.items.filter((i) => i.type === "unit" && (i.z || 0) > -1e4); if (!us.length) return null;
+  const B = 24, R = 30, cells = new Map(), key = (cx, cy) => cx + "," + cy;
+  for (const u of us) {
+    const poly = unitWorldPoly(u), xs = poly.map((p) => p.x), ys = poly.map((p) => p.y), e = { u, poly };
+    for (let cx = Math.floor((Math.min(...xs) - R) / B); cx <= Math.floor((Math.max(...xs) + R) / B); cx++)
+      for (let cy = Math.floor((Math.min(...ys) - R) / B); cy <= Math.floor((Math.max(...ys) + R) / B); cy++) { const k = key(cx, cy); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(e); }
+  }
+  const distTo = (poly, x, y) => { // 0 inside, else distance to the outline
+    let inside = false, d = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[j], b = poly[i];
+      if ((b.y > y) !== (a.y > y) && x < (a.x - b.x) * (y - b.y) / (a.y - b.y) + b.x) inside = !inside;
+      const dx = b.x - a.x, dy = b.y - a.y, t = clamp(((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+      d = Math.min(d, Math.hypot(a.x + t * dx - x, a.y + t * dy - y));
+    }
+    return inside ? 0 : d;
+  };
+  return (x, y, z) => {
+    for (const { u, poly } of cells.get(key(Math.floor(x / B), Math.floor(y / B))) || []) {
+      const d = distTo(poly, x, y); if (d > R) continue;
+      z = Math.min(z, unitTopAt(u, x, y) - 0.75 + d);
+    }
+    return z;
+  };
+}
 // Finished ground: the natural ground, dug out where steps are set into it.
 function finishedAt(x, y) {
   let z = terrainAt(x, y);
@@ -3234,11 +3262,43 @@ let cpSkip = new Set(); // pages left out of this PDF / print (by page number); 
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
 const listAnd = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+// What kind of job this is, read from the plan, so the client wording fits this job and no other
+function jobFacts() {
+  const its = job.items, E = { ...EST_DEFAULTS, ...job.est }, units = its.filter((i) => i.type === "unit");
+  const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), flights = its.filter((i) => i.type === "steps");
+  const isChan = (m) => !!m && /channel|grate/i.test(m.name || ""), groups = new Map();
+  for (const it of units) {
+    const m = mat(it.block); if (!m) continue; const k = it.block + "|" + (it.color || ""), g = groups.get(k) || { m, color: it.color || "", n: 0, cut: 0, glued: 0, area: 0, len: 0 };
+    g.n++; if (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05) g.cut++; if (unitOnUnit(it)) g.glued++; g.area += unitArea(it) / 144; g.len += it.w / 12; groups.set(k, g);
+  }
+  const ug = [...groups.values()].sort((a, b) => b.area - a.area);
+  const pavers = ug.filter((g) => g.m.kind === "paver" && g.glued < g.n / 3), trims = ug.filter((g) => g.m.kind !== "block" && !isChan(g.m) && !pavers.includes(g));
+  const blocks = ug.filter((g) => g.m.kind === "block" && !isChan(g.m)), chans = ug.filter((g) => isChan(g.m));
+  const unitSteps = blocks.length > 0 && (pavers.length > 0 || trims.length > 0);
+  const beach = gab.length > 0 || its.some((i) => i.type === "shore") || /beach|shore|waterfront/i.test(`${job.name} ${job.notes}`);
+  const island = E.ferryPerFt > 0 || !!E.ferryIncl || !!E.haulSelf || /\b(pender|galiano|mayne|saturna|gabriola|salt ?spring|denman|hornby|quadra|cortes|lasqueti|thetis|bowen|island)\b/i.test(job.address || "");
+  const steps = flights.length > 0 || unitSteps, paving = pavers.length > 0 || its.some((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path");
+  const noun = beach && steps ? "stairway" : paving && steps ? "paving and steps" : steps ? "steps" : paving ? "paving" : its.some((i) => i.type === "wall") ? "wall" : "work";
+  const tops = units.map((i) => (i.z || 0) + i.h), rise = tops.length ? (Math.max(...tops) - Math.min(...tops)) / 12 : 0;
+  const drainOut = (job.extras || []).find((x) => /pop-?up|emitter|outlet/i.test(x.desc || ""));
+  return { E, its, units, gab, flights, ug, pavers, trims, blocks, chans, unitSteps, beach, island, steps, paving, noun, rise, drainOut,
+    edges: its.filter((i) => i.type === "edge"), rails: its.filter((i) => i.type === "rail"), drains: its.filter((i) => i.type === "drain"),
+    glued: units.some(unitOnUnit) || flights.some((i) => stepCalc(i).cap) };
+}
+const colourIn = (g) => g.color ? ` in ${g.color}` : "", cName = (m) => matName(m).replace(/\s*\(check size\)/i, "");
 // Plain-language list of the work, written from the plan
 function scopeAuto() {
+  const F = jobFacts();
   const out = [], its = job.items, q = estimate(), E = q.E, gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface)));
-  out.push("Lay out the stairway on site and confirm the levels with you before digging.");
-  out.push("Dig out for the work, put down a compacted gravel base under every step and landing, and haul away the extra soil.");
+  out.push(`Lay out the ${F.noun} on site and confirm the levels with you before digging.`);
+  out.push(`Dig out for the work, put down a compacted gravel base under ${F.units.length ? "all the new work" : "every step and landing"}, and haul away the extra soil.`);
+  // placed blocks and pavers, by material and colour
+  for (const g of F.pavers) out.push(`${matName(g.m)} pavers${colourIn(g)}: about ${Math.round(g.area)} sq ft${F.rise > 0.75 ? ", following the slope" : ""}${g.cut ? ", cut to fit at the edges" + (F.unitSteps ? " and steps" : "") : ""}, on bedding sand with polymeric sand in the joints.`);
+  for (const g of F.trims) out.push(`${matName(g.m)}${colourIn(g)}: ${g.n} pieces ${F.unitSteps ? "as the step nosings and borders" : "as borders"}${g.glued ? ", glued down" : ""}.`);
+  if (F.unitSteps) out.push(`Steps: ${listAnd(F.blocks.map((g) => `${cName(g.m)}${colourIn(g)}`))} risers on a compacted base, with block walls hidden under the step edges.`);
+  else for (const g of F.blocks) out.push(`${cName(g.m)}${colourIn(g)}: ${g.n} blocks.`);
+  for (const g of F.chans) out.push(`Steel-grate channel drain${g.color ? ` (${g.color.toLowerCase()})` : ""}: about ${Math.round(g.len)} ft along the lower edge to catch surface water${F.drainOut ? ", piped underground to a flush pop-up outlet" : ""}.`);
+  if (F.edges.length) out.push(`Paver edge restraint: about ${Math.max(1, Math.round(F.edges.reduce((a, i) => a + Math.hypot(i.x2 - i.x, i.y2 - i.y) / 12, 0)))} ft of plastic edging spiked in along the sides, to keep the pavers tight.`);
   const flights = its.filter((i) => i.type === "steps" && stepCalc(i).count > 1), singles = its.filter((i) => i.type === "steps" && stepCalc(i).count === 1), all = [...flights, ...singles];
   const same = (f) => new Set(all.map(f)).size === 1;
   const build = (it) => { const c = stepCalc(it); return `${matName(mat(it.block))} risers${c.cap ? ` and ${matName(mat(it.cap))} caps glued down` : ""}`; };
@@ -3270,60 +3330,79 @@ function scopeAuto() {
   const rails = its.filter((i) => i.type === "rail");
   if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? "recycled plastic lumber" : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
+  const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
+  if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
   out.push("Clean up, and a walk-through with you when it's done.");
   return out.join("\n");
 }
 const exclAuto = () => EXCL_AUTO + (job.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))) && job.items.some((i) => i.type === "shore") && (job.est || {}).gabionTide ? "\nForeshore authorization for work below the high-water mark (Province of BC, and Fisheries and Oceans Canada review), if required" : "");
 // The case for the price, in the client's terms, worked out from the quote and the plan
 function valueAuto() {
-  const q = estimate(), E = q.E, its = job.items, lines = q.lines, out = [];
-  const flights = its.filter((i) => i.type === "steps"), cs = flights.map(stepCalc), steps = cs.reduce((a, c) => a + c.count, 0);
-  const gabB = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))).map((i) => i.h - (mat(i.surface).H || 7));
+  const q = estimate(), E = q.E, its = job.items, lines = q.lines, out = [], F = jobFacts();
+  const flights = F.flights, cs = flights.map(stepCalc), steps = cs.reduce((a, c) => a + c.count, 0);
+  const gabB = F.gab.map((i) => i.h - (mat(i.surface).H || 7));
   const tops = flights.map((i, k) => cs[k].top), bots = flights.map((i) => i.elev || 0).concat(gabB), climb = tops.length ? (Math.max(...tops) - Math.min(...bots)) / 12 : 0;
   const has = (re) => lines.some((l) => re.test(l.desc)), qty = (re) => { const l = lines.find((x) => re.test(x.desc)); return l ? l.qty : 0; };
-  const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.filter((i) => i.type === "drain"), rails = its.filter((i) => i.type === "rail");
-  const w0 = flights[0], c0 = cs[0], years = 75;
-  if (steps) out.push(bestLine(E));
-  if (steps) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
-  if (steps) out.push(lifeLine());
+  const gab = F.gab, drains = F.drains, rails = F.rails, chan = F.chans.length > 0;
+  const w0 = flights[0], c0 = cs[0], years = 75, where = F.island ? "the island" : "the site";
+  const paveSq = Math.round(F.pavers.reduce((a, g) => a + g.area, 0));
+  if (F.steps || F.paving) out.push(bestLine(E));
+  if (steps && F.beach) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
+  else if (steps) out.push(`Permanent steps, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining the way wood steps do.`);
+  if (F.paving && F.units.length) out.push(`Permanent, low-upkeep paving: concrete pavers on a compacted base flex with the ground instead of cracking like a poured slab, never need sealing or staining, and any single paver can be lifted and reset if something ever settles.`);
+  if (F.steps || F.paving) out.push(lifeLine());
   { const land = its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path").length, railFt = Math.round(rails.reduce((a, i) => a + i.w / 12, 0)), more = [];
+    if (paveSq) more.push(`${paveSq} sq ft of pavers`); if (F.unitSteps) more.push("block steps with feature nosings");
     if (land) more.push(`${plural(land, "landing and terrace").replace("landing and terraces", "landings and terraces")}`);
-    if (railFt) more.push(`${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
-    if (has(/delivery/i)) more.push("delivery to the island"); if (has(/wheelbarrow|hauling/i)) more.push("moving every block and bag down the slope by machine");
-    out.push(`What it works out to: spread over ${years} years of use, about $${Math.round(q.total / years / 12).toLocaleString("en-CA")} a month for safe access to your beach${climb > 1 ? ` down a ${Math.round(climb)} ft bank` : ""}. The price covers far more than the steps: ${listAnd(more)}.`);
+    if (railFt) more.push(`${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (chan) more.push("a steel-grate channel drain"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
+    if (F.edges.length) more.push("edge restraints");
+    if (has(/delivery/i)) more.push(`delivery to ${where}`); if (has(/wheelbarrow|hauling/i)) more.push("moving every block and bag down the slope by machine");
+    const what = F.beach ? `safe access to your beach${climb > 1 ? ` down a ${Math.round(climb)} ft bank` : ""}` : `${F.noun} you'll use every day`;
+    out.push(`What it works out to: spread over ${years} years of use, about $${Math.round(q.total / years / 12).toLocaleString("en-CA")} a month for ${what}.${more.length > 1 ? ` The price covers far more than the ${F.steps && !F.paving ? "steps" : F.noun}: ${listAnd(more)}.` : ""}`);
     const kg = haulList().reduce((a, x) => a + x.kg, 0), lb = kg * 2.20462;
-    if (lb > 2000) out.push(`By weight: about ${num1(kg / 1000)} tonnes (${Math.round(lb / 1000).toLocaleString("en-CA")},000 lb) of block, stone and gravel, brought over to the island and set by hand on a steep bank. That's about ${Math.round(q.total / lb * 100)}¢ a pound, delivered and installed${q.total / lb < 0.8 ? ": cheaper by the pound than bananas at the grocery store" : ""}. The truck only brings it to the top of the property. From there we move every piece ourselves, most of it two or three times: off the truck, down the bank to where it's needed, and into place. That's close to ${Math.round(kg * 3 / 1000)} tonnes of lifting and carrying in all.`); }
-  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ", with a handrail the whole way" : ""}. Steady, even steps are what make a long stair easy on the knees, coming up from the beach with a load.`);
-  const built = [`${fmtIn(E.baseDepth)} of compacted gravel under every step and landing`];
-  if (cs.some((c) => c.under)) built.push("block walls hidden under the step edges to keep the steps firmly in place");
+    if (lb > 2000) out.push(`By weight: about ${num1(kg / 1000)} tonnes (${Math.round(lb / 1000).toLocaleString("en-CA")},000 lb) of ${F.units.length ? "pavers, block" : "block, stone"} and gravel, ${F.island ? "brought over to the island and " : ""}set by hand${F.beach ? " on a steep bank" : ""}. That's about ${Math.round(q.total / lb * 100)}¢ a pound, delivered and installed${q.total / lb < 0.8 ? ": cheaper by the pound than bananas at the grocery store" : ""}. The truck only brings it to ${F.beach ? "the top of the property" : "the driveway"}. From there we move every piece ourselves, most of it two or three times: off the truck, ${F.beach ? "down the bank to where it's needed" : "over to the work area"}, and into place. That's close to ${Math.round(kg * 3 / 1000)} tonnes of lifting and carrying in all.`);
+  }
+  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ", with a handrail the whole way" : ""}. Steady, even steps are what make a ${F.beach ? "long stair easy on the knees, coming up from the beach with a load" : "stair easy and safe underfoot"}.`);
+  else if (F.unitSteps) out.push(`Comfortable and safe to walk: even steps of the same height and tread, nearly flat with just enough fall to shed rain, and a contrasting nosing on every step edge so each one is easy to see.`);
+  const built = [`${fmtIn(E.baseDepth)} of compacted gravel under ${F.units.length ? "all the new work" : "every step and landing"}`];
+  if (cs.some((c) => c.under) || F.unitSteps) built.push("block walls hidden under the step edges to keep the steps firmly in place");
+  if (F.pavers.length) built.push("polymeric sand locking the paver joints against weeds and washout");
+  if (F.edges.length) built.push("edge restraints holding the pavers tight");
   if (drains.length) built.push(`a drain line (${Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0))} ft) carrying ground water away in the rainy season`);
+  if (chan) built.push(`a steel-grate channel drain catching surface water along the lower edge${F.drainOut ? " and piping it to a tidy pop-up outlet" : ""}`);
   if (gab.length) built.push(`marine-grade gabion steps at the beach, made for salt spray and storm waves`);
   if (rails.length && E.railPlastic) built.push(`handrails of recycled plastic lumber that won't rot, split or splinter${E.railPaint ? ", primed and painted" : ""}`);
   else if (rails.length && E.railPaint) built.push("handrails and posts primed and painted");
-  out.push(`Built for a wet coastal bank: ${listAnd(built)}.`);
+  out.push(`Built for ${F.beach ? "a wet coastal bank" : "our wet coastal winters"}: ${listAnd(built)}.`);
   const inc = [];
-  if (has(/delivery/i)) inc.push(`delivery to the island${E.ferryPerFt > 0 || E.ferryIncl ? " including the ferry" : ""}`);
+  if (has(/delivery/i)) inc.push(`delivery to ${where}${E.ferryPerFt > 0 || E.ferryIncl ? " including the ferry" : ""}`);
   if (has(/wheelbarrow|hauling/i)) inc.push("moving every block and bag down the slope by machine");
   if (has(/haul-away|disposal/i)) inc.push("hauling away the extra soil");
-  if (has(/compactor|rammer|saw|equipment/i)) inc.push("all the equipment");
+  if (has(/compactor|rammer|saw|equipment/i) || (job.equip || []).some((e) => e.use)) inc.push("all the equipment");
   inc.push("clean-up with a final walk-through");
-  out.push(`Everything to get it built on an island site is in the price: ${listAnd(inc)}. No surprise extras.`);
-  const blkL = lines.find((l) => l.unit === "ea" && /block/i.test(l.desc) && !/cap/i.test(l.desc)), blk = blkL ? blkL.qty : 0, caps = qty(/\bcap\b|Cap Max/i);
-  out.push(`Measured, not guessed: quantities come from a scaled plan and a 3D model of the slope${blk ? ` (${blk} blocks${caps ? `, ${caps} caps` : ""} and every bag and tonne of gravel)` : ""}, with a small ${E.waste}% allowance for cuts. You pay for what the job needs.`);
-  out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your slope, the quantities, a dated schedule${(cdoc().tides || []).length ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
+  out.push(`Everything to get it built${F.island ? " on an island site" : ""} is in the price: ${listAnd(inc)}. No surprise extras.`);
+  const blk = F.units.length ? F.blocks.reduce((a, g) => a + g.n, 0) : (() => { const l = lines.find((l) => l.unit === "ea" && /block/i.test(l.desc) && !/cap|adhesive/i.test(l.desc)); return l ? l.qty : 0; })();
+  const caps = F.units.length ? 0 : qty(/^(?!.*adhesive).*(\bcap\b|Cap Max)/i), counted = [];
+  if (paveSq) counted.push(`${paveSq} sq ft of pavers`); if (blk) counted.push(`${blk} blocks`); if (caps) counted.push(`${caps} caps`);
+  out.push(`Measured, not guessed: quantities come from a scaled plan and a 3D model of the ${F.rise > 0.75 || climb > 1 ? "slope" : "site"}${counted.length ? ` (${counted.join(", ")} and every bag and tonne of gravel)` : ""}, with a small ${E.waste}% allowance for cuts. You pay for what the job needs.`);
+  out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your ${F.rise > 0.75 || climb > 1 ? "slope" : "site"}, the quantities, a dated schedule${(cdoc().tides || []).length ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
   out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
-  out.push("Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it.");
+  out.push(F.beach ? "Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it."
+    : `Well-built ${F.noun} ${/s$/.test(F.noun) ? "add" : "adds"} to the look, safety and value of the property for as long as you own it.`);
   return out.join("\n");
 }
 // the headline: best stair for the money, nothing skimped
 function bestLine(E) {
-  const its = job.items, save = ["following the existing route", "measuring every block and tonne from a scaled plan instead of guessing", `ordering everything on ${E.bulkSep ? "one truck load plus one gravel delivery brought over from town" : "one truck load"}`];
+  const its = job.items, F = jobFacts(), save = [...(F.beach ? ["following the existing route"] : []), "measuring every block and tonne from a scaled plan instead of guessing", `ordering everything on ${E.bulkSep ? `one truck load plus one gravel delivery${F.island ? " brought over from town" : ""}` : "one truck load"}`];
+  if ((job.equip || []).some((e) => e.use) && !(job.equip || []).some((e) => e.use && +e.rate > 0)) save.push("using our own equipment instead of rentals");
   const keep = [`a full ${fmtIn(E.baseDepth)} compacted gravel base`];
   if (its.some((i) => i.type === "drain")) keep.push("proper drainage");
-  keep.push("every cap glued down");
+  if (F.glued) keep.push(F.units.length ? "every nosing and cap glued down" : "every cap glued down");
+  if (F.pavers.length) keep.push("polymeric sand in the joints");
   if (its.some((i) => i.type === "rail")) keep.push("handrail posts set in concrete");
   if (its.some((i) => i.type === "landing" && isGabion(mat(i.surface)))) keep.push("marine-grade baskets at the beach");
-  return `The best stairway for this bank at the lowest price it can be built for, with no corners cut. The savings come from smart planning: ${listAnd(save)}. They don't come from cheaper materials or shortcuts: ${listAnd(keep)} are all part of the price.`;
+  const what = F.beach ? "stairway for this bank" : `${F.noun} for this ${F.rise > 0.75 ? "slope" : "site"}`;
+  return `The best ${what} at the lowest price it can be built for, with no corners cut. The savings come from smart planning: ${listAnd(save)}. They don't come from cheaper materials or shortcuts: ${listAnd(keep)} are all part of the price.`;
 }
 // how long it lasts, part by part (built correctly, Gulf Islands climate)
 function lifeLine() {
@@ -3331,20 +3410,24 @@ function lifeLine() {
   const more = [];
   if (rails) more.push(`The ${E.railPlastic ? "recycled plastic lumber rails won't rot and can last 50 years" : "cedar rails can last 25 years"}, and the hot-dip galvanized steel posts${E.railPaint ? ", kept painted," : ""} should last as long as the stair.`);
   if (gab) more.push("The marine-grade gabion steps at the beach can last 50 years.");
-  return `Built to last a lifetime: built correctly, the block steps, walls and caps can last 75 years or more. Our mild coastal winters have few freeze-thaw cycles, which are what usually break concrete down.${more.length ? " " + more.join(" ") : ""}`;
+  const F = jobFacts(), parts = [F.pavers.length && "pavers", (F.steps || F.blocks.length) && "block steps", F.its.some((i) => i.type === "wall") && "walls", F.glued && "caps"].filter(Boolean);
+  return `Built to last a lifetime: built correctly, the ${F.units.length ? listAnd(parts) : "block steps, walls and caps"} can last 75 years or more. Our mild coastal winters have few freeze-thaw cycles, which are what usually break concrete down.${more.length ? " " + more.join(" ") : ""}`;
 }
 function careAuto() {
   const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, out = [];
   const rails = its.some((i) => i.type === "rail"), gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.some((i) => i.type === "drain");
-  const pave = its.some((i) => (i.type === "landing" || i.type === "path") && [i.surface, i.infill].some((m) => (mat(m) || {}).kind === "paver"));
-  out.push("Once a year, walk the stair and check for loose caps or blocks. Re-glue any loose cap with concrete block adhesive before it gets knocked off.");
+  const F = jobFacts(), pave = F.pavers.length > 0 || its.some((i) => (i.type === "landing" || i.type === "path") && [i.surface, i.infill].some((m) => (mat(m) || {}).kind === "paver"));
+  const st = F.beach ? "stair" : F.steps ? "steps" : F.noun;
+  out.push(`Once a year, walk the ${st} and check for ${F.glued ? `loose caps${F.units.length ? ", nosings" : ""} or blocks. Re-glue any loose ${F.units.length ? "piece" : "cap"} with concrete block adhesive before it gets knocked off` : "anything loose or settled, and reset it before it spreads"}.`);
+  if (F.chans.length) out.push(`Lift out the channel grates once or twice a year, before and after the leaves fall, and flush out the silt so water keeps running${F.drainOut ? " to the pop-up outlet. Check that the outlet lid lifts freely" : ""}.`);
   if (drains) out.push("Keep the drain outlet clear of leaves, soil and plants, especially before the rainy season, so ground water keeps moving away from the stair.");
   if (pave) out.push("Top up the polymeric joint sand between the pavers every few years, or wherever weeds start to come through.");
   if (rails) out.push(`${E.railPaint ? "Repaint the rails and posts every 7–10 years, using a paint made for plastic lumber and galvanized steel. Touch up any chips sooner, especially at the base of the posts" : "Check the handrail posts and brackets once a year and tighten any loose bolts"}.`);
   if (gab) out.push("After big winter storms, check the gabion steps at the beach for torn or worn wire and lost stone. A small repair with lacing wire early on saves replacing a basket later.");
-  out.push("Keep tree roots and large shrubs trimmed back from the steps and terraces so they don't lift them.");
-  out.push("Don't use de-icing salt on the steps. Use sand or grit for grip in icy weather. Salt and steel shovels damage the concrete surface.");
-  out.push("Sweep off moss and leaves now and then, and pressure-wash on a low setting if the steps get slippery.");
+  const surf = F.steps && F.paving ? "steps and pavers" : F.paving ? "pavers" : "steps";
+  out.push(`Keep tree roots and large shrubs trimmed back from the ${F.beach ? "steps and terraces" : surf} so they don't lift them.`);
+  out.push(`Don't use de-icing salt on the ${surf}. Use sand or grit for grip in icy weather. Salt and steel shovels damage the concrete surface.`);
+  out.push(`Sweep off moss and leaves now and then, and pressure-wash on a low setting${pave ? " (then top up the joint sand)" : ""} if the ${surf} get slippery.`);
   return out.join("\n");
 }
 const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
@@ -3355,11 +3438,12 @@ function timelinePhases() {
     const k = /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
     hrs[k] += l.qty;
   }
-  const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0;
+  const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0, F = jobFacts();
+  const fin = [F.pavers.length ? "laying and cutting the pavers" : "pavers on the landings", F.gab.length && "gabion baskets", F.chans.length && "the channel drain", "edging", F.pavers.length && "polymeric sand"].filter(Boolean);
   return [
     ["Site preparation", "layout, digging, gravel base, and moving materials to the work area", days(hrs.prep)],
-    ["Steps and walls", "building the steps, block walls and caps, bottom to top", days(hrs.steps)],
-    ["Landings and finishing", "pavers on the landings, gabion baskets, edging", days(hrs.pave)],
+    [F.steps ? "Steps and walls" : "Block work", F.unitSteps ? "the block risers and hidden walls, then the nosings, bottom to top" : "building the steps, block walls and caps, bottom to top", days(hrs.steps)],
+    [F.pavers.length ? "Paving and finishing" : "Landings and finishing", listAnd(fin), days(hrs.pave)],
     ["Handrail", "posts set in concrete, then the rails", days(hrs.rail)],
     ["Clean-up and walk-through", "", 0.5],
   ].filter((p) => p[2] > 0);
@@ -3373,7 +3457,7 @@ function subWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.
 function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (isWorkday(r)) n--; } return r; }
 const dayName = (t) => t.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 function timelineAuto() {
-  const d = cdoc(), start = d.start ? new Date(d.start + "T12:00") : nextMonday(), ph = timelinePhases(), out = [];
+  const d = cdoc(), set = d.start ? new Date(d.start + "T12:00") : null, start = set && set >= new Date() ? set : nextMonday(), ph = timelinePhases(), out = []; // a start date already past means next week
   let day = 0, t = new Date(start); while (!isWorkday(t)) t.setDate(t.getDate() + 1);
   // ordering and deliveries, counted back from the first day on site
   const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
@@ -3381,9 +3465,10 @@ function timelineAuto() {
   const backDays = (n) => { const r = new Date(t); r.setDate(r.getDate() - n); while (!isWorkday(r)) r.setDate(r.getDate() - 1); return r; };
   const orderBy = backDays(Math.max(d.lead || 0, gab ? 21 : 0) + 2), hiab = subWorkdays(t, 2), gravel = subWorkdays(t, 1);
   if (shore) out.push(`Now: apply for foreshore authorization for the gabion steps below the high-water mark, if required (approvals can take several weeks).`);
-  out.push(`Order by ${dayName(orderBy)}, on signing with the deposit: blocks, caps, pavers and handrail materials${gab ? `, and the gabion ${E.gabionDiy ? "mesh, lacing wire and rings" : "baskets"} (shipped from out of province, allow 1–3 weeks)` : ""}.`);
+  const F = jobFacts(), goods = F.units.length ? listAnd([F.pavers.length && "pavers", F.blocks.length && "blocks", F.trims.length && "nosings", F.chans.length && "the channel drain", F.edges.length && "edging"].filter(Boolean)) : `blocks, caps, pavers${F.rails.length ? " and handrail materials" : ""}`;
+  out.push(`Order ${orderBy > new Date() ? "by " + dayName(orderBy) : "right away"}, on signing with the deposit: ${goods}${gab ? `, and the gabion ${E.gabionDiy ? "mesh, lacing wire and rings" : "baskets"} (shipped from out of province, allow 1–3 weeks)` : ""}.`);
   if (E.haulSelf) out.push(`${dayName(hiab)}: materials hauled to site${ferry ? " by ferry" : ""}.`);
-  else out.push(`${dayName(hiab)}: ${plural(loads, "truck load")} of block, caps, pavers and handrail materials delivered to site${ferry || E.ferryIncl ? " by ferry" : ""}${loads > 1 ? " (the second load as needed)" : ""}.`);
+  else out.push(`${dayName(hiab)}: ${plural(loads, "truck load")} of ${goods} delivered to site${ferry || E.ferryIncl ? " by ferry" : ""}${loads > 1 ? " (the second load as needed)" : ""}.`);
   if (!E.haulSelf && E.bulkSep) out.push(`${dayName(gravel)}: road base, drain rock${gab ? ", gabion stone" : ""} and sand delivered by the local gravel supplier.`);
   for (const [name, what, n] of ph) {
     const a = addWorkdays(t, Math.floor(day)), b = addWorkdays(t, Math.max(Math.floor(day), Math.ceil(day + n) - 1));
@@ -5131,7 +5216,8 @@ function build3d() {
   let baseY = 0;
   if (hasTerrain()) {
     // shaped ground over the site and a margin around it
-    const m = 240, gw = job.site.w + 2 * m, gd = job.site.d + 2 * m, segX = Math.min(120, Math.ceil(gw / 12)), segY = Math.min(120, Math.ceil(gd / 12));
+    const dig = unitDigger(), fine = dig ? 6 : 12, cap = dig ? 220 : 120;
+    const m = 240, gw = job.site.w + 2 * m, gd = job.site.d + 2 * m, segX = Math.min(cap, Math.ceil(gw / fine)), segY = Math.min(cap, Math.ceil(gd / fine));
     const geo = new THREE.PlaneGeometry(gw, gd, segX, segY), pos = geo.attributes.position;
     let lo = Infinity;
     const grades = job.items.filter((i) => i.type === "grade"), stairs = job.items.filter((i) => i.type === "steps").map((i) => [i, stepCalc(i)]);
@@ -5139,7 +5225,7 @@ function build3d() {
     const inStairs = (px, py) => stairs.some(([i, c]) => { const l = localOf(i, px, py); return Math.abs(l.x - c.xc) <= c.xw / 2 + 2 && Math.abs(l.y) <= c.run / 2 + 2; })
       || pads.some((i) => { const l = localOf(i, px, py); return Math.abs(l.x) <= i.w / 2 + 2 && Math.abs(l.y) <= i.d / 2 + 2; });
     const gradeLift = (px, py) => { let z = -Infinity; for (const g of grades) { const l = localOf(g, px, py), dx = Math.max(0, Math.abs(l.x) - g.w / 2), dy = Math.max(0, Math.abs(l.y) - g.d / 2); z = Math.max(z, g.h - Math.hypot(dx, dy) / 2); } return z; }; // falls 1 in 2 (about 27°) to the natural ground
-    for (let k = 0; k < pos.count; k++) { const px = pos.getX(k) + job.site.w / 2, py = pos.getY(k) + job.site.d / 2; let z = finishedAt(px, py); if (grades.length && !inStairs(px, py)) z = Math.max(z, gradeLift(px, py)); pos.setZ(k, z); lo = Math.min(lo, z); }
+    for (let k = 0; k < pos.count; k++) { const px = pos.getX(k) + job.site.w / 2, py = pos.getY(k) + job.site.d / 2; let z = finishedAt(px, py); if (grades.length && !inStairs(px, py)) z = Math.max(z, gradeLift(px, py)); if (dig) z = dig(px, py, z); pos.setZ(k, z); lo = Math.min(lo, z); }
     geo.computeVertexNormals();
     const tm = new THREE.Mesh(geo, mGrass); tm.rotation.x = -Math.PI / 2; tm.position.set(job.site.w / 2, 0, -job.site.d / 2); tm.receiveShadow = true; world.add(tm);
     baseY = Math.min(0, lo) - 1;
