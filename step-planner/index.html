@@ -3231,12 +3231,12 @@ async function blueprintImage(W, H) {
   const c = document.createElement("canvas"); c.width = W; c.height = H; const ctx = c.getContext("2d");
   const v = {}; fitView(W, H, v, 60);
   renderSheet(ctx, W, H, v, { unit: W / 1300, section: true, selId: null });
-  return c.toDataURL("image/jpeg", 0.85);
+  return stamped(c).toDataURL("image/jpeg", 0.85);
 }
 function renderImage() {
   if (!R3 || dirty3d) return null;
   R3.renderer.render(R3.scene, R3.camera);
-  try { return $("three").toDataURL("image/jpeg", 0.85); } catch { return null; }
+  try { return stamped($("three")).toDataURL("image/jpeg", 0.85); } catch { return null; }
 }
 $("qHtml").onclick = async () => {
   const qd = quoteData(), bp = await blueprintImage(1600, 1000), r3 = renderImage();
@@ -3666,7 +3666,7 @@ $("cpPrintBtn").onclick = () => {
 };
 // Pictures to attach to the estimate in Ledgerline (its CSV import carries no pictures)
 $("cpPics").onclick = async () => {
-  const shots = [], jpg = (c) => new Promise((r) => c.toBlob(r, "image/jpeg", 0.88)), mk = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); draw(g, w, h); return c; };
+  const shots = [], jpg = (c) => new Promise((r) => stamped(c).toBlob(r, "image/jpeg", 0.88)), mk = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); draw(g, w, h); return c; };
   { const pw = 1600, ph = simplePlanBox(pw, 2200); shots.push(["plan", mk(pw, ph, (g, w, h) => drawSimplePlan(g, 0, 0, w, h, 1.6))]); }
   if (job.items.some((i) => i.type === "steps")) shots.push(["side_view", mk(2000, 1000, (g, w, h) => { renderStairs.client = true; try { renderStairs(g, 0, 0, w, h, 1.6, "all"); } finally { renderStairs.client = false; } })]);
   if (R3) { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement; shots.push(["3d", mk(s.width, s.height, (g) => g.drawImage(s, 0, 0))]); }
@@ -3937,12 +3937,22 @@ async function saveFile(filename, blob) {
   try { if (downloadsCap) { await downloadsCap.save({ filename, data: blob }); return; } } catch (e) { if (e && (e.code === "declined" || e.code === "cancelled")) return; }
   const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
-const canvasBlob = (c) => new Promise((r) => c.toBlob(r, "image/png"));
+// Ownership line put on every plan, view and rendering that leaves the app
+function ownNotice() { const co = company(); return `© ${co.name ? co.name + " " : ""}${new Date().getFullYear()}. Prepared ${job.client ? `for ${job.client} ` : ""}for quote ${quoteNo()} only. Not for use in construction by others.`; }
+function stamped(c) {
+  const o = document.createElement("canvas"); o.width = c.width; o.height = c.height; const g = o.getContext("2d"); g.drawImage(c, 0, 0);
+  const fs = Math.max(12, Math.round(c.width / 95)), pad = Math.round(fs * 0.6), t = ownNotice();
+  g.font = `600 ${fs}px "IBM Plex Sans", system-ui, sans-serif`; const tw = Math.min(g.measureText(t).width, c.width - 4 * pad);
+  g.fillStyle = "rgba(255,255,255,.88)"; g.fillRect(pad, c.height - fs - 3 * pad, tw + 2 * pad, fs + 2 * pad);
+  g.fillStyle = "#2d3742"; g.textBaseline = "middle"; g.textAlign = "left"; g.fillText(t, 2 * pad, c.height - fs / 2 - 2 * pad, c.width - 4 * pad);
+  return o;
+}
+const canvasBlob = (c, hasNotice) => new Promise((r) => (hasNotice ? c : stamped(c)).toBlob(r, "image/png"));
 
 $("exportBtn").onclick = async () => {
   // 17 × 11 sheet at 200 dpi
   const W = 3400, H = 2200, c = document.createElement("canvas"); c.width = W; c.height = H; const ctx = c.getContext("2d");
-  const u = 2.6, titleH = 190, colX = Math.round(W * 0.64);
+  const u = 2.6, titleH = 230, colX = Math.round(W * 0.64);
   const v = {}; fitView(colX, H - titleH, v, 150);
   renderSheet(ctx, W, H, v, { unit: u, section: false, selId: null });
   ctx.fillStyle = BP.panel; ctx.fillRect(colX, 14, W - colX - 14, H - titleH - 14);
@@ -3978,7 +3988,8 @@ $("exportBtn").onclick = async () => {
   for (const [x, k, val] of cols) { label(ctx, k, x, H - titleH + 40, 26, "left", BP.ink2); label(ctx, String(val || "—").slice(0, 46), x, H - titleH + 84, 36, "left", BP.ink, 600, "IBM Plex Sans"); }
   label(ctx, `QUOTE ${quoteNo()} · ${new Date().toLocaleDateString()} · SHEET 1 OF 1`, 40, H - titleH + 140, 26, "left", BP.ink);
   if (job.notes) label(ctx, "NOTES: " + job.notes.slice(0, 120), 1300, H - titleH + 140, 24, "left", BP.ink2);
-  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(planLook() === "real" ? c : themed(c)));
+  label(ctx, ownNotice(), 40, H - titleH + 186, 26, "left", BP.ink, 600, "IBM Plex Sans");
+  saveFile(slug(job.name || "blueprint") + "_blueprint.png", await canvasBlob(planLook() === "real" ? c : themed(c), true));
 };
 
 // ---------- material pictures: drawn to the published size in the chosen colour, plus the user's own photos ----------
@@ -4208,7 +4219,7 @@ async function makePrintPdf() {
   const title = `${job.name || "Job"}${job.client ? " · " + job.client : ""}`, when = new Date().toLocaleDateString();
   const step = async (msg) => { $("prInfo").textContent = msg; await new Promise((r) => setTimeout(r, 0)); };
   const barFt = [1, 2, 4, 5, 10, 20, 40].find((f) => f * L.perFt >= 1.4) || 40, barIn = barFt * L.perFt;
-  const addPage = async (c) => { const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9)); pages.push({ w: L.PW, h: L.PH, px: c.width, py: c.height, jpg: new Uint8Array(await b.arrayBuffer()) }); };
+  const addPage = async (c) => { const b = await new Promise((r) => stamped(c).toBlob(r, "image/jpeg", 0.9)); pages.push({ w: L.PW, h: L.PH, px: c.width, py: c.height, jpg: new Uint8Array(await b.arrayBuffer()) }); };
 
   // 1. cover: overview with the sheet map, and how to put it together
   if (doCover) {
