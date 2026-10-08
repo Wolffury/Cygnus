@@ -664,7 +664,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <label class="f">Timeline (one step per line) <textarea id="cpTime" rows="8"></textarea></label>
         <div class="row"><button class="btn small" id="cpTimeReset">Rewrite from the dates</button></div>
         <label class="f">Not included (one per line) <textarea id="cpExcl" rows="4"></textarea></label>
-        <label class="f">Why this quote (one point per line) <textarea id="cpValue" rows="8"></textarea></label>
+        <label class="f">Project value and benefits (one point per line) <textarea id="cpValue" rows="8"></textarea></label>
         <div class="row"><button class="btn small" id="cpValueReset">Rewrite from the quote</button></div>
       </div>
       <div class="cppages" id="cpPages" aria-label="Preview of the client package"></div>
@@ -3061,7 +3061,7 @@ function drawSimplePlan(ctx, X, Y, w, h, u) {
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
   ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
 }
-const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Why this quote"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
 const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, price: true, terms: true };
 function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
@@ -3225,7 +3225,7 @@ function clientPages() {
   if (on.plan) picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
   if (on.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
   if (on.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
-  if (on.value) { head("Why this quote"); bullets(d.value ?? valueAuto(), "✓"); }
+  if (on.value) { head("Project value and benefits"); bullets(d.value ?? valueAuto(), "✓"); }
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
   const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
   if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
