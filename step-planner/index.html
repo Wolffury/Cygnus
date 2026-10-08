@@ -381,6 +381,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <button data-add="path"><b>Walkway / patio</b><span>Pavers, slabs, flagstone</span></button>
           <button data-add="wall"><b>Retaining wall</b><span>Block wall with caps</span></button>
           <button data-add="rail"><b>Handrail</b><span>Wood rail on posts</span></button>
+          <button data-add="drain"><b>Drain line</b><span>Perforated pipe in drain rock</span></button>
         </div>
         <h3>Site &amp; environment</h3>
         <div class="addgrid">
@@ -771,11 +772,11 @@ const TYPE_INFO = {
   steps: { label: "Steps" }, landing: { label: "Landing" }, path: { label: "Walkway / patio" }, wall: { label: "Retaining wall" },
   tree: { label: "Tree" }, evergreen: { label: "Evergreen" }, shrub: { label: "Shrub" }, rock: { label: "Boulder" },
   house: { label: "House" }, grade: { label: "Upper grade" }, rail: { label: "Handrail" }, unit: { label: "Block" }, dim: { label: "Measurement" },
-  shore: { label: "Shoreline" }, contour: { label: "Contour" }, spot: { label: "Spot elevation" }, cut: { label: "Section line" },
+  shore: { label: "Shoreline" }, drain: { label: "Drain line" }, contour: { label: "Contour" }, spot: { label: "Spot elevation" }, cut: { label: "Section line" },
 };
 const LINE_TYPES = new Set(["shore", "contour"]);
 const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade", "unit", "rail"]);
-const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail"]);
+const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail", "drain"]);
 // Handrail finishes: wood rails on posts (posts are galvanized pipe unless the whole rail is metal)
 const RAIL_COLORS = ["Cedar", "Brown", "Dark Brown", "Weathered grey", "Black (metal)"];
 // Edging along the open sides of a walkway or landing; a side that meets steps needs none (the step holds the gravel)
@@ -797,7 +798,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -824,6 +825,7 @@ function defaults(type, x, y) {
     case "contour": return { ...b, pts: [[x, y]], elev: 0 };
     case "spot": return { ...b, elev: 0 };
     case "cut": return { ...b, x2: x + 120, y2: y, label: "A" };
+    case "drain": return { ...b, x2: x, y2: y - 120, w: 12, depth: 18, outlet: "pad", label: "Drain line" };
   }
   return b;
 }
@@ -1035,6 +1037,7 @@ function itemSize(it) {
   if (it.type === "spot") return { w: 12, d: 12, xc: 0 };
   if (it.type === "cut") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
   if (it.type === "dim") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: 1, xc: 0 };
+  if (it.type === "drain") return { w: Math.hypot(it.x2 - it.x, it.y2 - it.y), d: it.w, xc: 0 };
   if (it.type === "steps") { const c = stepCalc(it); return { w: c.xw, d: c.run, xc: c.xc }; }
   if (RECT_TYPES.has(it.type)) return { w: it.w, d: it.d, xc: 0 };
   return { w: it.canopy, d: it.canopy, xc: 0 };
@@ -1049,6 +1052,7 @@ function segDist(px, py, ax, ay, bx, by) {
 function hitTest(px, py) {
   const order = drawOrder().slice().reverse();
   for (const it of order) {
+    if (it.type === "drain") { if (segDist(px, py, it.x, it.y, it.x2, it.y2) <= Math.max(it.w / 2, 16 / view2d.s)) return it; continue; }
     if (it.type === "dim" || it.type === "cut") {
       // a measurement is drawn off to the side of the points it measures: grab it by the line you see (or its number), finger-sized
       const tol = 22 / view2d.s, len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), off = it.type === "dim" ? it.off ?? 12 : 0;
@@ -1070,8 +1074,13 @@ function hitTest(px, py) {
   for (const it of order) if ((it.type === "tree" || it.type === "evergreen") && Math.hypot(px - it.x, py - it.y) <= it.canopy / 2) return it;
   return null;
 }
+// Drain line: perforated pipe in a gravel trench from its high end (x, y) to its outlet (x2, y2), with a rock splash pad at the outlet
+function drainCalc(it) {
+  const L = Math.hypot(it.x2 - it.x, it.y2 - it.y), fall = groundAt(it.x, it.y, it.id) - groundAt(it.x2, it.y2, it.id);
+  return { L, ft: L / 12, fall, slopePct: L ? fall / L * 100 : 0, rockYd: yd3(L * it.w * it.depth) + (it.outlet === "joins" ? 0 : 0.15), pad: it.outlet !== "joins", fabricSqft: L * (2 * it.depth + 2 * it.w) / 144, frame: { x: (it.x + it.x2) / 2, y: (it.y + it.y2) / 2, rot: Math.atan2(it.x2 - it.x, it.y2 - it.y) * 180 / Math.PI } };
+}
 function drawOrder() {
-  const rank = { shore: -2, contour: -1, grade: 0, path: 1, house: 2, landing: 3, wall: 4, steps: 5, rail: 5.5, unit: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9, dim: 10, spot: 11, cut: 12 };
+  const rank = { shore: -2, contour: -1, grade: 0, path: 1, house: 2, landing: 3, drain: 3.5, wall: 4, steps: 5, rail: 5.5, unit: 5, rock: 6, shrub: 7, evergreen: 8, tree: 9, dim: 10, spot: 11, cut: 12 };
   return job.items.slice().sort((a, b) => rank[a.type] - rank[b.type] || ((a.elev || 0) + (a.z || 0)) - ((b.elev || 0) + (b.z || 0)));
 }
 // ---------- terrain: contours, spot elevations and the shoreline (at water level) define the natural ground ----------
@@ -1198,7 +1207,7 @@ function planBounds() {
   let minX = 0, minY = 0, maxX = job.site.w, maxY = job.site.d;
   for (const it of job.items) {
     if (it.pts) { const [a, b, c, d] = bboxPts(it.pts); minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d); continue; }
-    if (it.type === "cut" || it.type === "dim") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
+    if (it.type === "cut" || it.type === "dim" || it.type === "drain") { minX = Math.min(minX, it.x, it.x2); maxX = Math.max(maxX, it.x, it.x2); minY = Math.min(minY, it.y, it.y2); maxY = Math.max(maxY, it.y, it.y2); continue; } const s = itemSize(it), r = Math.hypot(s.w, s.d) / 2; minX = Math.min(minX, it.x - r); maxX = Math.max(maxX, it.x + r); minY = Math.min(minY, it.y - r); maxY = Math.max(maxY, it.y + r); }
   return { minX, minY, maxX, maxY };
 }
 function fitView(W, H, v = view2d, pad = 60) {
@@ -1374,6 +1383,12 @@ function dimLine(ctx, v, it, ax, ay, bx, by, off, text, u) {
   ctx.restore();
 }
 
+// Flow arrow on a drain line pointing to the outlet, and the outlet pad
+function drainArrow(ctx, v, it, u, color) {
+  const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), ang = Math.atan2(by - ay, bx - ax), mx = (ax + bx) / 2, my = (ay + by) / 2;
+  ctx.save(); ctx.fillStyle = color; ctx.translate(mx, my); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(9 * u, 0); ctx.lineTo(-5 * u, -6 * u); ctx.lineTo(-5 * u, 6 * u); ctx.closePath(); ctx.fill(); ctx.restore();
+  if (it.outlet !== "joins") { ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(bx, by, Math.max(5 * u, it.w * 0.9 * v.s), 0, 7); ctx.stroke(); ctx.restore(); }
+}
 // ---------- realistic plan: what the finished job looks like from above ----------
 // Short names on the picture ("Flight 3 - 12 risers @ 7.5\"" → "Flight 3"); the full name is in the Item panel
 const shortLabel = (t) => String(t || "").split(/\s+[-–(]\s*/)[0].slice(0, 30);
@@ -1527,6 +1542,15 @@ function drawItemReal(ctx, v, it, u, sel) {
         return true;
       }
       case "spot": case "cut": return true; // survey marks: shown in the blueprint look only
+      case "drain": {
+        const dc = drainCalc(it), f = dc.frame, h = dc.L / 2, [bx, by] = W2S(v, it.x2, it.y2), pr = Math.max(6 * u, it.w * 1.1 * v.s);
+        ctx.save(); polyRect(ctx, v, f, -it.w / 2, -h, it.w / 2, h); const [a, b, c, d] = screenBox(v, f, -it.w / 2, -h, it.w / 2, h); ctx.clip(); stonesIn(ctx, a, b, c - a, d - b, "#c9c6bf", hashStr(it.id), Math.max(1.2, v.s * 1.1)); ctx.restore();
+        if (dc.pad) { ctx.save(); ctx.beginPath(); ctx.arc(bx, by, pr, 0, 7); ctx.clip(); stonesIn(ctx, bx - pr, by - pr, 2 * pr, 2 * pr, "#9d988e", hashStr(it.id) + 5, Math.max(2, v.s * 2.5)); ctx.restore(); }
+        ctx.save(); ctx.strokeStyle = "rgba(29,39,51,.7)"; ctx.lineWidth = 1.6 * u; ctx.setLineDash([5 * u, 4 * u]); lineL(ctx, v, f, 0, -h, 0, h); ctx.restore();
+        drainArrow(ctx, v, it, u, "rgba(29,39,51,.75)");
+        const [mx, my] = W2S(v, f.x, f.y); realLabel(ctx, `${shortLabel(tag) || "Drain"} (${plainLen(dc.L)}${dc.pad ? ", to outlet" : ""})`, mx + 40 * u, my, 10.5 * u, u);
+        return true;
+      }
       case "rail": {
         drawRail(ctx, v, it, u, hexOf(it.color), it.color === "Black (metal)" ? "#2b2b2b" : "#a7adb3");
         const lp = rotPt(it, 0, 14); const [lx, ly] = W2S(v, lp.x, lp.y);
@@ -1685,6 +1709,15 @@ function drawItem(ctx, v, it, u, sel) {
         label(ctx, it.label || "A", px - nx * 12 * u, py - ny * 12 * u, 13 * u, "center", BP.sel, 700);
       }
       break;
+    }
+    case "drain": {
+      const dc = drainCalc(it), f = dc.frame, h = dc.L / 2;
+      ctx.save(); ctx.strokeStyle = BP.ink2; ctx.lineWidth = 1 * u; ctx.setLineDash([6 * u, 4 * u]);
+      lineL(ctx, v, f, -it.w / 2, -h, -it.w / 2, h); lineL(ctx, v, f, it.w / 2, -h, it.w / 2, h); ctx.setLineDash([]);
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = BP.ink; lineL(ctx, v, f, 0, -h, 0, h);
+      drainArrow(ctx, v, it, u, BP.ink);
+      const [mx, my] = W2S(v, f.x, f.y); nameLabel(ctx, v, it, `${(shortLabel(it.label) || "DRAIN").toUpperCase()} · ${fmtLen(dc.L)}`, mx + 10 * u, my, 10 * u, "left", BP.ink2);
+      ctx.restore(); break;
     }
     case "dim": {
       const len = Math.hypot(it.x2 - it.x, it.y2 - it.y);
@@ -1896,7 +1929,7 @@ function handlesOf(it) {
     const len = Math.hypot(it.x2 - it.x, it.y2 - it.y), ang = Math.atan2(it.y2 - it.y, it.x2 - it.x), m = rotPt({ x: it.x, y: it.y, rot: -ang * 180 / Math.PI }, len / 2, it.off ?? 12);
     return hs.concat([{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }, { kind: "off", x: m.x, y: m.y }]);
   }
-  if (it.type === "cut") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
+  if (it.type === "cut" || it.type === "drain") return [{ kind: "end", idx: 1, x: it.x, y: it.y }, { kind: "end", idx: 2, x: it.x2, y: it.y2 }];
   if (LINE_TYPES.has(it.type)) return it.pts.map((p, idx) => ({ kind: "pt", idx, x: p[0], y: p[1] }));
   if (it.type === "spot") return [];
   if (!RECT_TYPES.has(it.type)) { hs.push({ kind: "radius", x: it.x + it.canopy / 2, y: it.y }); return hs; }
@@ -2104,7 +2137,7 @@ plan.addEventListener("pointermove", (e) => {
   if (snap) { nx = Math.round(nx); ny = Math.round(ny); }
   if (!drag.moved) { if (Math.hypot(nx - drag.item.x, ny - drag.item.y) * view2d.s < 4) return; snapshot(); drag.moved = true; }
   const it = drag.item;
-  if (it.type === "dim" || it.type === "cut") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
+  if (it.type === "dim" || it.type === "cut" || it.type === "drain") { const dx = nx - it.x, dy = ny - it.y; it.x2 += dx; it.y2 += dy; }
   if (it.pts) { const dx = nx - it.x, dy = ny - it.y; it.pts = it.pts.map(([x, y]) => [x + dx, y + dy]); }
   it.x = nx; it.y = ny;
   if (it.type === "unit" && snap) snapUnit(it);
@@ -2242,6 +2275,14 @@ function renderItemPane() {
   } else if (t === "spot") {
     h = `<h2>Spot elevation</h2><div class="grid2">${field("Elevation", "elev", it)}${field("East (x)", "x", it)}${field("North (y)", "y", it)}</div>
       <p class="note">A measured ground height, e.g. from a level or laser. Use negative values below the datum.</p>`;
+  } else if (t === "drain") {
+    const dc = drainCalc(it);
+    h = `<h2>Drain line</h2><label class="f">Name<input data-k="label" data-kind="text" value="${escapeHtml(it.label || "")}"></label>
+      <div class="grid2">${field("Trench width", "w", it)}${field("Trench depth", "depth", it)}${selectField("Ends at", "outlet", it, [["pad", "Rock outlet (splash pad)"], ["joins", "Joins the next drain line"]])}</div>
+      <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(dc.L)}</dd></div><div><dt>Fall to outlet</dt><dd>${Math.abs(dc.fall) < 0.25 ? "level ground" : `${fmtIn(dc.fall)} (${num1(dc.slopePct)}%)`}</dd></div>
+      <div><dt>Drain rock</dt><dd>${num1(dc.rockYd)} yd³</dd></div><div><dt>Pipe</dt><dd>${Math.ceil(dc.ft * 1.1)} ft</dd></div></dl>
+      ${dc.fall < -0.5 ? `<p class="banner">The arrow points uphill. Drag the round ends so the arrow points down the slope.</p>` : dc.slopePct < 1 ? `<p class="note">The ground is nearly flat here: dig the trench a little deeper toward the arrow end so the pipe falls at least ⅛" per foot (${fmtIn(dc.ft / 8)} over this run).</p>` : ""}
+      <p class="note">4" perforated pipe in a filter sock, laid in ¾" clear drain rock wrapped in filter fabric, from the high end down to a rock splash pad at the outlet (the arrow points to the outlet). Drag either round end to move it.</p>`;
   } else if (t === "cut") {
     h = `<h2>Section line ${escapeHtml(it.label || "")}</h2><label class="f">Letter<input data-k="label" data-kind="text" maxlength="2" value="${escapeHtml(it.label || "")}"></label>
       <dl class="stats"><div><dt>Length</dt><dd>${fmtLen(Math.hypot(it.x2 - it.x, it.y2 - it.y))}</dd></div><div><dt>Ground</dt><dd>${fmtElev(groundAt(it.x, it.y))} → ${fmtElev(groundAt(it.x2, it.y2))}</dd></div></dl>
@@ -2306,6 +2347,7 @@ function describe(it) {
   if (it.type === "steps") { const c = stepCalc(it); return `${c.count} risers, ${fmtLen(it.w)} wide, ${matName(mat(it.block))}${it.cap ? " + " + matName(mat(it.cap)) : ""}${it.config !== "straight" ? ", " + CONFIGS.find((x) => x[0] === it.config)[1].toLowerCase() : ""}`; }
   if (it.type === "wall") return `${fmtLen(it.w)} long, ${fmtLen(wallCalc(it).top)} high, ${matName(mat(it.block))}`;
   if (it.type === "rail") return `${fmtLen(it.w)} long, ${fmtLen(it.h)} high, ${it.color} wood, ${railCalc(it).posts} posts`;
+  if (it.type === "drain") return `${fmtLen(drainCalc(it).L)} of 4" perforated pipe in drain rock, to a rock outlet`;
   if (it.type === "unit") { const m = mat(it.block); return `${matName(m)} ${it.color || ""}${m && (it.w < (m.L || it.w) - 0.05 || it.h < m.H - 0.05) ? ", cut to " + fmtIn(it.w) + " × " + fmtIn(it.h) : ""}`; }
   if (it.type === "landing" || it.type === "path") return `${fmtLen(it.w)} × ${fmtLen(it.d)}, ${matName(mat(it.surface))} ${it.color || ""}`;
   return "";
@@ -2454,7 +2496,7 @@ function haulList() {
   for (const o of mats.values()) { const m = mat(o.id), n = Math.ceil(o.qty * waste), bulk = m.kind === "surface"; out.push({ desc: matName(m) + (o.color ? " " + o.color : ""), kg: n * unitKg(m), n, unit: perSqft(m) ? "sq ft" : "ea", bulk }); }
   const add = (desc, kg, bulk = false) => { if (kg > 0) out.push({ desc, kg, bulk }); };
   add("Road base / structural fill", ceilTo(w.baseTon, 0.5) * 1000, true);
-  add("Drain rock", ceilTo(w.drainYd, 0.25) * 1450, true);
+  add("Drain rock", ceilTo(w.drainYd + w.trenchYd, 0.25) * 1450, true);
   add("Bedding sand", ceilTo(w.sandYd, 0.25) * 1350, true);
   add("Polymeric sand", Math.ceil(w.polySqft / 60) * 23);
   add("Concrete for posts", w.railPosts * 2 * 30);
@@ -2477,7 +2519,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const ceilTo = (n, step) => Math.ceil(n / step - 1e-9) * step;
 function takeoff() {
   const E = { ...EST_DEFAULTS, ...job.est }, mats = new Map();
-  const w = { edgeFt: 0, railFt: 0, railPosts: 0, stepBlocks: 0, cutPieces: 0, caps: 0, wallBlocks: 0, paveSqft: 0, slabs: 0, surfSqft: 0, excavYd: 0, baseTon: 0, drainYd: 0, sandYd: 0, polySqft: 0, adhesiveCaps: 0 };
+  const w = { edgeFt: 0, railFt: 0, railPosts: 0, stepBlocks: 0, cutPieces: 0, caps: 0, wallBlocks: 0, paveSqft: 0, slabs: 0, surfSqft: 0, excavYd: 0, baseTon: 0, drainYd: 0, trenchYd: 0, pipeFt: 0, fabricSqft: 0, drainFt: 0, sandYd: 0, polySqft: 0, adhesiveCaps: 0 };
   const addM = (id, color, qty, use) => {
     if (!id || !(qty > 0) || !mat(id)) return;
     const k = id + "|" + (color || ""); const o = mats.get(k) || { id, color, qty: 0, uses: new Set() };
@@ -2532,6 +2574,8 @@ function takeoff() {
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
+    } else if (it.type === "drain") {
+      const dc = drainCalc(it); w.trenchYd += dc.rockYd; w.excavYd += dc.rockYd; w.pipeFt += dc.ft * 1.1; w.fabricSqft += dc.fabricSqft; w.drainFt += dc.ft;
     }
   }
   return { mats, w, E };
@@ -2551,6 +2595,9 @@ function estimate() {
   }
   L("Materials", '¾" road base / structural fill, compacted', ceilTo(w.baseTon, 0.5), "ton", E.basePerTon);
   L("Materials", '¾" clear drain rock behind walls', ceilTo(w.drainYd, 0.25), "yd³", E.drainPerYd);
+  L("Materials", '¾" clear drain rock for drain lines and outlet', ceilTo(w.trenchYd, 0.25), "yd³", E.drainPerYd);
+  L("Materials", '4" perforated drain pipe with filter sock', Math.ceil(w.pipeFt), "ft", E.drainPipeFt);
+  L("Materials", "Filter fabric around the drain rock", Math.ceil(w.fabricSqft), "sq ft", E.fabricSqft);
   L("Materials", "Bedding sand", ceilTo(w.sandYd, 0.25), "yd³", E.sandPerYd);
   L("Materials", "Polymeric joint sand", Math.ceil(w.polySqft / 60), "bag", E.polyBag);
   const rw = 1 + E.waste / 100;
@@ -2564,6 +2611,7 @@ function estimate() {
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
   const hrs = (n) => ceilTo(n, 0.5);
   L("Labour", "Excavation and grading", hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
+  L("Labour", "Drain line: trench, fabric, pipe and rock, outlet pad", hrs(w.drainFt * E.hrDrainFt), "hr", E.labourRate);
   L("Labour", "Base and fill placement, compaction in lifts", hrs(w.baseTon * E.hrBaseTon), "hr", E.labourRate);
   L("Labour", "Step riser and cap installation", hrs(w.stepBlocks * E.hrStepBlock + w.caps * E.hrCap), "hr", E.labourRate);
   L("Labour", "Block and cap cutting", hrs(w.cutPieces * E.hrCut), "hr", E.labourRate);
@@ -2629,7 +2677,7 @@ const EST_FIELDS = [
   ["delivery", "Delivery $ (lot)"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
-  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrBaseTon", "Hours per ton base"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
 function renderEstFields() {
   $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
@@ -2942,6 +2990,8 @@ function scopeAuto() {
   }
   if (gab.length) out.push(`${plural(gab.length, "gabion basket step")} (stones in a wire cage) at the bottom${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
   for (const it of its.filter((i) => i.type === "wall")) { const wc = wallCalc(it); out.push(`${shortLabel(it.label) || "Retaining wall"}: ${plainLen(it.w)} long, ${plainLen(wc.top)} high, ${matName(wc.b)}${wc.c ? " with caps" : ""}, drain rock behind.`); }
+  const drains = its.filter((i) => i.type === "drain");
+  if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
   const rails = its.filter((i) => i.type === "rail");
   if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); out.push(`Handrail: about ${ft} ft, ${r0.color || "cedar"} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
@@ -2953,7 +3003,7 @@ const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repair
 function timelinePhases() {
   const d = cdoc(), q = estimate(), perDay = Math.max(1, d.crew * d.hrs), hrs = { prep: 0, steps: 0, pave: 0, rail: 0 };
   for (const l of q.lines.filter((l) => l.unit === "hr")) {
-    const k = /excavat|base and fill|hauling|wheelbarrow/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
+    const k = /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
     hrs[k] += l.qty;
   }
   const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0;
@@ -3221,7 +3271,7 @@ $("importJson").onchange = async (e) => {
 function afterLoad() { renderJobPane(); renderMaterials(); renderEstFields(); requestAnimationFrame(() => { fitView(plan.clientWidth, plan.clientHeight); commit(); }); }
 
 function num(v, d, min = -1e6, max = 1e6) { v = typeof v === "string" ? parseLen(v) : +v; return isFinite(v) ? clamp(v, min, max) : d; }
-const STR_OPTS = { edging: EDGINGS.map((c) => c[0]), config: CONFIGS.map((c) => c[0]), cheek: CHEEKS.map((c) => c[0]), stagger: STAGGER.map((c) => c[0]), riserCut: RISERCUT.map((c) => c[0]), edge: EDGES.map((c) => c[0]) };
+const STR_OPTS = { edging: EDGINGS.map((c) => c[0]), config: CONFIGS.map((c) => c[0]), cheek: CHEEKS.map((c) => c[0]), stagger: STAGGER.map((c) => c[0]), outlet: ["pad", "joins"], riserCut: RISERCUT.map((c) => c[0]), edge: EDGES.map((c) => c[0]) };
 function sanitizeItem(raw, legacy) {
   if (!raw || !TYPE_INFO[raw.type]) return null;
   const d = defaults(raw.type, 0, 0);
@@ -4274,6 +4324,14 @@ function build3d() {
         }
         break;
       }
+      case "drain": {
+        const dc = drainCalc(it), f = dc.frame, gm = mat3("drainrock", () => new THREE.MeshStandardMaterial({ map: noiseTex("#bdb9b0", 40, 128), roughness: 1 }));
+        const z = (groundAt(it.x, it.y, it.id) + groundAt(it.x2, it.y2, it.id)) / 2 + 0.4, g = box(it.w, 0.8, dc.L, gm); g.castShadow = false; g.rotation.order = "YXZ"; place(g, f, 0, 0, z); g.rotation.x = -Math.atan2(dc.fall, dc.L);
+        if (!dc.pad) break;
+        const pad = new THREE.Mesh(new THREE.CylinderGeometry(it.w * 1.1, it.w * 1.3, 2, 16), mat3("padrock", () => new THREE.MeshStandardMaterial({ map: noiseTex("#8f8a80", 50, 128), roughness: 1, flatShading: true })));
+        pad.position.set(it.x2, groundAt(it.x2, it.y2, it.id) + 0.6, -it.y2); world.add(pad);
+        break;
+      }
       case "rail": {
         // posts follow the ground (and the steps) beside the rail; rails run post top to post top
         const rc = railCalc(it), metal = it.color === "Black (metal)";
@@ -4390,6 +4448,7 @@ Item types:
 - contour: {"type":"contour","pts": [[x,y],...],"elev": elevation} a ground contour line
 - spot: {"type":"spot","x","y","elev"} a measured ground elevation
 - cut: {"type":"cut","x","y","x2","y2","label": "A"} a section line for the side view
+- drain: {"type":"drain","x","y","x2","y2","w": trench width (12),"depth": trench depth (18),"outlet": "pad" (rock outlet at x2,y2) or "joins" (continues into another drain line),"label"} perforated pipe in drain rock from the high end (x,y) to the outlet (x2,y2)
 Elevations are inches from the job datum (0 = bottom of the steps); below the datum is negative.
 For L-shaped, U-turn or multi-flight stairs, use separate steps items joined by landings; each upper flight's "elev" equals the landing "h".
 Keep existing "id" values for items you keep; new items need no id.`;
