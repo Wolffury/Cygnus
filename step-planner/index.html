@@ -808,7 +808,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, hrPlanning: 12, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -2707,7 +2707,7 @@ const EST_FIELDS = [
   ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
-  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrPlanning", "Hours of free estimate and planning (not charged)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
 function renderEstFields() {
   $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
@@ -2883,7 +2883,12 @@ function renderNegotiate() {
   const all = round2(base - totalWith(live.map((o) => o.fn)));
   $("negList").innerHTML = `<p class="note">What each change takes off today's ${money(base)}. Held back for negotiating: nothing here is in the quote until you tap Apply (Undo takes it back).</p>
     <table class="qt"><tbody>${groups.map(([g, r]) => `<tr class="cat"><td colspan="3" style="text-align:left">${g}</td></tr>` + r.map(({ o, save }) => `<tr><td>${escapeHtml(o.t)}<small>${escapeHtml(o.d)}</small></td><td>−${money(save)}</td><td><button class="btn small" data-neg="${o.k}">Apply</button></td></tr>`).join("")).join("")}
-    <tr class="sub"><td>All of them together</td><td>−${money(all)}</td><td>${money(round2(base - all))}</td></tr></tbody></table>`;
+    <tr class="sub"><td>All of them together</td><td>−${money(all)}</td><td>${money(round2(base - all))}</td></tr></tbody></table>
+    ${(() => { const q = estimate(), t = haulList().reduce((a, x) => a + x.kg, 0) / 1000, h = Math.ceil(t * 0.5 * 2) / 2; if (t < 1) return "";
+      return `<h3>Work you're not charging for</h3><p class="note">Talking points: real work in the job that isn't in the price.</p>
+      <table class="qt"><tbody><tr><td>Unloading the truck and stacking material at the top by hand<small>About ${num1(t)} tonnes at roughly half an hour a tonne: ${num1(h)} hours</small></td><td>${money(round2(h * q.E.labourRate * q.factor))}</td></tr>
+      ${q.E.hrPlanning > 0 ? `<tr><td>Free estimate and planning<small>Site visit, measuring, the plan and 3D model, quantities, schedule and tide notes: ${num1(q.E.hrPlanning)} hours (set under Rates)</small></td><td>${money(round2(q.E.hrPlanning * q.E.labourRate * q.factor))}</td></tr>` : ""}
+      <tr class="sub"><td>Together</td><td>${money(round2((h + (q.E.hrPlanning || 0)) * q.E.labourRate * q.factor))}</td></tr></tbody></table>`; })()}`;
   $("negList").querySelectorAll("[data-neg]").forEach((b) => b.onclick = () => { const o = NEGOTIATE.find((x) => x.k === b.dataset.neg); snapshot(); job.est = { ...EST_DEFAULTS, ...job.est }; o.fn(job); commit(); renderEstFields(); toast(`Applied: ${o.t}. Undo takes it back.`); });
 }
 $("negBox").addEventListener("toggle", () => { if ($("negBox").open) renderNegotiate(); });
@@ -3108,6 +3113,7 @@ function valueAuto() {
   out.push(`Everything to get it built on an island site is in the price: ${listAnd(inc)}. No surprise extras.`);
   const blkL = lines.find((l) => l.unit === "ea" && /block/i.test(l.desc) && !/cap/i.test(l.desc)), blk = blkL ? blkL.qty : 0, caps = qty(/\bcap\b|Cap Max/i);
   out.push(`Measured, not guessed: quantities come from a scaled plan and a 3D model of the slope${blk ? ` (${blk} blocks${caps ? `, ${caps} caps` : ""} and every bag and tonne of gravel)` : ""}, with a small ${E.waste}% allowance for cuts. You pay for what the job needs.`);
+  out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your slope, the quantities, a dated schedule${(cdoc().tides || []).length ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
   out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
   out.push("Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it.");
   return out.join("\n");
