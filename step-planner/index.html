@@ -2794,6 +2794,7 @@ function takeoff() {
       if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") { w.paveSqft += ua / 144; if (!glued) { w.sandYd += yd3(ua * 1); w.polySqft += ua / 144; } }
       else if (m.kind === "solid") w.stepBlocks++; else w.wallBlocks++;
       if (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
+      if (!glued && !/channel|grate/i.test(m.name || "")) base(ua, it.h + (m.kind === "paver" || m.kind === "slab" ? 1 : 0)); // set on the ground: dig out and compact a gravel base under it
     } else if (it.type === "path") {
       surface(it.surface, it.color, it.w * it.d, use);
       base(it.w * it.d);
@@ -3443,8 +3444,10 @@ const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repair
 // Working days from labour hours, by stage of the job
 function timelinePhases() {
   const d = cdoc(), q = estimate(), perDay = Math.max(1, d.crew * d.hrs), hrs = { prep: 0, steps: 0, pave: 0, rail: 0 };
+  const placedPavers = job.items.some((i) => i.type === "unit" && (mat(i.block) || {}).kind === "paver" && !unitOnUnit(i));
   for (const l of q.lines.filter((l) => l.unit === "hr")) {
-    const k = /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
+    const k = /channel/i.test(l.desc) || (placedPavers && /cutting/i.test(l.desc)) ? "pave" // channel drains go in with the paving; on a laid paver job most cuts are pavers
+      : /excavat|base and fill|hauling|wheelbarrow|drain/i.test(l.desc) ? "prep" : /handrail/i.test(l.desc) ? "rail" : /paving|edging|surface|slab/i.test(l.desc) ? "pave" : "steps";
     hrs[k] += l.qty;
   }
   const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0, F = jobFacts();
