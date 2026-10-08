@@ -751,7 +751,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&am
 // Colours are rendering approximations of the named product colours.
 const HEX = {
   "Weathered grey": "#9a9488", "Black (metal)": "#2b2b2b", Grey: "#9c9b97", Charcoal: "#5a5a5c", "Rocky Mountain": "#8d7f6e", Granite: "#8f8c88", Sandalwood: "#b8a58a", Teak: "#8b6c52",
-  "Moroccan Sunset": "#ad7a58", "Autumn Blend": "#8a5534", Natural: "#b9b3a8", Midnight: "#4a4b50", "Shaded Grey": "#8a8987", "Indian Summer": "#a37c5c",
+  "Moroccan Sunset": "#ad7a58", "Autumn Blend": "#8a5534", "Galvanized steel": "#8f979e", "Black steel": "#3a3d40", Natural: "#b9b3a8", Midnight: "#4a4b50", "Shaded Grey": "#8a8987", "Indian Summer": "#a37c5c",
   "La Jolla Blend": "#a99c88", Tan: "#c2ad8c", "Desert Sand": "#cdb99a", Red: "#9a5a48", Brown: "#7a5e48", Green: "#7d8a72",
   Sandstone: "#c9b28d", "Granite Grey": "#8e8e8c", "Light Grey": "#bdbbb6", Cedar: "#9c6b45", "Dark Brown": "#5b4433", "Grey Mix": "#9a9a96",
 };
@@ -1585,6 +1585,8 @@ function drawItemReal(ctx, v, it, u, sel) {
       }
       case "unit": {
         unitPath(ctx, v, it); ctx.fillStyle = shade(hexOf(it.color), 0.92 + clamp((it.z || 0) / 60, 0, 0.2)); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke();
+        if (/grate/i.test((mat(it.block) || {}).name || "")) { ctx.save(); unitPath(ctx, v, it); ctx.clip(); ctx.strokeStyle = "rgba(20,22,26,.75)"; ctx.lineWidth = Math.max(1, 0.35 * v.s); // grate slots across the channel
+          for (let t = -it.w / 2 + 0.6; t < it.w / 2; t += 1) { const p = rotPt(it, t, -it.d / 2 + 0.8), q = rotPt(it, t, it.d / 2 - 0.8), [ax, ay] = W2S(v, p.x, p.y), [bx, by] = W2S(v, q.x, q.y); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); } ctx.restore(); }
         return true;
       }
       case "tree": case "evergreen": case "shrub": {
