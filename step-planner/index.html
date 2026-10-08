@@ -805,7 +805,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, hrGabion: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, gabionDiy: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -2255,6 +2255,7 @@ function renderItemPane() {
       ${selectField("Edge", "edge", it, EDGES)}${selectField("Edging", "edging", it, EDGINGS)}
       ${it.edge === "caps" ? selectField("Wall block", "block", it, matOptions(["block"])) + selectField("Block colour", "blockColor", it, colorOptions(it.block)) + selectField("Border cap", "cap", it, matOptions(["cap", "slab"])) + selectField("Cap colour", "capColor", it, colorOptions(it.cap)) : ""}</div>
       <dl class="stats"><div><dt>Surface</dt><dd>${num1(lc.area / 144)} sq ft</dd></div><div><dt>Perimeter blocks</dt><dd>${lc.blocks || "–"}</dd></div><div><dt>Border caps</dt><dd>${lc.caps || "–"}</dd></div><div><dt>Courses</dt><dd>${lc.courses || "–"}</dd></div></dl>`;
+    if (isGabion(mat(it.surface))) h += gabionSpecHtml(it);
   } else if (t === "path") {
     h += `<div class="grid2">${field("Width", "w", it)}${field("Length", "d", it)}${field("Rotation °", "rot", it, "deg")}<span></span>
       ${selectField("Surface", "surface", it, matOptions(["paver", "slab", "surface"]))}${selectField("Colour", "color", it, colorOptions(it.surface))}
@@ -2311,6 +2312,7 @@ function renderItemPane() {
   pane.innerHTML = h;
   if ($("nameReset")) $("nameReset").onclick = () => { snapshot(); delete it.lox; delete it.loy; commit(); };
   pane.querySelectorAll("[data-k]").forEach((inp) => inp.addEventListener("change", () => setItemField(it, inp)));
+  if ($("gabCopy")) $("gabCopy").onclick = async () => { const ta = $("gabEmail"); try { await navigator.clipboard.writeText(ta.value); toast("Copied. Paste it into an email."); } catch { ta.select(); document.execCommand("copy"); toast("Copied."); } };
   const rotBy = (d) => { snapshot(); it.rot = ((it.rot || 0) + d + 360) % 360; commit(); };
   $("rotL") && ($("rotL").onclick = () => rotBy(-90));
   $("rotR") && ($("rotR").onclick = () => rotBy(90));
@@ -2331,6 +2333,7 @@ function renderItemPane() {
 function setItemField(it, inp) {
   const key = inp.dataset.k, kind = inp.dataset.kind;
   snapshot();
+  if (key === "gabionDiy") { job.est = { ...job.est, gabionDiy: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
   if (kind === "text") it[key] = inp.value;
   else if (kind === "select") {
     it[key] = inp.value;
@@ -2505,6 +2508,7 @@ function haulList() {
   const add = (desc, kg, bulk = false) => { if (kg > 0) out.push({ desc, kg, bulk }); };
   add("Road base / structural fill", ceilTo(w.baseTon, 0.5) * 1000, true);
   add("Drain rock", ceilTo(w.drainYd + w.trenchYd, 0.25) * 1450, true);
+  if (w.gabStoneYd) add("Gabion stone", ceilTo(w.gabStoneYd * 1.15, 0.25) * 1600, true);
   add("Bedding sand", ceilTo(w.sandYd, 0.25) * 1350, true);
   add("Polymeric sand", Math.ceil(w.polySqft / 60) * 23);
   add("Concrete for posts", w.railPosts * 2 * 30);
@@ -2564,7 +2568,9 @@ function takeoff() {
       base(it.w * (wc.b.D + 12), wc.b.H);
       w.drainYd += yd3(it.w * 12 * wc.top);
     } else if (it.type === "landing" && isGabion(mat(it.surface))) { // one basket per step
-      addM(it.surface, it.color, 1, use); w.gabions = (w.gabions || 0) + 1; base(it.w * it.d); w.fabricSqft += it.w * it.d / 144 * 1.3; // fabric under the basket against scour
+      const gm = mat(it.surface), gH = gm.H || 7; w.gabions = (w.gabions || 0) + 1; base(it.w * it.d);
+      if (E.gabionDiy) { const g = gabionParts(it.w, it.d, gH); w.gabMeshFt2 = (w.gabMeshFt2 || 0) + g.meshFt2; w.gabEdgeM = (w.gabEdgeM || 0) + g.edgeM; w.gabStoneYd = (w.gabStoneYd || 0) + g.stoneYd; }
+      else addM(it.surface, it.color, 1, use); w.fabricSqft += it.w * it.d / 144 * 1.3; // fabric under the basket against scour
     } else if (it.type === "landing") {
       const lc = landingCalc(it);
       if (lc.edged) {
@@ -2621,6 +2627,13 @@ function estimate() {
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
   const hrs = (n) => ceilTo(n, 0.5);
   L("Labour", "Excavation and grading", hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
+  if (w.gabMeshFt2) {
+    L("Materials", "Gabion mesh: woven hex double-twist, Galfan + PVC (marine), 2.7/3.7 mm, 60×80 mm", ceilTo(w.gabMeshFt2 * 1.15 / 10.764 + 0.5, 0.5), "m²", E.meshM2); // +15% waste, plus ½ m² for cutting errors
+    L("Materials", "Lacing wire, Galfan + PVC 2.2/3.2 mm (50 m coil)", Math.ceil(w.gabEdgeM * 1.4 / 50), "coil", E.lacingCoil);
+    L("Materials", "Stainless C-rings for the panel edges", Math.ceil(w.gabions * 15 / 10) * 10, "ea", E.ringEach);
+    L("Materials", 'Gabion stone, hard angular basalt or granite 3–6"', ceilTo(w.gabStoneYd * 1.15, 0.25), "yd³", E.gabionStoneYd);
+    L("Labour", "Gabion baskets: cut, fold and lace the mesh on site", hrs(w.gabions * E.hrGabionBuild), "hr", E.labourRate);
+  }
   L("Labour", "Gabion basket steps: set, fill with rock by hand, close and tie", hrs((w.gabions || 0) * E.hrGabion), "hr", E.labourRate);
   L("Labour", "Drain line: trench, fabric, pipe and rock, outlet pad", hrs(w.drainFt * E.hrDrainFt), "hr", E.labourRate);
   L("Labour", "Base and fill placement, compaction in lifts", hrs(w.baseTon * E.hrBaseTon), "hr", E.labourRate);
@@ -2691,7 +2704,7 @@ const EST_FIELDS = [
   ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
-  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
 function renderEstFields() {
   $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
@@ -3014,7 +3027,7 @@ function scopeAuto() {
     const m = names.map((n) => n.match(/^(.*?)\s*\d+$/)), pre = m.every((x) => x && x[1] === m[0][1]) ? m[0][1] : null;
     out.push(names.length === 1 ? `${names[0]}: ${desc}.` : pre ? `${names.length} ${pre.toLowerCase()}s, each ${desc}.` : `${listAnd(names)}: each ${desc}.`);
   }
-  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")}, one basket per ${fmtIn(mat(gab[0].surface).H || 7)} step: marine-grade PVC-coated wire baskets filled with hard rock, on filter fabric, made to sit under the high tide${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
+  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")}, one basket per ${fmtIn(mat(gab[0].surface).H || 7)} step: marine-grade ${E.gabionDiy ? "baskets built on site from Galfan + PVC-coated hex mesh" : "PVC-coated wire baskets"} filled with hard rock, on filter fabric, made to sit under the high tide${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
   for (const it of its.filter((i) => i.type === "wall")) { const wc = wallCalc(it); out.push(`${shortLabel(it.label) || "Retaining wall"}: ${plainLen(it.w)} long, ${plainLen(wc.top)} high, ${matName(wc.b)}${wc.c ? " with caps" : ""}, drain rock behind.`); }
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
@@ -3985,6 +3998,63 @@ function stonesIn(ctx, x, y, w, h, base, seed, size) {
   const n = Math.min(4000, Math.round(w * h / (size * size) * 0.7));
   for (let k = 0; k < n; k++) { const r = size * (0.25 + 0.35 * rand(seed + k * 7)); ctx.fillStyle = shade("#9a9284", 0.75 + 0.5 * rand(seed + k * 13)); ctx.beginPath(); ctx.ellipse(x + rand(seed + k * 3) * w, y + rand(seed + k * 5) * h, r, r * 0.75, rand(seed + k) * 3, 0, 7); ctx.fill(); }
   ctx.restore();
+}
+// One box basket built from mesh: six sides (closed top), the edges to lace, and the stone to fill it
+function gabionParts(L, W, H) { return { meshFt2: 2 * (L * W + L * H + W * H) / 144, edgeM: 4 * (L + W + H) * 0.0254, stoneYd: L * W * H / 46656 }; }
+// Build spec for gabions made on site, shown in the gabion section and on the material card
+function gabionSpecHtml(it) {
+  const E = { ...EST_DEFAULTS, ...job.est }, gab = job.items.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), n = gab.length;
+  const H = (mat(it.surface) || {}).H || 7, t = gab.reduce((a, i) => { const g = gabionParts(i.w, i.d, H); a.m += g.meshFt2; a.e += g.edgeM; a.s += g.stoneYd; return a; }, { m: 0, e: 0, s: 0 });
+  const m2 = t.m * 1.15 / 10.764;
+  return `<h3>Gabion baskets</h3>
+    ${selectField("Baskets", "gabionDiy", { gabionDiy: E.gabionDiy ? "1" : "0" }, [["0", "Buy ready-made baskets"], ["1", "Build on site from mesh"]])}
+    <dl class="stats"><div><dt>Baskets</dt><dd>${n} × ${fmtIn(it.w)} × ${fmtIn(it.d)} × ${fmtIn(H)}</dd></div><div><dt>Mesh (closed top, +15%)</dt><dd>${num1(t.m * 1.15)} ft² = ${num1(m2)} m² → order ${num1(ceilTo(m2 + 0.5, 0.5))} m²</dd></div>
+      <div><dt>Lacing wire</dt><dd>about ${Math.round(t.e * 1.4)} m → one 50 m coil</dd></div><div><dt>C-rings</dt><dd>${Math.ceil(n * 15 / 10) * 10} (about 15 a basket)</dd></div>
+      <div><dt>Stone</dt><dd>${num1(t.s * 1.15)} yd³ (about ${num1(t.s * 1.15 * 1.6)} t)</dd></div><div><dt>Each step</dt><dd>${fmtIn(H)} high</dd></div></dl>
+    <details open><summary>Spec to give suppliers (marine, under the high tide)</summary>
+      <ul style="list-style:disc;padding-left:20px;margin:0;font-size:14px;display:flex;flex-direction:column;gap:6px">
+        <li><b>Mesh:</b> woven hexagonal double-twist gabion mesh.</li>
+        <li><b>Coating:</b> Galfan (Zn-5Al) plus extruded PVC, for coastal and marine use. Plain galvanized rusts out in salt water.</li>
+        <li><b>Wire:</b> body 2.7/3.7 mm (2.7 mm steel + 1.0 mm total PVC) or heavier 3.0/4.0 mm; selvedge (edge) 3.4/4.4 mm; lacing 2.2/3.2 mm.</li>
+        <li><b>PVC thickness:</b> about 0.5 mm (0.4 mm minimum).</li>
+        <li><b>Aperture:</b> 60×80 mm. These baskets are only ${fmtIn(H)} deep, like a Reno mattress, so the smaller mesh suits them better than 80×100 mm.</li>
+        <li><b>Lacing:</b> same Galfan + PVC system, 2.2/3.2 mm, sold in 25–50 m coils. Lace every edge with alternating single and double loops about every 4" (100 mm).</li>
+        <li><b>C-rings / hog rings</b> (instead of hand lacing): stainless or Galfan, about 15 a basket.</li>
+        <li><b>Stone fill:</b> hard, angular, durable rock (basalt or granite; not sandstone or shale), 3–6" (75–150 mm): bigger than the mesh opening but small enough to pack a ${fmtIn(H)} basket in two layers. Hand-place the face stones, fill the voids, and overfill the top about ½" (10 mm) so it settles tight before the lid is laced down.</li>
+        <li><b>Under the baskets:</b> non-woven filter fabric on compacted base, so the tide doesn't wash the ground out from under them. Lace each basket to the one below.</li>
+      </ul>
+      <p class="note">Price guide (Canada, 2025–26): PVC + Galfan mesh about $27–60 per m² (plain galvanized $1–3 per ft²; Galfan adds 30–40%, PVC 50–70%); lacing wire $20–50 a coil; rings $10–25 a pack; gabion stone $45–65 a tonne, more in small loads; filter fabric $0.75–2.50 per m². Small pre-made Galfan baskets (500 mm cubes) are about $55–60 each, usually dearer than roll stock. Some rolls only come in full lengths, so ask about part rolls.</p></details>
+    <details><summary>Quote request to send suppliers</summary>
+      <textarea id="gabEmail" rows="14" style="width:100%;font:13px/1.4 var(--font-body)" readonly>${escapeHtml(gabionEmail(n, H, m2, t))}</textarea>
+      <div class="row"><button class="btn small" id="gabCopy">Copy</button><span class="note">Paste into an email to gabion or wire suppliers (Gabion Canada, Gabions.ca, Fenced.ca and others).</span></div></details>`;
+}
+function gabionEmail(n, H, m2, t) {
+  const co = company();
+  return `Subject: Quote: PVC-coated Galfan gabion mesh for coastal use (about ${num1(ceilTo(m2 + 0.5, 0.5))} m²)
+
+Hi,
+
+I'm building ${n} small closed-top gabion baskets (${fmtIn(H)} deep) for a seaside job on the Gulf Islands, BC. They sit below the high tide, so I need woven hexagonal double-twist gabion mesh with Galfan (Zn-5Al) + PVC coating for coastal and marine exposure.
+
+Quantities:
+- Gabion mesh: about ${num1(ceilTo(m2 + 0.5, 0.5))} m²
+  - Body wire 2.7/3.7 mm (or heavier, 3.0/4.0 mm)
+  - Selvedge / edge wire 3.4/4.4 mm
+  - Aperture 60×80 mm (80×100 mm if that's all you stock)
+  - PVC about 0.5 mm (0.4 mm minimum), grey or black
+- Lacing wire: Galfan + PVC, 2.2/3.2 mm, 1 coil (25–50 m)
+- C-rings / hog rings, stainless or Galfan: about ${Math.ceil(n * 15 / 10) * 10}
+- Non-woven geotextile filter fabric: 5–10 m² (optional)
+
+Please let me know:
+- Price per m² for this mesh, and whether you sell part rolls
+- Price for the lacing wire and rings
+- Lead time and shipping to Victoria, BC
+
+If you also supply gabion stone, 75–150 mm (3–6") hard angular rock, please quote about ${num1(Math.max(0.5, ceilTo(t.s * 1.15 * 1.6, 0.5)))} tonne delivered.
+
+Thanks,
+${[co.name, co.phone, co.email].filter(Boolean).join("\n") || "[Your name and phone]"}`;
 }
 // Gabion fill: rounded stones packed tight in the given colour, dark gaps between them
 function gabionStones(ctx, x, y, w, h, hex, seed, size) {
