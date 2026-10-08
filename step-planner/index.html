@@ -3597,7 +3597,7 @@ function clientPages() {
   x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "top"; x.fillText("Accepted by (client) and date", M, y); x.fillText(`${co.name || "Contractor"} and date`, M + CW * 0.55, y);
   }
   // footer on every page
-  const notice = `© ${co.name ? co.name + " " : ""}${new Date().getFullYear()}. Prepared ${qd.client.name ? `for ${qd.client.name} ` : ""}for quote ${qd.quoteNumber} only. Not for construction by others.`;
+  const notice = `© ${co.name ? co.name + " " : ""}${new Date().getFullYear()}. Prepared ${qd.client.name ? `for ${qd.client.name} ` : ""}for quote ${qd.quoteNumber} only. Not for use in construction by others.`;
   pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(17, 600); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(notice, M, H - M * 0.6 - 28, CW);
     g.font = F(19); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(`${co.name || ""}${co.name ? " · " : ""}Quote ${qd.quoteNumber} · ${qd.job.name}`, M, H - M * 0.6); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.6); });
   return pages;
