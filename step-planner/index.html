@@ -3767,7 +3767,7 @@ function sanitizeJob(j) {
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
       extras: (Array.isArray(j.extras) ? j.extras : []).slice(0, 50).map((x) => ({ desc: String(x.desc || "").slice(0, 120), cat: ["Materials", "Labour", "Equipment & disposal", "Other"].includes(x.cat) ? x.cat : "Other", qty: num(x.qty, 1, 0, 1e5), unit: String(x.unit || "ea").slice(0, 10), price: num(x.price, 0, 0, 1e7) })),
       site: { w: num(j.site?.w, 480, 48, 20000), d: num(j.site?.d, 420, 48, 20000) },
-      items: (Array.isArray(j.items) ? j.items : []).map((r) => sanitizeItem(r, legacy)).filter(Boolean).slice(0, 300),
+      items: (Array.isArray(j.items) ? j.items : []).map((r) => sanitizeItem(r, legacy)).filter(Boolean).slice(0, 3000),
     };
   } finally { job = prev; }
 }
