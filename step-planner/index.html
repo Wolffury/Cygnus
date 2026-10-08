@@ -805,7 +805,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, gabionDiy: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -2333,7 +2333,7 @@ function renderItemPane() {
 function setItemField(it, inp) {
   const key = inp.dataset.k, kind = inp.dataset.kind;
   snapshot();
-  if (key === "gabionDiy") { job.est = { ...job.est, gabionDiy: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
+  if (key === "gabionDiy" || key === "gabionTide") { job.est = { ...job.est, [key]: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
   if (kind === "text") it[key] = inp.value;
   else if (kind === "select") {
     it[key] = inp.value;
@@ -3031,7 +3031,7 @@ function scopeAuto() {
     const m = names.map((n) => n.match(/^(.*?)\s*\d+$/)), pre = m.every((x) => x && x[1] === m[0][1]) ? m[0][1] : null;
     out.push(names.length === 1 ? `${names[0]}: ${desc}.` : pre ? `${names.length} ${pre.toLowerCase()}s, each ${desc}.` : `${listAnd(names)}: each ${desc}.`);
   }
-  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")}, one basket per ${fmtIn(mat(gab[0].surface).H || 7)} step: marine-grade ${E.gabionDiy ? "baskets built on site from Galfan + PVC-coated hex mesh" : "PVC-coated wire baskets"} filled with hard rock, on filter fabric, made to sit under the high tide${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
+  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")}${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}, one basket per ${fmtIn(mat(gab[0].surface).H || 7)} step: marine-grade ${E.gabionDiy ? "baskets built on site from Galfan + PVC-coated hex mesh" : "PVC-coated wire baskets"} filled with hard rock, on filter fabric, ${E.gabionTide ? "made to sit under the high tide" : "set above the high-water mark and built to stand up to salt spray and storm waves"}.`);
   for (const it of its.filter((i) => i.type === "wall")) { const wc = wallCalc(it); out.push(`${shortLabel(it.label) || "Retaining wall"}: ${plainLen(it.w)} long, ${plainLen(wc.top)} high, ${matName(wc.b)}${wc.c ? " with caps" : ""}, drain rock behind.`); }
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
@@ -3041,7 +3041,7 @@ function scopeAuto() {
   out.push("Clean up, and a walk-through with you when it's done.");
   return out.join("\n");
 }
-const exclAuto = () => EXCL_AUTO + (job.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))) && job.items.some((i) => i.type === "shore") ? "\nForeshore authorization for work below the high-water mark (Province of BC, and Fisheries and Oceans Canada review), if required" : "");
+const exclAuto = () => EXCL_AUTO + (job.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))) && job.items.some((i) => i.type === "shore") && (job.est || {}).gabionTide ? "\nForeshore authorization for work below the high-water mark (Province of BC, and Fisheries and Oceans Canada review), if required" : "");
 const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
 // Working days from labour hours, by stage of the job
 function timelinePhases() {
@@ -3072,7 +3072,7 @@ function timelineAuto() {
   let day = 0, t = new Date(start); while (!isWorkday(t)) t.setDate(t.getDate() + 1);
   // ordering and deliveries, counted back from the first day on site
   const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
-  const shore = gab && its.some((i) => i.type === "shore"), ferry = !E.haulSelf && E.ferryPerFt > 0, loads = Math.max(1, Math.ceil(E.ferryLoads || 1));
+  const shore = gab && E.gabionTide && its.some((i) => i.type === "shore"), ferry = !E.haulSelf && E.ferryPerFt > 0, loads = Math.max(1, Math.ceil(E.ferryLoads || 1));
   const backDays = (n) => { const r = new Date(t); r.setDate(r.getDate() - n); while (!isWorkday(r)) r.setDate(r.getDate() - 1); return r; };
   const orderBy = backDays(Math.max(d.lead || 0, gab ? 21 : 0) + 2), hiab = subWorkdays(t, 2), gravel = subWorkdays(t, 1);
   if (shore) out.push(`Now: apply for foreshore authorization for the gabion steps below the high-water mark, if required (approvals can take several weeks).`);
@@ -4021,11 +4021,12 @@ function gabionSpecHtml(it) {
   const H = (mat(it.surface) || {}).H || 7, t = gab.reduce((a, i) => { const g = gabionParts(i.w, i.d, H); a.m += g.meshFt2; a.e += g.edgeM; a.s += g.stoneYd; return a; }, { m: 0, e: 0, s: 0 });
   const m2 = t.m * 1.15 / 10.764;
   return `<h3>Gabion baskets</h3>
-    ${selectField("Baskets", "gabionDiy", { gabionDiy: E.gabionDiy ? "1" : "0" }, [["0", "Buy ready-made baskets"], ["1", "Build on site from mesh"]])}
+    <div class="grid2">${selectField("Baskets", "gabionDiy", { gabionDiy: E.gabionDiy ? "1" : "0" }, [["0", "Buy ready-made baskets"], ["1", "Build on site from mesh"]])}${selectField("They sit", "gabionTide", { gabionTide: E.gabionTide ? "1" : "0" }, [["0", "Above the high-water mark"], ["1", "Below high water (needs foreshore permits)"]])}</div>
+    ${E.gabionTide ? `<p class="banner">Below the high-water mark is Crown foreshore: it usually needs provincial authorization (FrontCounter BC, $250 + GST, months in the Gulf Islands) and may need a DFO review and an Islands Trust permit. Keeping the baskets above high water avoids that.</p>` : `<p class="note">Above the high-water mark: confirm where the natural boundary (the usual high-tide line, marked by the drift line and plants) is on site before setting the bottom basket.</p>`}
     <dl class="stats"><div><dt>Baskets</dt><dd>${n} × ${fmtIn(it.w)} × ${fmtIn(it.d)} × ${fmtIn(H)}</dd></div><div><dt>Mesh (closed top, +15%)</dt><dd>${num1(t.m * 1.15)} ft² = ${num1(m2)} m² → order ${num1(ceilTo(m2 + 0.5, 0.5))} m²</dd></div>
       <div><dt>Lacing wire</dt><dd>about ${Math.round(t.e * 1.4)} m → one 50 m coil</dd></div><div><dt>C-rings</dt><dd>${Math.ceil(n * 15 / 10) * 10} (about 15 a basket)</dd></div>
       <div><dt>Stone</dt><dd>${num1(t.s * 1.15)} yd³ (about ${num1(t.s * 1.15 * 1.6)} t)</dd></div><div><dt>Each step</dt><dd>${fmtIn(H)} high</dd></div></dl>
-    <details open><summary>Spec to give suppliers (marine, under the high tide)</summary>
+    <details open><summary>Spec to give suppliers (marine, ${E.gabionTide ? "under the high tide" : "salt spray and storm waves"})</summary>
       <ul style="list-style:disc;padding-left:20px;margin:0;font-size:14px;display:flex;flex-direction:column;gap:6px">
         <li><b>Mesh:</b> woven hexagonal double-twist gabion mesh.</li>
         <li><b>Coating:</b> Galfan (Zn-5Al) plus extruded PVC, for coastal and marine use. Plain galvanized rusts out in salt water.</li>
@@ -4048,7 +4049,7 @@ function gabionEmail(n, H, m2, t) {
 
 Hi,
 
-I'm building ${n} small closed-top gabion baskets (${fmtIn(H)} deep) for a seaside job on the Gulf Islands, BC. They sit below the high tide, so I need woven hexagonal double-twist gabion mesh with Galfan (Zn-5Al) + PVC coating for coastal and marine exposure.
+I'm building ${n} small closed-top gabion baskets (${fmtIn(H)} deep) for a seaside job on the Gulf Islands, BC. ${(job.est || {}).gabionTide ? "They sit below the high tide" : "They sit just above the high tide, in salt spray and storm waves"}, so I need woven hexagonal double-twist gabion mesh with Galfan (Zn-5Al) + PVC coating for coastal and marine exposure.
 
 Quantities:
 - Gabion mesh: about ${num1(ceilTo(m2 + 0.5, 0.5))} m²
