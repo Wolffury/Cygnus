@@ -633,6 +633,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Crew size <input id="cpCrew" inputmode="decimal"></label>
           <label class="f">Hours per day <input id="cpHrs" inputmode="decimal"></label>
           <label class="f">Days to get materials <input id="cpLead" inputmode="decimal"></label>
+          <label class="f">Time off from (all jobs) <input type="date" id="cpOffFrom"></label>
+          <label class="f">Time off to <input type="date" id="cpOffTo"></label>
         </div>
         <label class="checkrow"><input type="checkbox" id="cpGst"> Charge GST</label>
         <fieldset class="views"><legend>What goes in</legend>
@@ -3042,18 +3044,23 @@ function timelinePhases() {
 }
 function nextMonday() { const t = new Date(); t.setDate(t.getDate() + Math.round(cdoc().lead || 0)); t.setDate(t.getDate() + ((8 - t.getDay()) % 7 || 7)); return t; }
 const isoDay = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (r.getDay() % 6) n--; } return r; }
+// Time off (company-wide): no work between these dates, weekends already skipped
+function timeOff() { const c = company(), ok = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || ""); return ok(c.offFrom) && ok(c.offTo) && c.offTo >= c.offFrom ? [c.offFrom, c.offTo] : null; }
+function isWorkday(t) { if (!(t.getDay() % 6)) return false; const off = timeOff(), k = isoDay(t); return !(off && k >= off[0] && k <= off[1]); }
+function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (isWorkday(r)) n--; } return r; }
 const dayName = (t) => t.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 function timelineAuto() {
   const d = cdoc(), start = d.start ? new Date(d.start + "T12:00") : nextMonday(), ph = timelinePhases(), out = [];
   out.push(`On signing: we order the materials. Allow about ${plural(Math.round(d.lead), "day")} for them to arrive on site before we start.`);
-  let day = 0, t = new Date(start); while (!(t.getDay() % 6)) t.setDate(t.getDate() + 1);
+  let day = 0, t = new Date(start); while (!isWorkday(t)) t.setDate(t.getDate() + 1);
   for (const [name, what, n] of ph) {
     const a = addWorkdays(t, Math.floor(day)), b = addWorkdays(t, Math.max(Math.floor(day), Math.ceil(day + n) - 1));
     const first = Math.floor(day) + 1, last = Math.ceil(day + n);
     out.push(`${first === last ? `Day ${first}` : `Days ${first}–${last}`} (${first === last ? dayName(a) : `${dayName(a)} – ${dayName(b)}`}): ${name}${what ? ": " + what : ""}.`);
     day += n;
   }
+  const off = timeOff(), end = addWorkdays(t, Math.max(0, Math.ceil(day) - 1));
+  if (off && off[0] <= isoDay(end) && off[1] >= isoDay(t)) out.push(`No work ${dayName(new Date(off[0] + "T12:00"))} – ${dayName(new Date(off[1] + "T12:00"))} (holiday break); the dates above already allow for it.`);
   out.push(`About ${plural(Math.ceil(day), "working day")} on site with a crew of ${d.crew}. Rain days and material delays can move these dates; we'll keep you posted.`);
   return out.join("\n");
 }
@@ -3150,6 +3157,7 @@ function cpFill() {
   const d = cdoc();
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
   $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
+  { const c = company(); $("cpOffFrom").value = c.offFrom || ""; $("cpOffTo").value = c.offTo || ""; }
   $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto();
 }
 const cpSave = () => store.set("bsp.current", job);
@@ -3159,6 +3167,7 @@ $("prClient").onclick = () => { $("printDlg").hidden = true; cpShow(); };
 $("cpClose").onclick = () => { $("cpDlg").hidden = true; };
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
+for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).addEventListener("change", (e) => { store.set("bsp.company", { ...company(), [k]: e.target.value }); if (cdoc().timeline == null) $("cpTime").value = timelineAuto(); cpRender(); });
 $("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
 $("cpAllParts").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k !== "three" || !!R3; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
 $("cpPriceOnly").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k === "price" || k === "terms"; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
