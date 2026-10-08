@@ -2737,7 +2737,9 @@ function takeoff() {
     } else if (it.type === "unit") {
       const m = mat(it.block); if (!m) continue;
       addM(it.block, it.color, perSqft(m) ? unitArea(it) / 144 : 1, "Placed blocks");
-      if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") w.paveSqft += unitArea(it) / 144;
+      const ua = unitArea(it), glued = unitOnUnit(it); // sitting on another block: glued down as a cap, no sand bed
+      if (glued && m.kind !== "cap") w.adhesiveCaps++;
+      if (m.kind === "cap") { w.caps++; w.adhesiveCaps++; } else if (m.kind === "slab") w.slabs++; else if (m.kind === "paver") { w.paveSqft += ua / 144; if (!glued) { w.sandYd += yd3(ua * 1); w.polySqft += ua / 144; } }
       else if (m.kind === "solid") w.stepBlocks++; else w.wallBlocks++;
       if (it.clip || it.w < (m.L || it.w) - 0.05 || it.d < (m.D || it.d) - 0.05 || it.h < m.H - 0.05) w.cutPieces++;
     } else if (it.type === "path") {
@@ -4285,6 +4287,65 @@ function profileOf(cut) {
   }
   return { len, pts: out };
 }
+// does this placed unit rest on top of another one (a cap on a block)?
+function unitOnUnit(it) {
+  const z0 = it.z || 0; if (z0 < -1e4) return false;
+  return job.items.some((o) => o !== it && o.type === "unit" && Math.abs((o.z || 0) + o.h - z0) < 0.3 && Math.hypot(o.x - it.x, o.y - it.y) < (Math.max(o.w, o.d) + Math.max(it.w, it.d)) / 2 - 0.5);
+}
+// world outline of a placed unit (its rectangle, or its cut shape)
+function unitWorldPoly(it) { const loc = Array.isArray(it.clip) && it.clip.length >= 3 ? it.clip : [[-it.w / 2, -it.d / 2], [it.w / 2, -it.d / 2], [it.w / 2, it.d / 2], [-it.w / 2, it.d / 2]]; return loc.map(([lx, ly]) => rotPt(it, lx, ly)); }
+// where the segment a→b passes through a convex outline: [t0, t1] along it, or null
+function segThrough(a, b, poly) {
+  let t0 = 0, t1 = 1; const dx = b.x - a.x, dy = b.y - a.y;
+  let area = 0; for (let k = 0; k < poly.length; k++) { const p = poly[k], q = poly[(k + 1) % poly.length]; area += p.x * q.y - q.x * p.y; }
+  const sg = area >= 0 ? 1 : -1;
+  for (let k = 0; k < poly.length; k++) {
+    const p = poly[k], q = poly[(k + 1) % poly.length], nx = -(q.y - p.y) * sg, ny = (q.x - p.x) * sg; // inward normal
+    const num = nx * (a.x - p.x) + ny * (a.y - p.y), den = nx * dx + ny * dy;
+    if (Math.abs(den) < 1e-9) { if (num < 0) return null; continue; }
+    const t = -num / den; if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t0 > t1) return null;
+  }
+  return t1 - t0 > 1e-6 ? [t0, t1] : null;
+}
+// Section in real colours: sky, soil, gravel base and every block, cap and paver the line cuts through, to size
+function renderProfileReal(ctx, X, Y, W, H, cut, u, ve) {
+  const { len, pts } = profileOf(cut), est = { ...EST_DEFAULTS, ...job.est }, a = { x: cut.x, y: cut.y }, b = { x: cut.x2, y: cut.y2 };
+  const hits = [];
+  for (const it of job.items) if (it.type === "unit") { const r = segThrough(a, b, unitWorldPoly(it)); if (r) hits.push({ it, s0: r[0] * len, s1: r[1] * len, z0: it.z || 0, z1: (it.z || 0) + it.h }); }
+  let lo = Infinity, hi = -Infinity;
+  for (const p of pts) { lo = Math.min(lo, p.ground); hi = Math.max(hi, p.ground); }
+  for (const h of hits) { lo = Math.min(lo, h.z0 - est.baseDepth); hi = Math.max(hi, h.z1); }
+  lo = Math.floor((lo - 12) / 12) * 12; hi = Math.ceil((hi + 18) / 12) * 12;
+  const pl = 24 * u, pr = 24 * u, pt = 60 * u, pb = 30 * u;
+  const sx = (W - pl - pr) / len, sy = Math.min(sx * ve, (H - pt - pb) / (hi - lo));
+  const ox = X + pl + ((W - pl - pr) - len * sx) / 2, oz = Y + H - pb - ((H - pt - pb) - (hi - lo) * sy) / 2, P = (sv, z) => [ox + sv * sx, oz - (z - lo) * sy];
+  ctx.save(); ctx.beginPath(); ctx.rect(X, Y, W, H); ctx.clip();
+  const sky = ctx.createLinearGradient(0, Y, 0, Y + H); sky.addColorStop(0, "#dce9f3"); sky.addColorStop(1, "#f4f7f9"); ctx.fillStyle = sky; ctx.fillRect(X, Y, W, H);
+  // soil: up to the ground, or down to the bottom of the base where something is built lower than the ground
+  const built = (sv) => hits.filter((h) => sv >= h.s0 && sv <= h.s1);
+  const soilTop = (p) => { const hs = built(p.s); if (!hs.length) return p.ground; const bot = Math.min(...hs.map((h) => h.z0)) - est.baseDepth; return Math.min(p.ground, bot); };
+  ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = P(p.s, soilTop(p)); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.lineTo(...P(len, lo - 100)); ctx.lineTo(...P(0, lo - 100)); ctx.closePath();
+  const soil = ctx.createLinearGradient(0, P(0, hi)[1], 0, Y + H); soil.addColorStop(0, "#9b7a55"); soil.addColorStop(1, "#6f5238"); ctx.fillStyle = soil; ctx.fill();
+  ctx.beginPath(); let on = false; pts.forEach((p) => { if (built(p.s).length) { on = false; return; } const [x, y] = P(p.s, p.ground); on ? ctx.lineTo(x, y) : ctx.moveTo(x, y); on = true; }); ctx.strokeStyle = "#5d8f37"; ctx.lineWidth = 4 * u; ctx.stroke();
+  // gravel base (and compacted fill up from the ground) under anything not sitting on another unit
+  for (const h of hits) { // only where it isn't resting on another unit
+    let free = [[h.s0, h.s1]];
+    for (const g of hits) if (g !== h && Math.abs(g.z1 - h.z0) < 0.6) free = free.flatMap(([p, q]) => g.s1 <= p || g.s0 >= q ? [[p, q]] : [[p, Math.max(p, g.s0)], [Math.min(q, g.s1), q]].filter(([m, n]) => n - m > 0.05));
+    for (const [p, q] of free) { const [x0, yt] = P(p, h.z0), [x1, yb] = P(q, h.z0 - est.baseDepth); stonesIn(ctx, x0, yt, x1 - x0, yb - yt, "#a9a294", hashStr(h.it.id), Math.max(1.2, sx * 0.9)); }
+  }
+  // the units, back to front by height
+  hits.sort((p, q) => p.z0 - q.z0);
+  for (const h of hits) { const m = mat(h.it.block), [x0, y0] = P(h.s0, h.z1), [x1, y1] = P(h.s1, h.z0); unitBox(ctx, x0, y0, x1, y1, m && m.kind === "cap" ? shade(hexOf(h.it.color), 1.1) : hexOf(h.it.color), sx * 3); }
+  ctx.restore(); ctx.save();
+  const T = (t, x, y, size, color = "#1d2733", weight = 600, align = "left") => { ctx.font = `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
+  T(`Section ${cut.label || ""}: cut through the ground and everything built on it`, X + 16 * u, Y + 22 * u, 16 * u, "#1d2733", 700);
+  T(`${hits.length} blocks and pavers cut by the line · real colours and sizes${ve > 1.01 ? ` · heights × ${num1(ve)}` : ""}`, X + 16 * u, Y + 42 * u, 12 * u, "#3d4a57", 500);
+  const ft = [1, 2, 5, 10, 20].find((f) => f * 12 * sx > 70 * u) || 20, bx = X + W - 30 * u - ft * 12 * sx, by = Y + H - 16 * u;
+  ctx.fillStyle = "#1d2733"; for (let k = 0; k < 4; k++) { if (k % 2 === 0) ctx.fillRect(bx + k * ft * 3 * sx, by, ft * 3 * sx, 5 * u); } ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 1 * u; ctx.strokeRect(bx, by, ft * 12 * sx, 5 * u);
+  T(`${ft} ft`, bx + ft * 6 * sx, by - 8 * u, 11 * u, "#1d2733", 700, "center");
+  ctx.restore();
+}
 function renderProfile(ctx, X, Y, W, H, cut, u, ve) {
   const { len, pts } = profileOf(cut), wl = waterLevel();
   ctx.save();
@@ -4863,7 +4924,7 @@ function drawSide() {
     label(ctx, "On the Blueprint, tap Ground → Section line and drag across the site.", w / 2, h / 2 + 14, 13, "center", BP.ink2, 500, "IBM Plex Sans");
     return;
   }
-  renderProfile(ctx, 0, 0, w, h, cut, 1, sideVE);
+  if (planLook() === "real") { cv.style.filter = ""; renderProfileReal(ctx, 0, 0, w, h, cut, 1, sideVE); } else renderProfile(ctx, 0, 0, w, h, cut, 1, sideVE);
 }
 $("v3d").onclick = () => setView("3d");
 let lastW = 0;
