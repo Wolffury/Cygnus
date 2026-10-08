@@ -227,6 +227,13 @@ textarea { resize: vertical; }
 .price { display: flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 14px; }
 .price input { width: 76px; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); text-align: right; font-family: var(--font-mono); }
 .price small { color: var(--muted); }
+.mailcard { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
+.mailcard summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.mailcard summary small { flex-basis: 100%; color: var(--muted); font-weight: 400; }
+.mailcard textarea { width: 100%; font: 13px/1.45 var(--font-body); }
+.mailcard .pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); }
+.mailcard .pill.ok { color: var(--good, #2e7d32); border-color: currentColor; }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .btn.small { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .stats.big dd { font-size: 17px; }
 table.qt { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -355,6 +362,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <button role="tab" aria-selected="false" data-pane="pMat">Materials</button>
         <button role="tab" aria-selected="false" data-pane="pQuote">Quote</button>
         <button role="tab" aria-selected="false" data-pane="pEquip">Equipment</button>
+        <button role="tab" aria-selected="false" data-pane="pMail">Orders</button>
         <button role="tab" aria-selected="false" data-pane="pAi" id="tAi">AI</button>
         <button role="tab" aria-selected="false" data-pane="pJob">Job</button>
       </div>
@@ -522,6 +530,14 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <div id="bPlan"></div>
         <p class="note" id="fNote"></p>
         <p class="note">Rental yards and suppliers, with phone numbers, are on the Quote tab under "Suppliers and rental yards".</p>
+      </div>
+      <div class="pane" id="pMail" role="tabpanel" hidden>
+        <h2>Order emails</h2>
+        <p class="note">One email for each supplier, written from the quote with the delivery dates from your timeline. Put in the supplier's address, check the email, then tap <b>Open in email app</b> and press Send there.</p>
+        <label class="f">Send from <input type="email" id="mailFrom" placeholder="you@example.com" autocomplete="off"></label>
+        <p class="note">This address goes in the signature. The email itself sends from the account set up in your email app, so add this address to the app first (Android: Gmail app › Add another account › Other; PC: Outlook or Mail › Add account). If the app opens on a different account, tap the From line and switch.</p>
+        <div id="mailLeft"></div>
+        <div id="mailList"></div>
       </div>
       <div class="pane" id="pAi" role="tabpanel" hidden>
         <h2>AI assistant</h2>
@@ -2185,6 +2201,7 @@ plan.addEventListener("wheel", (e) => {
 // ---------- panels ----------
 function showPane(id) {
   for (const b of document.querySelectorAll(".tabs button")) { const on = b.dataset.pane === id; b.setAttribute("aria-selected", on); $(b.dataset.pane).hidden = !on; }
+  if (id === "pMail") renderMail();
 }
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showPane(b.dataset.pane)));
 
@@ -2900,7 +2917,7 @@ function renderNegotiate() {
 }
 $("negBox").addEventListener("toggle", () => { if ($("negBox").open) renderNegotiate(); });
 function renderQuote() {
-  renderBuy(); renderEquip();
+  renderBuy(); renderEquip(); renderMail();
   const q = estimate();
   if ($("negBox") && $("negBox").open) renderNegotiate();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"];
@@ -3493,6 +3510,7 @@ function sanitizeJob(j) {
         return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
+      mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
@@ -4175,6 +4193,157 @@ If you also supply gabion stone, 75–150 mm (3–6") hard angular rock, please 
 Thanks,
 ${[co.name, co.phone, co.email].filter(Boolean).join("\n") || "[Your name and phone]"}`;
 }
+// ---------- order emails ----------
+// One email per supplier, written from the quote. "Open in email app" hands it to the device's mail app (mailto),
+// which sends from whatever account is set up there; the planner can't pick the sending account itself.
+const MAIL_SUPS = [
+  { k: "slegg", name: "Slegg Building Materials", what: "Block, caps, pavers, adhesive, concrete, drainage and rail hardware" },
+  { k: "windsor", name: "Windsor Plywood", what: "Recycled plastic lumber, primer and paint" },
+  { k: "dugums", name: "Big Dugums Trucking", what: "Road base" },
+  { k: "gabion", name: "Gabion supplier", what: "Gabion mesh, lacing wire and rings" },
+];
+function deliveryDates() {
+  const d = cdoc(), t = d.start ? new Date(d.start + "T12:00") : nextMonday(); while (!isWorkday(t)) t.setDate(t.getDate() + 1);
+  return { start: t, hiab: subWorkdays(t, 2), gravel: subWorkdays(t, 1) };
+}
+const longDay = (t) => t.toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+const FRAC = { 0.25: "¼", 0.5: "½", 0.75: "¾" };
+function mailQty(q, unit) {
+  const w = Math.floor(q), f = FRAC[round2(q - w)], n = f ? (w ? w + f : f) : num1(q);
+  if (unit === "gal") return `${w ? `${w} gal` : ""}${q - w > 0 ? `${w ? " + " : ""}${Math.ceil((q - w) * 4)} qt` : ""}`;
+  if (unit === "ea") return `${n} ×`;
+  if (["bag", "tube", "set", "coil"].includes(unit)) return `${n} ${unit}${q === 1 ? "" : "s"} of`;
+  if (unit === "ton") return `${n} tonne${q === 1 ? "" : "s"} of`;
+  return `${n} ${unit} of`;
+}
+// which supplier each quote line is ordered from
+function mailSup(l, E) {
+  if (/^¾" road base|^road base/i.test(l.desc)) return E.bulkSep ? "dugums" : "slegg";
+  if (E.bulkSep && /^¾" clear drain rock|^bedding sand|^gabion stone/i.test(l.desc)) return ""; // small amounts: not on the Hiab (weight) or the road base order
+  if (/^gabion mesh|^lacing wire|c-rings|^gabion basket/i.test(l.desc)) return "gabion";
+  if (E.railPlastic && /recycled plastic lumber|^exterior paint|^primer/i.test(l.desc)) return "windsor";
+  return "slegg";
+}
+function mailSig() { const c = company(); return ["Thanks,", "", c.name || "[Your name]", c.phone, c.mailFrom || c.email].filter((x) => x != null && x !== "").join("\n"); }
+function mailAuto(k) {
+  const q = estimate(), E = q.E, dd = deliveryDates(), site = job.address || "[full site address]";
+  const mats = q.lines.filter((l) => l.cat === "Materials" && l.qty > 0 && mailSup(l, E) === k);
+  const item = (l) => {
+    const rail = /^handrail (cap )?rail, (2x\d)/i.exec(l.desc);
+    if (rail && l.unit === "ft") return `- ${Math.ceil(l.qty / 12)} × ${rail[2]} ${E.railPlastic ? "recycled plastic lumber" : "cedar"}, 12 ft (${rail[1] ? "cap rail" : "rail"})`;
+    if (/adhesive/i.test(l.desc)) return `- ${l.qty} × 10 oz tubes of concrete block / cap adhesive, rated for cool, damp weather (please advise what you stock)`;
+    const d = /^[A-Z][a-z]/.test(l.desc) && !/^Abbotsford|^Belgard|^Allan/.test(l.desc) ? l.desc[0].toLowerCase() + l.desc.slice(1) : l.desc;
+    return `- ${mailQty(l.qty, l.unit)} ${d}`;
+  };
+  if (k === "slegg") {
+    const kg = haulList().filter((x) => !(E.bulkSep && x.bulk)).reduce((a, x) => a + x.kg, 0), price = mats.filter((l) => l.unit === "ea" && /block|cap/i.test(l.desc) && l.price > 0);
+    return { subject: `Quote and order for delivery to ${/pender/i.test(site) ? "Pender Island" : site}, ${dayName(dd.hiab)}`,
+      body: `Hi,
+
+Please quote the materials below, delivered by Hiab on ${longDay(dd.hiab)} to ${site}.
+
+${mats.map(item).join("\n")}
+
+Delivery
+- One truck load${E.ferryIncl ? " with the ferry included" : ""}.${E.delivery ? ` I have ${money(E.delivery)} delivered; please confirm.` : ""}
+- Total weight is about ${num1(kg / 1000)} tonnes. Please confirm your truck can take it in one load.
+- Please set the pallets as close to the top of the stair as the boom will reach.
+
+Please confirm
+${price.length ? `- Your prices on the block and caps. I have ${new Set(price.map((l) => l.price)).size === 1 ? `${money(price[0].price)} each` : price.map((l) => `${money(l.price)} for the ${/cap/i.test(l.desc) ? "caps" : "block"}`).join(" and ")}.\n` : ""}- Stock and lead time, so it's all on site by ${dayName(dd.hiab)}.
+- Total delivered price, before tax.
+
+${mailSig()}` };
+  }
+  if (k === "windsor") return { subject: `Quote: recycled plastic lumber for a handrail, needed by ${dayName(dd.hiab)}`,
+    body: `Hi,
+
+I'm building a handrail on a beach stairway at ${site} and would like a price on recycled plastic lumber.
+
+${mats.map(item).join("\n")}
+
+If you stock 16 ft lengths, please also quote those. I'll take whichever leaves less waste.
+
+Questions
+- Which brand is it, and where is it made?
+- What colours do you have? The rails will be painted, so I'd like the lightest colour you stock.
+- What's the recommended post spacing for a 2x6 and a 2x4 rail? My posts are about 4 ft apart.
+- How much does it expand and contract with temperature, and what gap should I leave at the joints?
+- Does the primer and paint you'd suggest work on both the plastic and the galvanized steel posts?
+- Price per foot and total, before tax.
+- Is it in stock? If not, what's the lead time? I need it by ${longDay(dd.hiab)}.
+
+Delivery
+The rest of my materials come from Slegg Building Materials (2046 Keating Cross Rd, Saanichton) on one Hiab load on ${dayName(dd.hiab)}. Could you drop the lumber at Slegg in time to go on that truck? If not, please quote delivery to the site.
+
+${mailSig()}` };
+  if (k === "dugums") {
+    const haul = q.lines.find((l) => /haul-away/i.test(l.desc));
+    return { subject: `Road base delivery, ${dayName(dd.gravel)}`,
+      body: `Hi,
+
+I'm building a beach stairway at ${site} and need the following delivered on ${longDay(dd.gravel)}:
+
+${mats.map((l) => `- ${mailQty(l.qty, l.unit)} ¾" road base / structural fill (about ${Math.round(l.qty / 1.35)} yd³ loose)`).join("\n")}
+
+Please dump it as close to the top of the stairway as you can safely get. I'll show you the spot, or can send a photo ahead.
+${haul ? `\nCould you also quote hauling away about ${num1(haul.qty)} yd³ of excavated soil from the same site partway through the job? I'll confirm the date.\n` : ""}
+Please confirm
+- Price per tonne and the delivery charge, before tax.
+- That ${dayName(dd.gravel)} works. Morning is best.
+
+${mailSig()}` };
+  }
+  if (k === "gabion") {
+    const gab = job.items.filter((i) => i.type === "landing" && isGabion(mat(i.surface)));
+    if (!E.gabionDiy && gab.length) { const H = (mat(gab[0].surface) || {}).H || 7;
+      return { subject: `Quote: ${gab.length} small marine gabion baskets (PVC-coated Galfan)`, body: `Hi,\n\nPlease quote ${gab.length} gabion baskets about ${fmtIn(gab[0].w)} × ${fmtIn(gab[0].d)} × ${fmtIn(H)} deep, closed top, woven hex double-twist mesh with Galfan + PVC coating for coastal use, with matching lacing wire. Please include shipping to Victoria, BC and the lead time; I need them by ${longDay(dd.hiab)}.\n\n${mailSig()}` }; }
+    if (!gab.length) return { subject: "", body: "" };
+    const H = (mat(gab[0].surface) || {}).H || 7, t = gab.reduce((a, i) => { const g = gabionParts(i.w, i.d, H); a.m += g.meshFt2; a.e += g.edgeM; a.s += g.stoneYd; return a; }, { m: 0, e: 0, s: 0 });
+    const txt = gabionEmail(gab.length, H, t.m * 1.15 / 10.764, t).replace(/\nThanks,[\s\S]*$/, "\n" + mailSig()), m = /^Subject: (.*)\n+/.exec(txt);
+    return { subject: m ? m[1] : "Gabion mesh quote", body: m ? txt.slice(m[0].length) : txt };
+  }
+  return { subject: "", body: "" };
+}
+function mailList() {
+  const q = estimate(), E = q.E, used = new Set(q.lines.filter((l) => l.cat === "Materials" && l.qty > 0).map((l) => mailSup(l, E)));
+  return MAIL_SUPS.filter((s) => used.has(s.k));
+}
+function mailDoc(k) { const m = (job.mail || {})[k] || {}, a = mailAuto(k); return { subject: m.subject ?? a.subject, body: m.body ?? a.body, sent: m.sent || "", edited: m.subject != null || m.body != null }; }
+const mailHref = (to, s, b) => `mailto:${encodeURIComponent(to || "").replace(/%40/g, "@")}?subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b.replace(/\r?\n/g, "\r\n"))}`;
+async function copyText(t, what) { try { await navigator.clipboard.writeText(t); toast(`${what} copied. Paste it into your email.`); } catch { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast(`${what} copied.`); } }
+let mailOpen = new Set();
+function renderMail() {
+  if (!$("mailList") || $("pMail").hidden) return;
+  if ($("pMail").contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; // don't redraw under someone typing
+  const c = company(), to = c.mailTo || {};
+  $("mailFrom").value = c.mailFrom || c.email || "";
+  const list = mailList();
+  const q = estimate(), left = q.lines.filter((l) => l.cat === "Materials" && l.qty > 0 && !mailSup(l, q.E));
+  $("mailLeft").innerHTML = left.length ? `<p class="banner">Not in any email yet: ${escapeHtml(listAnd(left.map((l) => `${mailQty(l.qty, l.unit)} ${l.desc.replace(/ for drain lines and outlet| \(.*\)$|, hard angular.*$/gi, "").toLowerCase()}`)))}. Add them to one of the emails, or pick them up yourself.</p>` : "";
+  $("mailList").innerHTML = list.length ? list.map((s) => { const d = mailDoc(s.k);
+    return `<details class="mailcard" data-mk="${s.k}"${mailOpen.has(s.k) ? " open" : ""}><summary><b>${escapeHtml(s.name)}</b>${d.sent ? ` <span class="pill ok">Sent ${escapeHtml(d.sent)}</span>` : ""}${d.edited ? ` <span class="pill">Edited</span>` : ""}<small>${escapeHtml(s.what)}</small></summary>
+      <label class="f">To <input type="email" data-mf="to" value="${escapeHtml(to[s.k] || "")}" placeholder="supplier's email address" autocomplete="off"></label>
+      <label class="f">Subject <input data-mf="subject" value="${escapeHtml(d.subject)}"></label>
+      <label class="f">Email <textarea data-mf="body" rows="16">${escapeHtml(d.body)}</textarea></label>
+      <div class="row wrap"><a class="btn primary" data-mopen href="${escapeHtml(mailHref(to[s.k], d.subject, d.body))}" target="_blank" rel="noopener">Open in email app</a>
+        <button class="btn small" data-mcopy="subject">Copy subject</button><button class="btn small" data-mcopy="body">Copy email</button>
+        <button class="btn small" data-msent>${d.sent ? "Not sent yet" : "Mark as sent"}</button>${d.edited ? `<button class="btn small" data-mreset>Rewrite from the quote</button>` : ""}</div>
+      <p class="note" data-mlong${mailHref(to[s.k], d.subject, d.body).length > 1900 ? "" : " hidden"}>Long email: some email apps cut it short. If it arrives cut off, use Copy email and paste it in.</p></details>`; }).join("") : `<p class="note">Nothing to order yet. Add items to the plan and the emails appear here.</p>`;
+  $("mailList").querySelectorAll(".mailcard").forEach((card) => {
+    const k = card.dataset.mk, f = (n) => card.querySelector(`[data-mf="${n}"]`);
+    const upd = () => { const a = card.querySelector("[data-mopen]"), h = mailHref(f("to").value.trim(), f("subject").value, f("body").value); a.href = h; card.querySelector("[data-mlong]").hidden = h.length <= 1900; };
+    card.addEventListener("toggle", () => { if (card.open) mailOpen.add(k); else mailOpen.delete(k); });
+    f("to").addEventListener("change", () => { const cc = company(); store.set("bsp.company", { ...cc, mailTo: { ...(cc.mailTo || {}), [k]: f("to").value.trim().slice(0, 120) } }); upd(); });
+    for (const n of ["subject", "body"]) f(n).addEventListener("input", () => { const a = mailAuto(k), m = { ...((job.mail || {})[k] || {}) }; m[n] = f(n).value === a[n] ? undefined : f(n).value; job.mail = { ...(job.mail || {}), [k]: m }; store.set("bsp.current", job); upd(); });
+    f("to").addEventListener("input", upd);
+    card.querySelectorAll("[data-mcopy]").forEach((b) => b.onclick = () => copyText(f(b.dataset.mcopy).value, b.dataset.mcopy === "body" ? "Email" : "Subject"));
+    card.querySelector("[data-mopen]").addEventListener("click", (e) => { if (!f("to").value.trim()) toast("No address in To: fill it in your email app, or type it here first."); });
+    card.querySelector("[data-msent]").onclick = () => { const m = { ...((job.mail || {})[k] || {}) }; m.sent = m.sent ? "" : dayName(new Date()); job.mail = { ...(job.mail || {}), [k]: m }; commit(); renderMail(); };
+    const r = card.querySelector("[data-mreset]"); if (r) r.onclick = () => { const m = { ...((job.mail || {})[k] || {}) }; delete m.subject; delete m.body; job.mail = { ...(job.mail || {}), [k]: m }; commit(); renderMail(); };
+  });
+}
+$("mailFrom").addEventListener("change", (e) => { store.set("bsp.company", { ...company(), mailFrom: e.target.value.trim().slice(0, 120) }); renderMail(); });
 // Gabion fill: rounded stones packed tight in the given colour, dark gaps between them
 function gabionStones(ctx, x, y, w, h, hex, seed, size) {
   ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.fillStyle = shade(hex, 0.3); ctx.fillRect(x, y, w, h);
