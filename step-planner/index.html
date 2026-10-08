@@ -3064,12 +3064,22 @@ const isoDay = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2,
 // Time off (company-wide): no work between these dates, weekends already skipped
 function timeOff() { const c = company(), ok = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || ""); return ok(c.offFrom) && ok(c.offTo) && c.offTo >= c.offFrom ? [c.offFrom, c.offTo] : null; }
 function isWorkday(t) { if (!(t.getDay() % 6)) return false; const off = timeOff(), k = isoDay(t); return !(off && k >= off[0] && k <= off[1]); }
+function subWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() - 1); if (isWorkday(r)) n--; } return r; }
 function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (isWorkday(r)) n--; } return r; }
 const dayName = (t) => t.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
 function timelineAuto() {
   const d = cdoc(), start = d.start ? new Date(d.start + "T12:00") : nextMonday(), ph = timelinePhases(), out = [];
-  out.push(`On signing: we order the materials. Allow about ${plural(Math.round(d.lead), "day")} for them to arrive on site before we start.`);
   let day = 0, t = new Date(start); while (!isWorkday(t)) t.setDate(t.getDate() + 1);
+  // ordering and deliveries, counted back from the first day on site
+  const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
+  const shore = gab && its.some((i) => i.type === "shore"), ferry = !E.haulSelf && E.ferryPerFt > 0, loads = Math.max(1, Math.ceil(E.ferryLoads || 1));
+  const backDays = (n) => { const r = new Date(t); r.setDate(r.getDate() - n); while (!isWorkday(r)) r.setDate(r.getDate() - 1); return r; };
+  const orderBy = backDays(Math.max(d.lead || 0, gab ? 21 : 0) + 2), hiab = subWorkdays(t, 2), gravel = subWorkdays(t, 1);
+  if (shore) out.push(`Now: apply for foreshore authorization for the gabion steps below the high-water mark, if required (approvals can take several weeks).`);
+  out.push(`Order by ${dayName(orderBy)}, on signing with the deposit: blocks, caps, pavers and handrail materials${gab ? `, and the gabion ${E.gabionDiy ? "mesh, lacing wire and rings" : "baskets"} (shipped from out of province, allow 1–3 weeks)` : ""}.`);
+  if (E.haulSelf) out.push(`${dayName(hiab)}: materials hauled to site${ferry ? " by ferry" : ""}.`);
+  else out.push(`${dayName(hiab)}: ${plural(loads, "truck load")} of block, caps, pavers and handrail materials delivered to site${ferry || E.ferryIncl ? " by ferry" : ""}${loads > 1 ? " (the second load as needed)" : ""}.`);
+  if (!E.haulSelf && E.bulkSep) out.push(`${dayName(gravel)}: road base, drain rock${gab ? ", gabion stone" : ""} and sand delivered by the local gravel supplier.`);
   for (const [name, what, n] of ph) {
     const a = addWorkdays(t, Math.floor(day)), b = addWorkdays(t, Math.max(Math.floor(day), Math.ceil(day + n) - 1));
     const first = Math.floor(day) + 1, last = Math.ceil(day + n);
