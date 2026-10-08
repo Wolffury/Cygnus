@@ -496,6 +496,9 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Delivery truck length (ft) <input id="fTruck" inputmode="decimal"></label>
           <label class="f">Truck loads <input id="fLoads" inputmode="decimal"></label>
           <label class="f">Ferry crossings per load <input id="fWays" inputmode="decimal"></label>
+          <label class="f">Truck payload (kg) <input id="fPay" inputmode="decimal"></label>
+          <label class="f">Road base, gravel and sand <select id="fBulkSep"><option value="0">On the same truck</option><option value="1">Delivered separately</option></select></label>
+          <label class="f" id="fBulkDelBox">Separate gravel delivery $ <input id="fBulkDel" inputmode="decimal"></label>
         </div>
         <div class="grid2" id="hSelf" hidden>
           <label class="f">Trailer payload (kg) <input id="hPay" inputmode="decimal"></label>
@@ -801,7 +804,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -2637,7 +2640,9 @@ function estimate() {
       const hp = haulPlan(E);
       L("Equipment & disposal", `Ferry with my truck and ${num1(E.rigFt)} ft rig (${hp.trips} trips, about ${num1(hp.kg / 1000)} t at ${num1(hp.pay / 1000)} t a trip; return free)`, hp.trips, "trip", round2(hp.fare));
       L("Labour", `Hauling materials (${hp.trips} trips × ${num1(E.hrsPerTrip)} h)`, ceilTo(hp.trips * E.hrsPerTrip, 0.5), "hr", E.labourRate);
-    } else if (E.ferryPerFt > 0 && !E.ferryIncl) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
+    }
+    if (!E.haulSelf && E.bulkSep && E.bulkDelivery > 0) L("Equipment & disposal", "Road base, gravel and sand: separate delivery", 1, "load", E.bulkDelivery);
+    if (!E.haulSelf && E.ferryPerFt > 0 && !E.ferryIncl) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
     L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
@@ -2692,6 +2697,7 @@ function renderEstFields() {
 // ---------- where to buy: suppliers near the job, their prices, and the ferry ----------
 // Found online in Oct 2026 for the Southern Gulf Islands / Saanich Peninsula. Prices are what the listing showed; confirm before ordering.
 const DEFAULT_SUPPLIERS = [
+  { id: "bigdugums", name: "Big Dugums Trucking", area: "On Pender Island, no ferry", address: "Pender Island", phone: "", url: "", notes: "Road base / fill, drain rock, sand and rock, delivered on the island. No prices online: call for per-ton / per-yard prices and the delivery charge, then put them under Rates (road base $ per ton, drain rock and sand $ per yd³) and the separate gravel delivery on the Equipment tab.", prices: {} },
   { id: "pender-hh", name: "Pender Island Home Building Centre (Home Hardware)", area: "On Pender Island, no ferry", address: "3338 Port Washington Rd, Pender Island", phone: "250-629-3455", url: "https://www.homehardware.ca/en/store/52992", notes: "Closest. General building, lumber and garden supplies; ask whether they can bring in Allan Block or Belgard (not confirmed). Closed Sun and Mon.", prices: {} },
   { id: "slegg-keating", name: "Slegg Building Materials, Saanichton", area: "Saanich Peninsula, about 10 min from Swartz Bay ferry", address: "2046 Keating Cross Rd, Saanichton", phone: "", url: "https://www.slegg.com/s/content/blocks-pavers", notes: "Slegg sells Belgard (Abbotsford's line) and Allan Block. Closest yard to the Swartz Bay ferry; confirm stock or a transfer from Victoria.", prices: {} },
   { id: "slegg-admirals", name: "Slegg Building Materials, Victoria (Admirals Rd)", area: "Victoria, about 35 min from Swartz Bay", address: "1496 Admirals Rd, Victoria", phone: "250-388-5443", url: "https://allanblock.com/dealers/slegg-building-materials-victoria-admirals-rd", notes: "Allan Block authorized dealer; Slegg also sells Belgard pavers and caps.", prices: {} },
@@ -2742,7 +2748,9 @@ function renderBuy() {
   });
   // ferry
   $("fIncl").value = String((job.est || {}).ferryIncl ? 1 : 0); $("fIncl").onchange = () => { snapshot(); job.est = { ...job.est, ferryIncl: +$("fIncl").value }; commit(); };
-  const F = [["fDel", "delivery"], ["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
+  $("fBulkSep").value = String((job.est || {}).bulkSep ? 1 : 0); $("fBulkSep").onchange = () => { snapshot(); job.est = { ...job.est, bulkSep: +$("fBulkSep").value }; commit(); };
+  $("fBulkDelBox").hidden = !(job.est || {}).bulkSep;
+  const F = [["fDel", "delivery"], ["fBulkDel", "bulkDelivery"], ["fPay", "truckKg"], ["fPerFt", "ferryPerFt"], ["fTruck", "truckFt"], ["fLoads", "ferryLoads"], ["fWays", "ferryWays"], ["hPay", "payloadKg"], ["hLen", "rigFt"], ["hBase", "fareBase"], ["hOver", "farePerFtOver"], ["hHrs", "hrsPerTrip"]];
   const E2 = { ...EST_DEFAULTS, ...job.est };
   if (document.activeElement !== $("bDay")) $("bDay").value = E2.barrowDay;
   for (const [el, k] of [["bKg", "barrowKg"], ["bMin", "barrowMin"], ["bHrs", "barrowHrsDay"]]) { const inp = $(el); if (document.activeElement !== inp) inp.value = E2[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = E2[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
@@ -2763,7 +2771,15 @@ function renderBuy() {
     $("hPlan").innerHTML = `<div class="supcard"><b>${hp.trips} trips · about ${num1(hp.kg / 1000)} tonnes · ${money(hp.fare)} ferry a trip (return free) · ${money(hp.trips * hp.fare)} in fares, ${num1(hp.trips * E2.hrsPerTrip)} hours hauling</b>
       ${all.map((x) => `${escapeHtml(x.desc)}${x.n ? ` (${x.n} ${x.unit})` : ""}: ${num1(x.kg)} kg${x.bulk && !E2.haulBulk ? " (got on the island)" : ""}`).join("<br>")}
       <br><small>Each trip carries up to ${num1(hp.pay)} kg. Weights: AB Classic 34 kg, Pro Cap Max 28.3 kg, 60mm pavers about 12.6 kg per sq ft, road base about 1 tonne per ton ordered; others estimated from size. Stay within the trailer's and truck's ratings.</small></div>`;
-  } else $("hPlan").innerHTML = "";
+  } else {
+    // delivery truck: what goes on it, and whether it fits in the loads set
+    const all = haulList(), onTruck = all.filter((x) => !(x.bulk && E2.bulkSep)), kg = onTruck.reduce((a, x) => a + x.kg, 0), sep = all.filter((x) => x.bulk && E2.bulkSep).reduce((a, x) => a + x.kg, 0);
+    const loads = Math.max(1, Math.ceil(E2.ferryLoads || 1)), need = E2.truckKg > 0 ? Math.ceil(kg / E2.truckKg) : loads, per = kg / loads;
+    $("hPlan").innerHTML = `<div class="supcard"><b>On the truck: about ${num1(kg / 1000)} tonnes in ${plural(loads, "load")} (${num1(per / 1000)} t a load${E2.truckKg > 0 ? `, truck takes ${num1(E2.truckKg / 1000)} t` : ""})</b>
+      ${need > loads ? `<br><span class="pill warn">Over</span> That's more than the truck carries: it needs ${plural(need, "load")}, or check its payload with the supplier.` : need < loads ? `<br><span class="pill ok">Fits</span> It fits in ${plural(need, "load")}: set Truck loads to ${need} to save a delivery.` : ""}
+      <br>${onTruck.map((x) => `${escapeHtml(x.desc)}${x.n ? ` (${x.n} ${x.unit})` : ""}: ${num1(x.kg)} kg`).join("<br>")}
+      ${sep ? `<br><b>Delivered separately:</b> road base, gravel and sand, about ${num1(sep / 1000)} tonnes${E2.bulkDelivery > 0 ? ` (${money(E2.bulkDelivery)})` : " (enter its delivery price)"}` : ""}</div>`;
+  }
   for (const [el, k] of F) { const inp = $(el); if (document.activeElement !== inp) inp.value = job.est[k] ?? EST_DEFAULTS[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = job.est[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
   const pal = [...mats.values()].reduce((a, o) => { const m = mat(o.id); return a + (m.perPallet ? Math.ceil(Math.ceil(o.qty * waste) / m.perPallet) : 0); }, 0);
   $("fNote").textContent = `${pal ? `About ${pal} pallets of block, caps and pavers. ` : ""}BC Ferries, Swartz Bay to the Southern Gulf Islands (2026): commercial vehicles over 5,500 kg $4.55 per foot one way; regular vehicles $89 up to 20 ft plus $8 a foot over. Otter Bay ramp limit 56,500 kg, 7 axles. The return crossing is not charged, so leave crossings at 1 per load. Check the fare when you book.`;
