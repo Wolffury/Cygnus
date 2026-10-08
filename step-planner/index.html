@@ -666,6 +666,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <label class="f">Not included (one per line) <textarea id="cpExcl" rows="4"></textarea></label>
         <label class="f">Project value and benefits (one point per line) <textarea id="cpValue" rows="8"></textarea></label>
         <div class="row"><button class="btn small" id="cpValueReset">Rewrite from the quote</button></div>
+        <label class="f">Care and maintenance (one point per line) <textarea id="cpCare" rows="7"></textarea></label>
+        <div class="row"><button class="btn small" id="cpCareReset">Rewrite from the plan</button></div>
       </div>
       <div class="cppages" id="cpPages" aria-label="Preview of the client package"></div>
     </div>
@@ -3061,8 +3063,8 @@ function drawSimplePlan(ctx, X, Y, w, h, u) {
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
   ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
 }
-const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
-const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, price: true, terms: true };
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["care", "Care and maintenance"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, care: true, price: true, terms: true };
 function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
@@ -3116,8 +3118,9 @@ function valueAuto() {
   const tops = flights.map((i, k) => cs[k].top), bots = flights.map((i) => i.elev || 0).concat(gabB), climb = tops.length ? (Math.max(...tops) - Math.min(...bots)) / 12 : 0;
   const has = (re) => lines.some((l) => re.test(l.desc)), qty = (re) => { const l = lines.find((x) => re.test(x.desc)); return l ? l.qty : 0; };
   const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.filter((i) => i.type === "drain"), rails = its.filter((i) => i.type === "rail");
-  const w0 = flights[0], c0 = cs[0], years = 40;
+  const w0 = flights[0], c0 = cs[0], years = 75;
   if (steps) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
+  if (steps) out.push(lifeLine());
   { const land = its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path").length, railFt = Math.round(rails.reduce((a, i) => a + i.w / 12, 0)), more = [];
     if (land) more.push(`${plural(land, "landing and terrace").replace("landing and terraces", "landings and terraces")}`);
     if (railFt) more.push(`${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
@@ -3145,6 +3148,28 @@ function valueAuto() {
   out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your slope, the quantities, a dated schedule${(cdoc().tides || []).length ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
   out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
   out.push("Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it.");
+  return out.join("\n");
+}
+// how long it lasts, part by part (built correctly, Gulf Islands climate)
+function lifeLine() {
+  const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, rails = its.some((i) => i.type === "rail"), gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
+  const more = [];
+  if (rails) more.push(`The ${E.railPlastic ? "recycled plastic lumber rails won't rot and can last 50 years" : "cedar rails can last 25 years"}, and the hot-dip galvanized steel posts${E.railPaint ? ", kept painted," : ""} should last as long as the stair.`);
+  if (gab) more.push("The marine-grade gabion steps at the beach can last 50 years.");
+  return `Built to last a lifetime: built correctly, the block steps, walls and caps can last 75 years or more. Our mild coastal winters have few freeze-thaw cycles, which are what usually break concrete down.${more.length ? " " + more.join(" ") : ""}`;
+}
+function careAuto() {
+  const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, out = [];
+  const rails = its.some((i) => i.type === "rail"), gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.some((i) => i.type === "drain");
+  const pave = its.some((i) => (i.type === "landing" || i.type === "path") && [i.surface, i.infill].some((m) => (mat(m) || {}).kind === "paver"));
+  out.push("Once a year, walk the stair and check for loose caps or blocks. Re-glue any loose cap with concrete block adhesive before it gets knocked off.");
+  if (drains) out.push("Keep the drain outlet clear of leaves, soil and plants, especially before the rainy season, so ground water keeps moving away from the stair.");
+  if (pave) out.push("Top up the polymeric joint sand between the pavers every few years, or wherever weeds start to come through.");
+  if (rails) out.push(`${E.railPaint ? "Repaint the rails and posts every 7–10 years, using a paint made for plastic lumber and galvanized steel. Touch up any chips sooner, especially at the base of the posts" : "Check the handrail posts and brackets once a year and tighten any loose bolts"}.`);
+  if (gab) out.push("After big winter storms, check the gabion steps at the beach for torn or worn wire and lost stone. A small repair with lacing wire early on saves replacing a basket later.");
+  out.push("Keep tree roots and large shrubs trimmed back from the steps and terraces so they don't lift them.");
+  out.push("Don't use de-icing salt on the steps. Use sand or grit for grip in icy weather. Salt and steel shovels damage the concrete surface.");
+  out.push("Sweep off moss and leaves now and then, and pressure-wash on a low setting if the steps get slippery.");
   return out.join("\n");
 }
 const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
@@ -3244,6 +3269,7 @@ function clientPages() {
     }
     y += 10;
   }
+  if (on.care) { const c = d.care ?? careAuto(); if (c.trim()) { head("Care and maintenance"); bullets(c); } }
   if (on.price) {
   head("Price");
   const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
@@ -3306,7 +3332,7 @@ function cpFill() {
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
   $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
   { const c = company(); $("cpOffFrom").value = c.offFrom || ""; $("cpOffTo").value = c.offTo || ""; }
-  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto(); $("cpValue").value = d.value ?? valueAuto();
+  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto(); $("cpValue").value = d.value ?? valueAuto(); $("cpCare").value = d.care ?? careAuto();
 }
 const cpSave = () => store.set("bsp.current", job);
 const cpShow = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
@@ -3320,8 +3346,9 @@ for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).ad
 $("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
 $("cpAllParts").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k !== "three" || !!R3; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
 $("cpPriceOnly").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k === "price" || k === "terms"; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
+$("cpCareReset").onclick = () => { cdoc().care = null; $("cpCare").value = careAuto(); cpSave(); cpRender(); };
 $("cpValueReset").onclick = () => { cdoc().value = null; $("cpValue").value = valueAuto(); cpSave(); cpRender(); };
-for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"], ["cpValue", "value"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
+for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"], ["cpValue", "value"], ["cpCare", "care"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
 $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = scopeAuto(); cpSave(); cpRender(); };
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
 async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
@@ -3513,7 +3540,7 @@ function sanitizeJob(j) {
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
         return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
-          tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
+          tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
