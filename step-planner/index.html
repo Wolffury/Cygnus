@@ -647,6 +647,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <label class="f">Timeline (one step per line) <textarea id="cpTime" rows="8"></textarea></label>
         <div class="row"><button class="btn small" id="cpTimeReset">Rewrite from the dates</button></div>
         <label class="f">Not included (one per line) <textarea id="cpExcl" rows="4"></textarea></label>
+        <label class="f">Why this quote (one point per line) <textarea id="cpValue" rows="8"></textarea></label>
+        <div class="row"><button class="btn small" id="cpValueReset">Rewrite from the quote</button></div>
       </div>
       <div class="cppages" id="cpPages" aria-label="Preview of the client package"></div>
     </div>
@@ -3027,8 +3029,8 @@ function drawSimplePlan(ctx, X, Y, w, h, u) {
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
   ctx.font = `600 ${13 * u}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.fillText(`${ft} ft`, bx, by - 6 * u); ctx.restore();
 }
-const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
-const CP_PARTS_ON = { plan: true, side: true, three: false, scope: true, excl: true, time: true, tides: true, price: true, terms: true };
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Why this quote"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, price: true, terms: true };
 function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
@@ -3074,6 +3076,36 @@ function scopeAuto() {
   return out.join("\n");
 }
 const exclAuto = () => EXCL_AUTO + (job.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))) && job.items.some((i) => i.type === "shore") && (job.est || {}).gabionTide ? "\nForeshore authorization for work below the high-water mark (Province of BC, and Fisheries and Oceans Canada review), if required" : "");
+// The case for the price, in the client's terms, worked out from the quote and the plan
+function valueAuto() {
+  const q = estimate(), E = q.E, its = job.items, lines = q.lines, out = [];
+  const flights = its.filter((i) => i.type === "steps"), cs = flights.map(stepCalc), steps = cs.reduce((a, c) => a + c.count, 0);
+  const gabB = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))).map((i) => i.h - (mat(i.surface).H || 7));
+  const tops = flights.map((i, k) => cs[k].top), bots = flights.map((i) => i.elev || 0).concat(gabB), climb = tops.length ? (Math.max(...tops) - Math.min(...bots)) / 12 : 0;
+  const has = (re) => lines.some((l) => re.test(l.desc)), qty = (re) => { const l = lines.find((x) => re.test(x.desc)); return l ? l.qty : 0; };
+  const gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface))), drains = its.filter((i) => i.type === "drain"), rails = its.filter((i) => i.type === "rail");
+  const w0 = flights[0], c0 = cs[0], years = 40;
+  if (steps) out.push(`A permanent stair, not a seasonal fix: ${steps} steps of solid concrete block with caps glued down, on a compacted gravel base. Concrete doesn't rot, warp, split or need staining. A wood stair in salt air needs regular staining and board and post repairs, and is usually rebuilt within 15–25 years.`);
+  if (steps && climb > 1) out.push(`What it works out to: about ${money(q.total / steps)} a step and ${money(q.total / climb)} per vertical foot of the ${Math.round(climb)} ft climb. Over ${years} years of use that's about ${money(q.total / years)} a year, or ${money(q.total / years / 12)} a month.`);
+  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ", with a handrail the whole way" : ""}. Steady, even steps are what make a long stair easy on the knees, coming up from the beach with a load.`);
+  const built = [`${fmtIn(E.baseDepth)} of compacted gravel under every step and landing`];
+  if (cs.some((c) => c.under)) built.push("block walls hidden under the step edges to keep the steps firmly in place");
+  if (drains.length) built.push(`a drain line (${Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0))} ft) carrying ground water away in the rainy season`);
+  if (gab.length) built.push(`marine-grade gabion steps at the beach, made for salt spray and storm waves`);
+  out.push(`Built for a wet coastal bank: ${listAnd(built)}.`);
+  const inc = [];
+  if (has(/delivery/i)) inc.push(`delivery to the island${E.ferryPerFt > 0 || E.ferryIncl ? " including the ferry" : ""}`);
+  if (has(/wheelbarrow|hauling/i)) inc.push("moving every block and bag down the slope by machine");
+  if (has(/haul-away|disposal/i)) inc.push("hauling away the extra soil");
+  if (has(/compactor|rammer|saw|equipment/i)) inc.push("all the equipment");
+  inc.push("clean-up with a final walk-through");
+  out.push(`Everything to get it built on an island site is in the price: ${listAnd(inc)}. No surprise extras.`);
+  const blkL = lines.find((l) => l.unit === "ea" && /block/i.test(l.desc) && !/cap/i.test(l.desc)), blk = blkL ? blkL.qty : 0, caps = qty(/\bcap\b|Cap Max/i);
+  out.push(`Measured, not guessed: quantities come from a scaled plan and a 3D model of the slope${blk ? ` (${blk} blocks${caps ? `, ${caps} caps` : ""} and every bag and tonne of gravel)` : ""}, with a small ${E.waste}% allowance for cuts. You pay for what the job needs.`);
+  out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
+  out.push("Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it.");
+  return out.join("\n");
+}
 const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
 // Working days from labour hours, by stage of the job
 function timelinePhases() {
@@ -3152,6 +3184,7 @@ function clientPages() {
   if (on.plan) picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
   if (on.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
   if (on.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
+  if (on.value) { head("Why this quote"); bullets(d.value ?? valueAuto(), "✓"); }
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
   const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
   if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
@@ -3232,7 +3265,7 @@ function cpFill() {
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
   $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
   { const c = company(); $("cpOffFrom").value = c.offFrom || ""; $("cpOffTo").value = c.offTo || ""; }
-  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto();
+  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto(); $("cpValue").value = d.value ?? valueAuto();
 }
 const cpSave = () => store.set("bsp.current", job);
 const cpShow = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
@@ -3245,7 +3278,8 @@ for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).ad
 $("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
 $("cpAllParts").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k !== "three" || !!R3; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
 $("cpPriceOnly").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k === "price" || k === "terms"; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
-for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
+$("cpValueReset").onclick = () => { cdoc().value = null; $("cpValue").value = valueAuto(); cpSave(); cpRender(); };
+for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"], ["cpValue", "value"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
 $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = scopeAuto(); cpSave(); cpRender(); };
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
 async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
@@ -3437,7 +3471,7 @@ function sanitizeJob(j) {
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
         return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
-          tideNote: t(d.tideNote, 1500), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
+          tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
       buy: Object.fromEntries(Object.entries(j.buy || {}).filter(([k, v]) => typeof k === "string" && typeof v === "string").slice(0, 200).map(([k, v]) => [k.slice(0, 40), v.slice(0, 40)])),
