@@ -754,11 +754,11 @@ const CATALOG = [
   // Poured and loose surfaces (per sq ft)
   { id: "concrete", brand: "Generic", line: "Concrete", name: 'Broom-finish concrete 4"', kind: "surface", L: 0, D: 0, H: 4, colors: ["Light Grey"], price: 12, pattern: "concrete" },
   { id: "gravel", brand: "Generic", line: "Aggregate", name: '¾" crushed gravel 3"', kind: "surface", L: 0, D: 0, H: 3, colors: ["Grey Mix"], price: 2.5, pattern: "gravel" },
-  { id: "gabion", brand: "Generic", line: "Gabion", name: 'Gabion basket (stones in a wire cage) 12"', kind: "surface", L: 0, D: 0, H: 12, colors: ["Grey Mix", "Granite Grey", "Sandstone"], price: 28, pattern: "gabion" },
+  { id: "gabion", brand: "Generic", line: "Gabion", name: 'Gabion basket step 7" (marine: PVC-coated Galfan wire, rock-filled)', kind: "surface", L: 36, D: 18, H: 7, colors: ["Grey Mix", "Granite Grey", "Sandstone"], price: 125, pattern: "gabion", note: "Priced per basket: one basket is one 7\" step, each sitting on the back of the one below. For salt water and the tide: PVC-coated Galfan (zinc-aluminum) wire mesh, stainless or PVC-coated tie wire and spiral binders, and hard angular rock (basalt or granite, 4–8\") that won't break down. Set on filter fabric over compacted base. Estimate: marine basket about $110 plus about $15 of rock; put in your supplier's price." },
   { id: "deck", brand: "Generic", line: "Wood", name: "Deck boards", kind: "surface", L: 72, D: 5.5, H: 1, colors: ["Cedar", "Dark Brown"], price: 14, pattern: "wood" },
 ];
 const KIND_LABEL = { block: "Wall / riser blocks", cap: "Caps & treads", solid: "Solid step units", paver: "Pavers (per sq ft)", slab: "Slabs (each)", surface: "Poured & loose (per sq ft)" };
-const perSqft = (m) => m.kind === "paver" || m.kind === "surface";
+const perSqft = (m) => m.kind === "paver" || (m.kind === "surface" && m.pattern !== "gabion"); // gabion baskets are priced each
 
 let job; // set below
 // Catalogue + this job's own materials + materials you made on other jobs (the saved library)
@@ -803,7 +803,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.35, hrDrainFt: 0.2, hrGabion: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -2492,13 +2492,14 @@ const yd3 = (cuIn) => cuIn / 46656;          // cubic inches to cubic yards
 const KG_EACH = { "ab-classic": 34, "ab-stones": 34, "ab-rocks": 34, "ab-vertical": 34, pcm18: 28.3 };
 function unitKg(m) {
   if (KG_EACH[m.id]) return KG_EACH[m.id];
-  if (m.kind === "surface") return m.pattern === "gravel" || m.pattern === "gabion" ? 144 * m.H * 0.027 : m.pattern === "wood" ? 1.5 : 144 * m.H * 0.0393;
+  if (m.pattern === "gabion") return (m.L || 36) * (m.D || 18) * m.H * 0.027; // one basket of rock
+  if (m.kind === "surface") return m.pattern === "gravel" ? 144 * m.H * 0.027 : m.pattern === "wood" ? 1.5 : 144 * m.H * 0.0393;
   if (perSqft(m)) return 144 * m.H * 0.0393 * 0.93; // per sq ft
   return m.L * m.D * m.H * 0.0393 * (m.kind === "block" ? 0.52 : 0.93);
 }
 function haulList() {
   const { mats, w, E } = takeoff(), waste = 1 + E.waste / 100, out = [];
-  for (const o of mats.values()) { const m = mat(o.id), n = Math.ceil(o.qty * waste), bulk = m.kind === "surface"; out.push({ desc: matName(m) + (o.color ? " " + o.color : ""), kg: n * unitKg(m), n, unit: perSqft(m) ? "sq ft" : "ea", bulk }); }
+  for (const o of mats.values()) { const m = mat(o.id), n = Math.ceil(o.qty * (m.pattern === "gabion" ? 1 : waste)), bulk = m.kind === "surface"; out.push({ desc: matName(m) + (o.color ? " " + o.color : ""), kg: n * unitKg(m), n, unit: perSqft(m) ? "sq ft" : "ea", bulk }); }
   const add = (desc, kg, bulk = false) => { if (kg > 0) out.push({ desc, kg, bulk }); };
   add("Road base / structural fill", ceilTo(w.baseTon, 0.5) * 1000, true);
   add("Drain rock", ceilTo(w.drainYd + w.trenchYd, 0.25) * 1450, true);
@@ -2560,6 +2561,8 @@ function takeoff() {
       if (wc.c) { addM(it.cap, it.capColor, wc.caps, use); w.caps += wc.caps; w.adhesiveCaps += wc.caps; }
       base(it.w * (wc.b.D + 12), wc.b.H);
       w.drainYd += yd3(it.w * 12 * wc.top);
+    } else if (it.type === "landing" && isGabion(mat(it.surface))) { // one basket per step
+      addM(it.surface, it.color, 1, use); w.gabions = (w.gabions || 0) + 1; base(it.w * it.d); w.fabricSqft += it.w * it.d / 144 * 1.3; // fabric under the basket against scour
     } else if (it.type === "landing") {
       const lc = landingCalc(it);
       if (lc.edged) {
@@ -2596,13 +2599,13 @@ function estimate() {
   const L = (cat, desc, qty, unit, price, note = "") => { if (qty > 0) lines.push({ cat, desc, qty, unit, price, total: round2(qty * price), note }); };
   for (const o of mats.values()) {
     const m = mat(o.id), sq = perSqft(m);
-    L("Materials", `${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)}${o.color ? " – " + o.color : ""}`, sq ? Math.ceil(o.qty * waste) : Math.ceil(o.qty * waste), sq ? "sq ft" : "ea", priceOf(o.id), `${[...o.uses].join(", ")} · incl. ${E.waste}% waste`);
+    L("Materials", `${m.brand === "Generic" ? "" : m.brand + " "}${matName(m)}${o.color ? " – " + o.color : ""}`, sq ? Math.ceil(o.qty * (m.pattern === "gabion" ? 1 : waste)) : Math.ceil(o.qty * (m.pattern === "gabion" ? 1 : waste)), sq ? "sq ft" : "ea", priceOf(o.id), `${[...o.uses].join(", ")} · incl. ${E.waste}% waste`);
   }
   L("Materials", '¾" road base / structural fill, compacted', ceilTo(w.baseTon, 0.5), "ton", E.basePerTon);
   L("Materials", '¾" clear drain rock behind walls', ceilTo(w.drainYd, 0.25), "yd³", E.drainPerYd);
   L("Materials", '¾" clear drain rock for drain lines and outlet', ceilTo(w.trenchYd, 0.25), "yd³", E.drainPerYd);
   L("Materials", '4" perforated drain pipe with filter sock', Math.ceil(w.pipeFt), "ft", E.drainPipeFt);
-  L("Materials", "Filter fabric around the drain rock", Math.ceil(w.fabricSqft), "sq ft", E.fabricSqft);
+  L("Materials", "Filter fabric (around drain rock, under gabions)", Math.ceil(w.fabricSqft), "sq ft", E.fabricSqft);
   L("Materials", "Bedding sand", ceilTo(w.sandYd, 0.25), "yd³", E.sandPerYd);
   L("Materials", "Polymeric joint sand", Math.ceil(w.polySqft / 60), "bag", E.polyBag);
   const rw = 1 + E.waste / 100;
@@ -2616,6 +2619,7 @@ function estimate() {
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
   const hrs = (n) => ceilTo(n, 0.5);
   L("Labour", "Excavation and grading", hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
+  L("Labour", "Gabion basket steps: set, fill with rock by hand, close and tie", hrs((w.gabions || 0) * E.hrGabion), "hr", E.labourRate);
   L("Labour", "Drain line: trench, fabric, pipe and rock, outlet pad", hrs(w.drainFt * E.hrDrainFt), "hr", E.labourRate);
   L("Labour", "Base and fill placement, compaction in lifts", hrs(w.baseTon * E.hrBaseTon), "hr", E.labourRate);
   L("Labour", "Step riser and cap installation", hrs(w.stepBlocks * E.hrStepBlock + w.caps * E.hrCap), "hr", E.labourRate);
@@ -2685,7 +2689,7 @@ const EST_FIELDS = [
   ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
   ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
-  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
+  ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
 function renderEstFields() {
   $("estFields").innerHTML = EST_FIELDS.map(([k, l]) => `<label class="f">${l}<input data-est="${k}" inputmode="decimal" value="${job.est[k] ?? EST_DEFAULTS[k]}"></label>`).join("");
@@ -2726,7 +2730,7 @@ function renderBuy() {
   if (!$("buyList")) return;
   const { mats, E } = takeoff(), waste = 1 + E.waste / 100, sups = suppliers();
   const rows = [...mats.values()].map((o) => {
-    const m = mat(o.id), need = Math.ceil(o.qty * waste), pal = m.perPallet ? Math.ceil(need / m.perPallet) : null, sid = (job.buy || {})[o.id] || "";
+    const m = mat(o.id), need = Math.ceil(o.qty * (m.pattern === "gabion" ? 1 : waste)), pal = m.perPallet ? Math.ceil(need / m.perPallet) : null, sid = (job.buy || {})[o.id] || "";
     return `<div class="buyrow"><div class="buyhead"><b>${escapeHtml(matName(m))}${o.color ? ` <small>${escapeHtml(o.color)}</small>` : ""}</b><span>${need} ${perSqft(m) ? "sq ft" : "ea"}${pal ? ` · ${pal} pallet${pal > 1 ? "s" : ""} of ${m.perPallet}` : ""}</span></div>
       <div class="buyline"><select data-buy="${o.id}" aria-label="Buy ${escapeHtml(matName(m))} from"><option value="">Buy from…</option>${sups.filter((x) => !x.rental).map((x) => `<option value="${escapeHtml(x.id)}"${x.id === sid ? " selected" : ""}>${escapeHtml(x.name)}${x.prices && x.prices[o.id] != null ? ` · ${money(x.prices[o.id])}` : ""}</option>`).join("")}</select>
       <label>$<input data-bprice="${o.id}" inputmode="decimal" value="${priceOf(o.id).toFixed(2)}" aria-label="Price for ${escapeHtml(matName(m))}"></label><b>${money(need * priceOf(o.id))}</b></div></div>`;
@@ -2781,7 +2785,7 @@ function renderBuy() {
       ${sep ? `<br><b>Delivered separately:</b> road base, gravel and sand, about ${num1(sep / 1000)} tonnes${E2.bulkDelivery > 0 ? ` (${money(E2.bulkDelivery)})` : " (enter its delivery price)"}` : ""}</div>`;
   }
   for (const [el, k] of F) { const inp = $(el); if (document.activeElement !== inp) inp.value = job.est[k] ?? EST_DEFAULTS[k]; inp.onchange = () => { const n = parseFloat(inp.value); if (!(n >= 0)) { inp.value = job.est[k]; return; } snapshot(); job.est = { ...job.est, [k]: n }; commit(); }; }
-  const pal = [...mats.values()].reduce((a, o) => { const m = mat(o.id); return a + (m.perPallet ? Math.ceil(Math.ceil(o.qty * waste) / m.perPallet) : 0); }, 0);
+  const pal = [...mats.values()].reduce((a, o) => { const m = mat(o.id); return a + (m.perPallet ? Math.ceil(Math.ceil(o.qty * (m.pattern === "gabion" ? 1 : waste)) / m.perPallet) : 0); }, 0);
   $("fNote").textContent = `${pal ? `About ${pal} pallets of block, caps and pavers. ` : ""}BC Ferries, Swartz Bay to the Southern Gulf Islands (2026): commercial vehicles over 5,500 kg $4.55 per foot one way; regular vehicles $89 up to 20 ft plus $8 a foot over. Otter Bay ramp limit 56,500 kg, 7 axles. The return crossing is not charged, so leave crossings at 1 per load. Check the fare when you book.`;
   // supplier editing
   const list = suppliers();
@@ -3008,7 +3012,7 @@ function scopeAuto() {
     const m = names.map((n) => n.match(/^(.*?)\s*\d+$/)), pre = m.every((x) => x && x[1] === m[0][1]) ? m[0][1] : null;
     out.push(names.length === 1 ? `${names[0]}: ${desc}.` : pre ? `${names.length} ${pre.toLowerCase()}s, each ${desc}.` : `${listAnd(names)}: each ${desc}.`);
   }
-  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")} (stones in a wire cage) at the bottom${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
+  if (gab.length) out.push(`${plural(gab.length, "gabion basket step")}, one basket per ${fmtIn(mat(gab[0].surface).H || 7)} step: marine-grade PVC-coated wire baskets filled with hard rock, on filter fabric, made to sit under the high tide${/beach/i.test(gab.map((g) => g.label).join(" ")) ? " down to the beach" : ""}.`);
   for (const it of its.filter((i) => i.type === "wall")) { const wc = wallCalc(it); out.push(`${shortLabel(it.label) || "Retaining wall"}: ${plainLen(it.w)} long, ${plainLen(wc.top)} high, ${matName(wc.b)}${wc.c ? " with caps" : ""}, drain rock behind.`); }
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
@@ -3018,6 +3022,7 @@ function scopeAuto() {
   out.push("Clean up, and a walk-through with you when it's done.");
   return out.join("\n");
 }
+const exclAuto = () => EXCL_AUTO + (job.items.some((i) => i.type === "landing" && isGabion(mat(i.surface))) && job.items.some((i) => i.type === "shore") ? "\nForeshore authorization for work below the high-water mark (Province of BC, and Fisheries and Oceans Canada review), if required" : "");
 const EXCL_AUTO = "Permits, surveys or engineering if required\nMoving or repairing irrigation, wiring or other buried services\nLandscaping, planting or lawn repair beyond the work area";
 // Working days from labour hours, by stage of the job
 function timelinePhases() {
@@ -3082,7 +3087,7 @@ function clientPages() {
   if (on.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
   if (on.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
-  const ex = d.excl ?? EXCL_AUTO; if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
+  const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
   if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
   if (on.price) {
   head("Price");
@@ -3145,7 +3150,7 @@ function cpFill() {
   const d = cdoc();
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
   $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
-  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? EXCL_AUTO;
+  $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto();
 }
 const cpSave = () => store.set("bsp.current", job);
 const cpShow = () => { cpFill(); $("cpDlg").hidden = false; cpRender(); };
@@ -4053,7 +4058,8 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
     } else {
       const lc = landingCalc(it), sm = lc.s, sH = sm ? Math.max(1.5, sm.H) : 2, g = Math.min(...seqGround(el).map((q) => q[1]));
       if (isGabion(sm) || /gabion/i.test(it.label || "")) {
-        const zb = Math.min(g, it.h - 1); const [a, b] = P(el.d0, it.h), [c2, d2] = P(el.d0 + el.len, zb);
+        const bh = isGabion(sm) ? sm.H : 7, zb = it.h - bh, [a, b] = P(el.d0, it.h), [c2, d2] = P(el.d0 + el.len, zb);
+        if (g < zb - 0.5) { const [, gy] = P(0, g); stonesIn(ctx, a, d2, c2 - a, gy - d2, "#c7bba5", seed + 5, Math.max(1.5, sc * 0.9)); } // compacted base, or the basket below, under it
         gabionStones(ctx, a, b, c2 - a, d2 - b, hexOf(it.color || "Grey Mix"), seed, Math.max(2, sc * 2.4));
         ctx.save(); ctx.strokeStyle = "rgba(60,60,60,.8)"; ctx.lineWidth = Math.max(1, sc * 0.25); ctx.strokeRect(a, b, c2 - a, d2 - b);
         for (let x = a; x < c2; x += Math.max(4, sc * 3)) { ctx.beginPath(); ctx.moveTo(x, b); ctx.lineTo(x, d2); ctx.stroke(); }
@@ -4323,7 +4329,11 @@ function build3d() {
       case "path": { const m = mat(it.surface) || mat("cs-standard"); const g = surfaceMesh(m, it.color, it.w, it.d, Math.max(1, m.H * 0.6)); place(g, it, 0, 0, gz + Math.max(1, m.H * 0.6) / 2 + 0.05); break; }
       case "landing": {
         const lc = landingCalc(it), sm = lc.s || mat("cs-standard"), sH = Math.max(1, sm.H);
-        if (isGabion(sm) && !lc.edged) { const g = gabionMesh(sm, it.color, it.w, it.d, Math.max(1, it.h - lc.z0)); place(g, it, 0, 0, (it.h + lc.z0) / 2); break; }
+        if (isGabion(sm) && !lc.edged) { // one basket, its own height; compacted base under it down to the ground
+          const bh = sm.H || 7, g = gabionMesh(sm, it.color, it.w, it.d, bh); place(g, it, 0, 0, it.h - bh / 2);
+          if (it.h - bh - lc.z0 > 0.5) { const f = box(it.w - 0.5, it.h - bh - lc.z0, it.d - 0.5, mat3("gabbase", () => new THREE.MeshStandardMaterial({ map: noiseTex("#b8ad98", 30, 128), roughness: 1 }))); place(f, it, 0, 0, (it.h - bh + lc.z0) / 2); }
+          break;
+        }
         if (lc.edged) {
           const bm = blockMat(it.blockColor), cm = blockMat(it.capColor, true), bH = lc.b.H, top = it.h;
           const sides = [[-it.w / 2, -it.d / 2, it.w / 2, -it.d / 2 + lc.b.D], [-it.w / 2, it.d / 2 - lc.b.D, it.w / 2, it.d / 2], [-it.w / 2, -it.d / 2 + lc.b.D, -it.w / 2 + lc.b.D, it.d / 2 - lc.b.D], [it.w / 2 - lc.b.D, -it.d / 2 + lc.b.D, it.w / 2, it.d / 2 - lc.b.D]];
