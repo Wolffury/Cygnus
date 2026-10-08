@@ -234,6 +234,10 @@ textarea { resize: vertical; }
 .mailcard .pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); }
 .mailcard .pill.ok { color: var(--good, #2e7d32); border-color: currentColor; }
 a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+.jobcard { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.jobcard.open { border-color: var(--accent); }
+.jobcard b { font-size: 16px; } .jobcard small { color: var(--muted); display: block; }
+.jobcard .row { justify-content: flex-end; }
 .btn.small { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .stats.big dd { font-size: 17px; }
 table.qt { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -291,6 +295,8 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     </div>
     <div class="spacer"></div>
     <span class="sync" id="syncState" hidden></span>
+    <button class="btn" id="jobsTop">My jobs</button>
+    <button class="btn" id="newTop">New job</button>
     <button class="btn" id="undoBtn" title="Undo">Undo</button>
     <button class="btn" id="exportBtn">Export sheet</button>
     <button class="btn" id="mailTop">Order emails</button>
@@ -620,6 +626,13 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
   </div>
 </div>
 <div class="modal" id="photoView" hidden role="dialog" aria-modal="true"><img id="photoBig" alt="Material photo"></div>
+<div class="modal" id="jobsDlg" hidden role="dialog" aria-modal="true" aria-labelledby="jobsTitle">
+  <div class="modalbox">
+    <div class="row" style="justify-content:space-between"><h2 id="jobsTitle">My jobs</h2><div class="row"><button class="btn primary" id="jobsNew">New job</button><button class="btn" id="jobsClose" aria-label="Close">✕</button></div></div>
+    <p class="note">Every plan you've saved. Opening one saves the job you have open first, so nothing is lost. Saved jobs sync between your devices.</p>
+    <div id="jobsCards"></div>
+  </div>
+</div>
 <div class="modal" id="printDlg" hidden role="dialog" aria-modal="true" aria-labelledby="prTitle">
   <div class="modalbox">
     <h2 id="prTitle">Print on regular paper</h2>
@@ -3501,13 +3514,31 @@ function keepCurrent() {
   list.unshift({ name: job.name, saved: Date.now(), job: JSON.parse(JSON.stringify(job)) }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); return true;
 }
 $("saveJob").onclick = () => { keepCurrent(); toast("Saved " + (job.name || "job")); };
+// ---------- My jobs: every saved plan in one list ----------
+function jobTotal(j) { const prev = job; try { job = sanitizeJob(JSON.parse(JSON.stringify(j))); return j.items && j.items.length ? estimate().total : 0; } catch { return 0; } finally { job = prev; } }
+function renderJobsDlg() {
+  const list = jobsSaved(), cur = { name: job.name, saved: null, job, open: true };
+  const rows = [cur, ...list.filter((x) => x.name !== job.name)];
+  $("jobsCards").innerHTML = rows.map((r, i) => { const j = r.job || {}, t = jobTotal(j);
+    return `<div class="jobcard${r.open ? " open" : ""}"><div><b>${escapeHtml(r.name || "Untitled")}</b>${r.open ? ' <span class="pill ok">Open now</span>' : ""}
+      <small>${escapeHtml([j.client, j.address].filter(Boolean).join(" · ") || "No client yet")}</small>
+      <small>${plural((j.items || []).length, "item")}${t ? ` · ${money(t)}` : ""}${r.saved ? ` · saved ${new Date(r.saved).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}` : ""}</small></div>
+      <div class="row">${r.open ? "" : `<button class="btn small primary" data-jopen="${escapeHtml(r.name)}">Open</button><button class="btn small" data-jdel="${escapeHtml(r.name)}" aria-label="Delete ${escapeHtml(r.name)}">Delete</button>`}</div></div>`; }).join("") || '<p class="note">No saved jobs yet.</p>';
+  $("jobsCards").querySelectorAll("[data-jopen]").forEach((b) => b.onclick = () => { const pick = jobsSaved().find((x) => x.name === b.dataset.jopen); if (!pick) return; keepCurrent(); snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(pick.job))); selId = null; afterLoad(); $("jobsDlg").hidden = true; toast("Opened " + (job.name || "job")); });
+  $("jobsCards").querySelectorAll("[data-jdel]").forEach((b) => b.onclick = () => { if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Tap again to delete"; b.classList.add("danger"); return; } store.set("bsp.jobs", jobsSaved().filter((x) => x.name !== b.dataset.jdel)); renderJobs(); renderJobsDlg(); toast("Deleted " + b.dataset.jdel); });
+}
+function startNewJob() { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); $("jobsDlg").hidden = true; showPane("pJob"); setTimeout(() => { const n = $("jName"); if (n) { n.focus(); n.select(); } }, 300); toast(kept ? `Saved "${was}" in My jobs. Type a name for the new job.` : "New job started. Type a name for it."); }
+$("jobsTop").onclick = () => { renderJobsDlg(); $("jobsDlg").hidden = false; };
+$("jobsClose").onclick = () => { $("jobsDlg").hidden = true; };
+$("jobsDlg").addEventListener("click", (e) => { if (e.target === $("jobsDlg")) $("jobsDlg").hidden = true; });
+$("jobsNew").onclick = startNewJob; $("newTop").onclick = startNewJob;
 function freshJob() {
-  const j = { ...sampleJob(), name: "New job", client: "", notes: "", items: [], quoteNo: "" };
+  const j = { ...sampleJob(), name: `New job ${new Date().toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`, client: "", notes: "", items: [], quoteNo: "" };
   j.defaults = { ...DEFAULTS, ...store.get("bsp.defaults", {}) }; j.est = { ...EST_DEFAULTS, ...store.get("bsp.est", {}) };
   j.prices = { ...store.get("bsp.prices", {}) }; j.custom = store.get("bsp.library", []);
   return j;
 }
-$("newJob").onclick = () => { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); toast(kept ? `Saved "${was}" in Saved jobs and started a new job. Name it on the Job tab.` : "Started a new job."); };
+$("newJob").onclick = startNewJob;
 $("exportJson").onclick = () => saveFile(slug(job.name) + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
 $("importJson").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
