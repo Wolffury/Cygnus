@@ -2944,6 +2944,8 @@ function renderQuote() {
     <details id="clientView"${clientOpen ? " open" : ""}><summary>What the client sees${q.lines.some((l) => l.hidden) ? ` (${q.lines.filter((l) => l.hidden).length} lines hidden)` : ""}</summary>
       <p class="note">Untick a line to leave it off the client's quote, the Ledgerline CSV and the saved quote page. Its price is spread over the lines that stay, so the total doesn't change. Your markup and contingency are already built into every price and never show as their own lines.</p>
       <div class="row"><button class="btn small" id="cvSite">Hide site costs</button><button class="btn small" id="cvAll">Show every line</button></div>
+      <label class="f">Price detail on the client copy <select id="cvDetail">${CLIENT_DETAIL.map(([v, t]) => `<option value="${v}"${(job.clientDetail || "lines") === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+      ${(job.clientDetail || "lines") !== "lines" ? `<p class="note">${job.clientDetail === "total" ? "The client sees one price for the whole job, then tax and the deposit." : "The client sees one price for each section (materials, labour, equipment and delivery), with no quantities or unit prices."} The ticks below still choose what's hidden and spread into the other prices.</p>` : ""}
       <label class="f">Labour on the client copy <select id="cvLab">${CLIENT_LABOUR.map(([v, t]) => `<option value="${v}"${(job.clientLabour || "hours") === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
       ${job.clientLabour === "all" ? `<p class="note">The client sees one labour line: ${money(round2(q.lines.filter((l) => !l.hidden && l.cat === "Labour").reduce((a, l) => a + l.clientTotal, 0)))}.</p>` : ""}
       <div class="tablewrap"><table class="qt lines"><tbody>${order.filter((c) => q.lines.some((l) => l.cat === c)).map((c) => `<tr class="cat"><td colspan="3">${c}</td></tr>` + q.lines.filter((l) => l.cat === c).map((l) => `<tr><td><label class="checkrow"><input type="checkbox" data-cv="${escapeHtml(lineKey(l.desc))}"${l.hidden ? "" : " checked"}> ${escapeHtml(l.desc)}</label></td><td>${l.hidden ? "hidden" : l.cat === "Labour" && job.clientLabour && job.clientLabour !== "hours" ? (job.clientLabour === "all" ? "in labour total" : "one price") : `${num1(l.qty)} ${l.unit} × ${money(l.clientPrice)}`}</td><td>${l.hidden ? "–" : money(l.clientTotal)}</td></tr>`).join("")).join("")}</tbody></table></div>
@@ -2956,6 +2958,7 @@ function renderQuote() {
   $("cvAll").onclick = () => setHide([]);
   $("qGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; renderEstFields(); commit(); };
   $("cvLab").onchange = (e) => { snapshot(); job.clientLabour = e.target.value; clientOpen = true; commit(); };
+  $("cvDetail").onchange = (e) => { snapshot(); job.clientDetail = e.target.value; clientOpen = true; commit(); };
   $("extraList").innerHTML = (job.extras || []).map((x, i) => `<button data-ex="${i}"><span>${escapeHtml(x.desc)}</span><span>${num1(x.qty)} × ${money(x.price)} · remove</span></button>`).join("") || '<p class="note">None yet.</p>';
   $("extraList").querySelectorAll("[data-ex]").forEach((b) => b.onclick = () => { snapshot(); job.extras.splice(+b.dataset.ex, 1); commit(); });
 }
@@ -2973,6 +2976,7 @@ for (const [id, k] of COMPANY_KEYS) $(id).addEventListener("change", (e) => stor
 
 function slug(s) { return (s || "job").replace(/[^\w-]+/g, "_"); }
 // Client lines: hidden lines left out; labour as hours × rate, one price per task, or one price for all of it
+const CLIENT_DETAIL = [["lines", "Every line itemised"], ["sections", "A total for each section"], ["total", "One price for the whole job"]];
 const CLIENT_LABOUR = [["hours", "Hours × rate"], ["task", "One price for each task"], ["all", "One price for all labour"]];
 function clientLines(q) {
   const out = [], mode = job.clientLabour || "hours", lab = q.lines.filter((l) => !l.hidden && l.cat === "Labour");
@@ -2986,7 +2990,21 @@ function clientLines(q) {
     }
     out.push(row);
   }
-  return out;
+  const detail = job.clientDetail || "lines";
+  if (detail === "lines") return out;
+  const sum = (rs, k) => round2(rs.reduce((a, r) => a + (r[k] || 0), 0)), lump = (category, description, rs) => ({ category, description, quantity: 1, unit: "lot", unitCost: sum(rs, "costTotal"), costTotal: sum(rs, "costTotal"), unitPrice: sum(rs, "lineTotal"), lineTotal: sum(rs, "lineTotal"), note: "", lump: true });
+  if (detail === "total") return out.length ? [lump("Materials", `${job.name || "The work"}, complete as described in the scope of work: all materials, labour, equipment and delivery`, out)] : [];
+  return ["Materials", "Labour", "Equipment & disposal", "Other"].map((c) => { const rs = out.filter((r) => r.category === c); return rs.length ? lump(c, sectionText(c, rs), rs) : null; }).filter(Boolean);
+}
+// one plain line describing everything in a section of the price
+function sectionText(cat, rs) {
+  const all = rs.map((r) => r.description).join(" | ");
+  const has = (re, t, a) => { if (re.test(all)) a.push(t); };
+  if (cat === "Materials") { const a = []; has(/block|cap max|\bcap\b/i, "block and caps", a); has(/paver|slab/i, "pavers", a); has(/gabion/i, "gabion baskets", a); has(/road base|drain rock|gravel|bedding sand|stone/i, "gravel, rock and sand", a); has(/drain pipe|filter fabric/i, "drainage", a); has(/handrail|lumber/i, "handrail and posts", a); has(/concrete/i, "concrete", a); has(/adhesive/i, "adhesive", a); has(/paint|primer/i, "paint", a); has(/edging/i, "edging", a);
+    return `All materials${a.length ? `: ${listAnd(a)}` : ""}`; }
+  if (cat === "Labour") return "All labour: layout, digging and base preparation, building the steps, landings and walls, handrail, finishing and clean-up";
+  if (cat === "Equipment & disposal") { const a = []; has(/deliver|ferry|truck/i, "delivery to site", a); has(/compactor|saw|excavator|rammer|wheelbarrow|equipment/i, "equipment", a); has(/haul-away|disposal/i, "hauling away the extra soil", a); return a.length ? listAnd(a).replace(/^./, (c) => c.toUpperCase()) : "Equipment and disposal"; }
+  return "Other items";
 }
 function quoteData() {
   const q = estimate(), c = company(), d = new Date(), valid = new Date(d.getTime() + q.E.validDays * 864e5);
@@ -3016,7 +3034,7 @@ function renderImage() {
 $("qHtml").onclick = async () => {
   const qd = quoteData(), bp = await blueprintImage(1600, 1000), r3 = renderImage();
   const order = ["Materials", "Labour", "Equipment & disposal", "Other"], e = escapeHtml;
-  const rows = order.filter((c) => qd.lines.some((l) => l.category === c)).map((c) => `<tr class="cat"><td colspan="4">${c}</td></tr>` + qd.lines.filter((l) => l.category === c).map((l) => `<tr><td>${e(l.description)}</td><td class="n">${num1(l.quantity)} ${l.unit}</td><td class="n">${money(l.unitPrice)}</td><td class="n">${money(l.lineTotal)}</td></tr>`).join("")).join("");
+  const rows = order.filter((c) => qd.lines.some((l) => l.category === c)).map((c) => `<tr class="cat"><td colspan="4">${c}</td></tr>` + qd.lines.filter((l) => l.category === c).map((l) => `<tr><td>${e(l.description)}</td><td class="n">${l.lump ? "" : `${num1(l.quantity)} ${l.unit}`}</td><td class="n">${l.lump ? "" : money(l.unitPrice)}</td><td class="n">${money(l.lineTotal)}</td></tr>`).join("")).join("");
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quote ${e(qd.quoteNumber)} · ${e(qd.job.name)}</title>
 <style>body{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1c2530;background:#fff;margin:0}main{max-width:900px;margin:0 auto;padding:32px 24px}
 header{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:3px solid #173f73;padding-bottom:16px}h1{font-size:28px;margin:0;color:#173f73;letter-spacing:.02em}
@@ -3293,8 +3311,10 @@ function clientPages() {
     let cx = M + cols[0]; for (let k = 1; k < 4; k++) { cx += cols[k]; if (cells[k]) { x.textAlign = "right"; x.fillText(cells[k], cx - 8, y + 7); } }
     x.textAlign = "left"; y += h; x.fillStyle = "#dde3ea"; x.fillRect(M, y - 1, CW, 1);
   };
-  row(["Item", "Qty", "Unit price", "Amount"], { weight: 700, fill: "#eef2f7" });
-  for (const cat of ["Materials", "Labour", "Equipment & disposal", "Other"]) {
+  const lumpy = qd.lines.some((l) => l.lump);
+  row(lumpy ? ["Item", "", "", "Amount"] : ["Item", "Qty", "Unit price", "Amount"], { weight: 700, fill: "#eef2f7" });
+  if (lumpy) for (const l of qd.lines) row([l.description, "", "", money(l.lineTotal)]);
+  else for (const cat of ["Materials", "Labour", "Equipment & disposal", "Other"]) {
     const ls = qd.lines.filter((l) => l.category === cat); if (!ls.length) continue;
     row([cat.toUpperCase(), "", "", ""], { weight: 700, size: 20, color: BLUE });
     for (const l of ls) row([l.description, `${num1(l.quantity)} ${l.unit}`, money(l.unitPrice), money(l.lineTotal)]);
@@ -3550,6 +3570,7 @@ function sanitizeJob(j) {
       chat: (Array.isArray(j.chat) ? j.chat : []).slice(-30).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, text: String(m.text || "").slice(0, 4000), note: String(m.note || "").slice(0, 200) })),
       equip: Array.isArray(j.equip) ? j.equip.slice(0, 40).filter((q) => q && typeof q === "object").map((q) => ({ id: String(q.id || "m").slice(0, 20), name: String(q.name || "Machine").slice(0, 80), use: q.use ? 1 : 0, yard: String(q.yard || "").slice(0, 40), rate: num(q.rate, 0, 0, 1e5), days: num(q.days, 1, 0, 1000) })) : undefined,
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
+      clientDetail: ["sections", "total"].includes(j.clientDetail) ? j.clientDetail : "lines",
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
         return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
