@@ -3542,7 +3542,22 @@ function nextMonday() { const t = new Date(); t.setDate(t.getDate() + Math.round
 const isoDay = (t) => `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 // Time off (company-wide): no work between these dates, weekends already skipped
 function timeOff() { const c = company(), ok = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || ""); return ok(c.offFrom) && ok(c.offTo) && c.offTo >= c.offFrom ? [c.offFrom, c.offTo] : null; }
-function isWorkday(t) { if (!(t.getDay() % 6)) return false; const off = timeOff(), k = isoDay(t); return !(off && k >= off[0] && k <= off[1]); }
+// BC statutory holidays (plus Boxing Day, when suppliers are closed). One on a weekend is taken the next weekday.
+const statCache = new Map();
+function bcStats(y) {
+  if (statCache.has(y)) return statCache.get(y);
+  const d = (m, day) => new Date(y, m, day, 12), nth = (m, wd, n) => { const t = d(m, 1); t.setDate(1 + ((wd - t.getDay() + 7) % 7) + 7 * (n - 1)); return t; };
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, e = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b - 8) / 25) + 1) / 3) + 15) % 30;
+  const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - e - (c % 4)) % 7, mm = Math.floor((a + 11 * e + 22 * l) / 451), em = Math.floor((e + l - 7 * mm + 114) / 31), ed = ((e + l - 7 * mm + 114) % 31) + 1;
+  const good = new Date(y, em - 1, ed - 2, 12), vic = d(4, 24); vic.setDate(24 - ((vic.getDay() + 6) % 7));
+  const list = [[d(0, 1), "New Year's Day"], [nth(1, 1, 3), "Family Day"], [good, "Good Friday"], [vic, "Victoria Day"], [d(6, 1), "Canada Day"], [nth(7, 1, 1), "BC Day"], [nth(8, 1, 1), "Labour Day"],
+    [d(8, 30), "Truth and Reconciliation Day"], [nth(9, 1, 2), "Thanksgiving"], [d(10, 11), "Remembrance Day"], [d(11, 25), "Christmas Day"], [d(11, 26), "Boxing Day"]];
+  const out = new Map();
+  for (const [t, name] of list) { const o = new Date(t); while (!(o.getDay() % 6) || out.has(isoDay(o))) o.setDate(o.getDate() + 1); out.set(isoDay(o), name); }
+  statCache.set(y, out); return out;
+}
+const statName = (t) => bcStats(t.getFullYear()).get(isoDay(t)) || null;
+function isWorkday(t) { if (!(t.getDay() % 6) || statName(t)) return false; const off = timeOff(), k = isoDay(t); return !(off && k >= off[0] && k <= off[1]); }
 function subWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() - 1); if (isWorkday(r)) n--; } return r; }
 function addWorkdays(t, n) { const r = new Date(t); while (n > 0) { r.setDate(r.getDate() + 1); if (isWorkday(r)) n--; } return r; }
 const dayName = (t) => t.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
@@ -3567,6 +3582,8 @@ function timelineAuto() {
     day += n;
   }
   const off = timeOff(), end = addWorkdays(t, Math.max(0, Math.ceil(day) - 1));
+  { const stats = []; for (const r = new Date(orderBy); r <= end; r.setDate(r.getDate() + 1)) { const n = statName(r); if (n && !(off && isoDay(r) >= off[0] && isoDay(r) <= off[1])) stats.push(`${dayName(r)} (${n})`); }
+    if (stats.length) out.push(`No work on stat holidays: ${listAnd(stats)}; the dates above already allow for ${stats.length > 1 ? "them" : "it"}.`); }
   if (off && off[0] <= isoDay(end) && off[1] >= isoDay(t)) out.push(`No work ${dayName(new Date(off[0] + "T12:00"))} – ${dayName(new Date(off[1] + "T12:00"))} (holiday break); the dates above already allow for it.`);
   out.push(`About ${plural(Math.ceil(day), "working day")} on site with a crew of ${d.crew}. Rain days and material delays can move these dates; we'll keep you posted.`);
   return out.join("\n");
