@@ -1668,7 +1668,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), L = Math.hypot(it.x2 - it.x, it.y2 - it.y);
         ctx.save(); ctx.lineCap = "round"; ctx.strokeStyle = "#1f2226"; ctx.lineWidth = Math.max(3 * u, 1.5 * v.s); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
         ctx.fillStyle = "#c9ccd0"; for (let t = 6; t < L; t += 12) { const px = ax + (bx - ax) * t / L, py = ay + (by - ay) * t / L; ctx.beginPath(); ctx.arc(px, py, Math.max(1.2 * u, 0.4 * v.s), 0, 7); ctx.fill(); } ctx.restore(); // spikes every foot
-        realLabel(ctx, `${shortLabel(tag) || "Edge restraint"} (${plainLen(L)})`, bx + (it.x2 < it.x ? -60 : 60) * u, by, 10 * u, u);
+        { const mx = (ax + bx) / 2, my = (ay + by) / 2; realLabel(ctx, `${shortLabel(tag) || "Edge restraint"} (${plainLen(L)})`, deferLabels ? mx : mx + (it.x2 < it.x ? -60 : 60) * u, my, 10 * u, u); } // client plan: the leader points at the middle of the line
         return true;
       }
       case "drain": {
@@ -1677,7 +1677,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         if (dc.pad) { ctx.save(); ctx.beginPath(); ctx.arc(bx, by, pr, 0, 7); ctx.clip(); stonesIn(ctx, bx - pr, by - pr, 2 * pr, 2 * pr, "#9d988e", hashStr(it.id) + 5, Math.max(2, v.s * 2.5)); ctx.restore(); }
         ctx.save(); ctx.strokeStyle = "rgba(29,39,51,.7)"; ctx.lineWidth = 1.6 * u; ctx.setLineDash([5 * u, 4 * u]); lineL(ctx, v, f, 0, -h, 0, h); ctx.restore();
         drainArrow(ctx, v, it, u, "rgba(29,39,51,.75)");
-        const [mx, my] = W2S(v, f.x, f.y); realLabel(ctx, `${shortLabel(tag) || "Drain"} (${plainLen(dc.L)}${dc.pad ? ", to outlet" : ""})`, mx + 40 * u, my, 10.5 * u, u);
+        const [mx, my] = W2S(v, f.x, f.y); realLabel(ctx, `${shortLabel(tag) || "Drain"} (${plainLen(dc.L)}${dc.pad ? ", to outlet" : ""})`, deferLabels ? mx : mx + 40 * u, my, 10.5 * u, u);
         return true;
       }
       case "rail": {
@@ -3312,9 +3312,9 @@ function placeNames(ctx, names, X, Y, w, h, u, blocked) {
   const font = (n) => `${n.weight} ${n.size}px "IBM Plex Sans", system-ui, sans-serif`;
   for (const n of names) { ctx.save(); ctx.font = font(n); n.tw = ctx.measureText(n.t).width; ctx.restore(); n.hh = n.size * 0.7 + 2 * u; }
   const xs = names.map((n) => n.x).sort((p, q) => p - q), mid = xs[Math.floor(xs.length / 2)], gap = 34 * u; // the middle of the work, not of the outliers
-  const L = [], R = []; let flip = 0;
+  const L = [], R = []; let flip = 0; const nMid = names.filter((n) => Math.abs(n.x - mid) <= 40 * u).length;
   for (const n of names.slice().sort((p, q) => p.y - q.y)) {
-    const side = n.x < mid - 40 * u ? L : n.x > mid + 40 * u ? R : (flip++ % 2 ? R : L); side.push(n);
+    const side = n.x < mid - 40 * u ? L : n.x > mid + 40 * u ? R : nMid > 1 ? (flip++ % 2 ? R : L) : n.x < X + w / 2 ? L : R; side.push(n);
   }
   const near = names.filter((n) => Math.abs(n.x - mid) < 80 * u).map((n) => n.x), edgeL = Math.min(mid, ...near) - gap, edgeR = Math.max(mid, ...near) + gap;
   const hit = (bx) => blocked.some((o) => bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1]);
