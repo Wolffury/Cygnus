@@ -756,7 +756,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&am
 // ---------- material catalog ----------
 // Colours are rendering approximations of the named product colours.
 const HEX = {
-  "Weathered grey": "#9a9488", "Black (metal)": "#2b2b2b", Grey: "#9c9b97", Charcoal: "#5a5a5c", "Rocky Mountain": "#8d7f6e", Granite: "#8f8c88", Sandalwood: "#b8a58a", Teak: "#8b6c52",
+  "Weathered grey": "#9a9488", "Black (metal)": "#2b2b2b", Black: "#232323", Grey: "#9c9b97", Charcoal: "#5a5a5c", "Rocky Mountain": "#8d7f6e", Granite: "#8f8c88", Sandalwood: "#b8a58a", Teak: "#8b6c52",
   "Moroccan Sunset": "#ad7a58", "Autumn Blend": "#8a5534", "Galvanized steel": "#8f979e", "Black steel": "#3a3d40", Natural: "#b9b3a8", Midnight: "#4a4b50", "Shaded Grey": "#8a8987", "Indian Summer": "#a37c5c",
   "La Jolla Blend": "#a99c88", Tan: "#c2ad8c", "Desert Sand": "#cdb99a", Red: "#9a5a48", Brown: "#7a5e48", Green: "#7d8a72",
   Sandstone: "#c9b28d", "Granite Grey": "#8e8e8c", "Light Grey": "#bdbbb6", Cedar: "#9c6b45", "Dark Brown": "#5b4433", "Grey Mix": "#9a9a96",
@@ -838,7 +838,7 @@ const LINE_TYPES = new Set(["shore", "contour"]);
 const RECT_TYPES = new Set(["steps", "landing", "path", "wall", "house", "grade", "unit", "rail"]);
 const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail", "drain", "edge"]);
 // Handrail finishes: wood rails on posts (posts are galvanized pipe unless the whole rail is metal)
-const RAIL_COLORS = ["Cedar", "Brown", "Dark Brown", "Weathered grey", "Black (metal)"];
+const RAIL_COLORS = ["Cedar", "Brown", "Dark Brown", "Weathered grey", "Black", "Black (metal)"];
 // Edging along the open sides of a walkway or landing; a side that meets steps needs none (the step holds the gravel)
 function edgingCalc(it) {
   if (it.edging !== "plastic") return { ft: 0, sides: [] };
@@ -1685,7 +1685,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         return true;
       }
       case "rail": {
-        drawRail(ctx, v, it, u, hexOf(it.color), it.color === "Black (metal)" ? "#2b2b2b" : "#a7adb3");
+        drawRail(ctx, v, it, u, hexOf(it.color), /^Black/.test(it.color || "") ? "#2b2b2b" : "#a7adb3"); // black rails get black posts
         const lp = rotPt(it, 0, 14); const [lx, ly] = W2S(v, lp.x, lp.y);
         realLabel(ctx, `${shortLabel(tag) || "Handrail"} (${plainLen(it.h)} high)`, lx, ly, 10.5 * u, u);
         return true;
@@ -3437,7 +3437,7 @@ function scopeAuto() {
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
   const rails = its.filter((i) => i.type === "rail");
-  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? "recycled plastic lumber" : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
+  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
   const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
   if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
@@ -5575,7 +5575,7 @@ function build3d() {
       }
       case "rail": {
         // posts follow the ground (and the steps) beside the rail; rails run post top to post top
-        const rc = railCalc(it), metal = it.color === "Black (metal)";
+        const rc = railCalc(it), metal = /^Black/.test(it.color || "");
         const wood = mat3("wood|" + it.color, () => new THREE.MeshStandardMaterial({ map: noiseTex(hexOf(it.color), 18, 128, 0.85), roughness: 0.85 })), post = new THREE.MeshStandardMaterial({ color: metal ? "#2b2b2b" : "#a7adb3", roughness: 0.4, metalness: 0.6 });
         const g = new THREE.Group(); place(g, it, 0, 0, 0);
         const xs = []; for (let k = 0; k < rc.posts; k++) xs.push(-it.w / 2 + Math.min(it.w, k * rc.sp));
