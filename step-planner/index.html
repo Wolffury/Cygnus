@@ -3599,7 +3599,8 @@ function clientPages() {
   const on = d.parts;
   if (on.plan) picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
   if (on.side && job.items.some((i) => i.type === "steps")) picture(Math.round(H * 0.24), (ctx, X, Y, w, h) => { renderStairs.client = true; try { renderStairs(ctx, X, Y, w, h, 1.2, "all"); } finally { renderStairs.client = false; } }, "Side view of the whole stairway, bottom on the left.");
-  if (on.three && R3) picture(Math.round(H * 0.3), (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.max(w / s.width, h / s.height); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work.");
+  if (on.three && R3) { const s3 = R3.renderer.domElement, ph = Math.round(clamp(CW * s3.height / s3.width, H * 0.25, H * 0.55)); // box shaped like the 3D view, so nothing is cut off
+    picture(ph, (ctx, X, Y, w, h) => { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement, k = Math.min(w / s.width, h / s.height); ctx.fillStyle = "#b9d3ea"; ctx.fillRect(X, Y, w, h); ctx.drawImage(s, X + (w - s.width * k) / 2, Y + (h - s.height * k) / 2, s.width * k, s.height * k); }, "3D picture of the finished work."); }
   if (on.value) { head("Project value and benefits"); bullets(d.value ?? valueAuto(), "✓"); }
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
   const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
