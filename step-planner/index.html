@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Block Step Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 <style>
 /* Layout: one-screen tablet tool. Top bar, big drawing surface on the left, tool panel on the right (stacks below on narrow screens). */
 :root {
@@ -498,6 +498,10 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Address <input id="coAddr"></label>
           <label class="f">GST / business no. <input id="coTax"></label>
           <label class="f">Terms <textarea id="coTerms" rows="4"></textarea></label>
+          <label class="f">Client package look <select id="coLook"><option value="ledgerline">Ledgerline: engraved letterhead, frame and shell</option><option value="plain">Plain</option></select></label>
+          <label class="f">Slogan under your name <input id="coTagline" placeholder="e.g. Your ideas set in stone"></label>
+          <div class="row"><label class="btn">Use my Ledgerline look<input type="file" id="coLedger" accept=".json,application/json" hidden></label><button class="btn" id="coBrandClear">Remove logo and signature</button></div>
+          <p class="note" id="coBrandNote"></p>
         </details>
       </div>
 
@@ -696,7 +700,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <div class="cppages" id="cpPages" aria-label="Preview of the client package"></div>
     </div>
     <p class="note" id="cpInfo"></p>
-    <div class="row"><button class="btn primary" id="cpPdf">Save PDF (to print or send)</button><button class="btn" id="cpPrintBtn">Print</button><button class="btn" id="cpPics">Save pictures (for Ledgerline)</button></div>
+    <div class="row"><button class="btn primary" id="cpPdf">Save PDF (to print or send)</button><button class="btn" id="cpPrintBtn">Print</button><button class="btn" id="cpLedger">Send to Ledgerline</button><button class="btn" id="cpPics">Save pictures (for Ledgerline)</button></div>
   </div>
 </div>
 <div id="cpPrint"></div>
@@ -3188,10 +3192,26 @@ $("exAdd").onclick = () => {
   snapshot(); job.extras = [...(job.extras || []), { desc, cat: $("exCat").value, qty, unit: "ea", price }];
   $("exDesc").value = ""; $("exPrice").value = ""; $("exQty").value = "1"; commit();
 };
-const COMPANY_KEYS = [["coName", "name"], ["coPhone", "phone"], ["coEmail", "email"], ["coAddr", "address"], ["coTax", "taxNo"], ["coTerms", "terms"]];
+const COMPANY_KEYS = [["coName", "name"], ["coPhone", "phone"], ["coEmail", "email"], ["coAddr", "address"], ["coTax", "taxNo"], ["coTerms", "terms"], ["coLook", "look"], ["coTagline", "tagline"]];
 const DEFAULT_TERMS = "Price includes materials, labour, equipment and disposal as listed. Deposit due on acceptance; balance on completion. Changes to the scope are quoted separately. Work is guaranteed for 2 years on workmanship; manufacturer warranties apply to materials.";
 function company() { return { terms: DEFAULT_TERMS, ...store.get("bsp.company", {}) }; }
-function renderCompany() { const c = company(); for (const [id, k] of COMPANY_KEYS) $(id).value = c[k] || ""; }
+function renderCompany() {
+  const c = company(); for (const [id, k] of COMPANY_KEYS) $(id).value = c[k] || (k === "look" ? "ledgerline" : "");
+  $("coBrandNote").textContent = c.logo || c.signature || c.color ? `From Ledgerline: ${[c.logo && "logo", c.signature && "signature", c.texture && "paper texture", c.color && "colour"].filter(Boolean).join(", ")}. The client package uses them in the Ledgerline look.`
+    : "Pick a Ledgerline backup file (Ledgerline → Settings → Download backup) to bring in your logo, colour, slogan and signature.";
+}
+// Brand from a Ledgerline backup file: logo, colour, slogan, signature and paper texture; contact details only where these are blank
+$("coLedger").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let s = null; try { const d = JSON.parse(await f.text()); s = d && d.settings; } catch {}
+  if (!s || typeof s !== "object") { toast("That isn't a Ledgerline backup. In Ledgerline: Settings, Download backup."); return; }
+  const c = company(), img = (v) => typeof v === "string" && /^data:image\//.test(v) && v.length < 400000 ? v : "";
+  const next = { ...c, look: "ledgerline", color: /^#[0-9a-f]{6}$/i.test(s.color || "") ? s.color : c.color, tagline: s.tagline || c.tagline || "", website: s.website || c.website || "",
+    logo: img(s.logo) || c.logo || "", signature: img(s.signature) || c.signature || "", texture: img(s.texture) || c.texture || "" };
+  for (const [k, lk] of [["name", "name"], ["phone", "phone"], ["email", "email"], ["address", "address"], ["taxNo", "taxId"]]) if (!next[k] && s[lk]) next[k] = String(s[lk]).replace(/\n/g, ", ");
+  store.set("bsp.company", next); brandReady = null; renderCompany(); cpRender && cpRender(); toast("Your Ledgerline look is in. Open the client package to see it.");
+};
+$("coBrandClear").onclick = () => { const c = company(); delete c.logo; delete c.signature; delete c.texture; store.set("bsp.company", c); brandReady = null; renderCompany(); toast("Logo, signature and texture removed."); };
 for (const [id, k] of COMPANY_KEYS) $(id).addEventListener("change", (e) => store.set("bsp.company", { ...company(), [k]: e.target.value }));
 
 function slug(s) { return (s || "job").replace(/[^\w-]+/g, "_"); }
@@ -3589,29 +3609,97 @@ function timelineAuto() {
   return out.join("\n");
 }
 // Lays text, pictures and the price table onto letter pages (150 dpi), starting a new page when one fills up
+// Fonts and pictures for the Ledgerline look, loaded once (again after the brand changes)
+let brandReady = null, BRAND = {};
+function brandAssets() {
+  if (brandReady) return brandReady;
+  const c = company(), load = (src) => new Promise((r) => { if (!src) return r(null); const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src; });
+  const fonts = document.fonts ? Promise.all(['600 40px Cinzel', '500 40px Cinzel', '400 24px "EB Garamond"', '600 24px "EB Garamond"', 'italic 400 24px "EB Garamond"'].map((f) => document.fonts.load(f).catch(() => null))) : null;
+  brandReady = Promise.all([fonts, load(c.logo), load(c.signature), load(c.texture)]).then(([, logo, sig, tex]) => (BRAND = { logo, sig, tex }));
+  return brandReady;
+}
+// Ledgerline's shell: a logarithmic spiral with its chamber walls, drawn in the brand colour
+const _naut = {};
+function nautilusCanvas(hex, alpha = 1, size = 700) {
+  const key = hex + alpha + size; if (_naut[key]) return _naut[key];
+  const cv = document.createElement("canvas"); cv.width = cv.height = size;
+  const x = cv.getContext("2d"), n = parseInt((hex || "#8B6B3E").slice(1), 16), k = size / 700;
+  x.strokeStyle = `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`; x.lineCap = "round"; x.lineJoin = "round";
+  const B = Math.log(3) / (2 * Math.PI), TMAX = 2 * Math.PI * 3.6, A = 300 * k / Math.exp(B * TMAX), cx = size * 0.54, cy = size * 0.5;
+  const P = (th) => { const rr = A * Math.exp(B * th); return [cx + rr * Math.cos(th), cy + rr * Math.sin(th)]; };
+  x.lineWidth = 3.2 * k; x.beginPath(); for (let th = 1.5; th <= TMAX; th += 0.02) { const [px, py] = P(th); th === 1.5 ? x.moveTo(px, py) : x.lineTo(px, py); } x.stroke();
+  x.lineWidth = 1.7 * k;
+  for (let th = TMAX; th > 2 * Math.PI + 1.5; th -= 0.36) { const [ox, oy] = P(th), [ix, iy] = P(th - 2 * Math.PI), mr = (A * Math.exp(B * th) + A * Math.exp(B * (th - 2 * Math.PI))) / 2, ma = th + 0.32; x.beginPath(); x.moveTo(ox, oy); x.quadraticCurveTo(cx + mr * Math.cos(ma), cy + mr * Math.sin(ma), ix, iy); x.stroke(); }
+  const [ax, ay] = P(TMAX), [bx, by] = P(TMAX - 2 * Math.PI); x.lineWidth = 3.2 * k; x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
+  return (_naut[key] = cv);
+}
+const tintHex = (hex, f) => { const n = parseInt(hex.slice(1), 16), t = (v) => Math.round(255 - (255 - v) * f); return `rgb(${t(n >> 16 & 255)},${t(n >> 8 & 255)},${t(n & 255)})`; };
 function clientPages() {
-  const d = cdoc(), D = 150, W = 8.5 * D, H = 11 * D, M = 0.6 * D, CW = W - 2 * M, foot = 0.45 * D;
-  const qd = quoteData(), co = qd.company, pages = []; let c, x, y = 0;
-  const F = (size, weight = 400) => `${weight} ${size}px "IBM Plex Sans", system-ui, sans-serif`;
-  const INK = "#1c2530", MUTED = "#5d6b7a", BLUE = "#173f73";
-  const page = () => { c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M; };
+  const d = cdoc(), D = 150, W = 8.5 * D, H = 11 * D, qd = quoteData(), co = qd.company, cfull = company(), pages = []; let c, x, y = 0;
+  const LL = cfull.look !== "plain"; // the Ledgerline look: engraved letterhead, bronze frame, shell watermark
+  const M = LL ? 0.78 * D : 0.6 * D, CW = W - 2 * M, foot = LL ? 0.62 * D : 0.45 * D;
+  const PC = LL ? (/^#[0-9a-f]{6}$/i.test(cfull.color || "") ? cfull.color : "#8B6B3E") : "#173f73";
+  const SANS = `"IBM Plex Sans", system-ui, sans-serif`, SERIF = `"EB Garamond", Garamond, Georgia, serif`, CAPS = `Cinzel, "Trajan Pro", Georgia, serif`;
+  const F = (size, weight = 400, fam) => `${weight} ${size}px ${fam || (LL ? SERIF : SANS)}`;
+  const INK = LL ? "#2A2520" : "#1c2530", MUTED = LL ? "#6E655B" : "#5d6b7a", BLUE = PC, RULE = LL ? "#E8E2D9" : "#dde3ea", FILL = LL ? tintHex(PC, 0.07) : "#eef2f7";
+  const BODY = LL ? 25 : 26; // text size
+  const spaced = (px, fn) => { const had = x.letterSpacing; try { x.letterSpacing = px + "px"; } catch {} fn(); try { x.letterSpacing = had || "0px"; } catch {} };
+  const page = () => {
+    c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M;
+    if (LL) {
+      if (BRAND.tex) x.drawImage(BRAND.tex, 0, 0, W, H);
+      else { x.save(); x.globalAlpha = 0.085; x.drawImage(nautilusCanvas(PC, 1, 900), -0.15 * W, H - 0.62 * W, 0.86 * W, 0.86 * W); x.restore(); }
+      x.strokeStyle = tintHex(PC, 0.55); x.lineWidth = 1.6; x.strokeRect(38, 38, W - 76, H - 76);
+      x.strokeStyle = tintHex(PC, 0.28); x.lineWidth = 1.2; x.strokeRect(46, 46, W - 92, H - 92);
+    }
+  };
   const room = (h) => { if (y + h > H - M - foot) page(); };
-  const text = (t, size = 26, o = {}) => {
-    const font = F(size, o.weight || 400), ind = o.indent || 0, lines = wrapLines(x, t, CW - ind, font), lh = size * 1.38;
+  const text = (t, size = BODY, o = {}) => {
+    const font = o.font || F(size, o.weight || 400), ind = o.indent || 0, lines = wrapLines(x, t, CW - ind, font), lh = size * (LL ? 1.32 : 1.38);
     for (const ln of lines) { room(lh); x.font = font; x.fillStyle = o.color || INK; x.textBaseline = "top"; x.textAlign = "left"; x.fillText(ln, M + ind, y); y += lh; }
     y += o.after ?? size * 0.35;
   };
-  const head = (t) => { room(110); y += 18; x.font = F(30, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(t.toUpperCase(), M, y); y += 42; x.fillStyle = BLUE; x.fillRect(M, y, CW, 3); y += 18; };
-  const bullets = (txt, mark = "•") => { for (const ln of String(txt || "").split("\n").map((l) => l.trim()).filter(Boolean)) { room(36); x.font = F(26); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(mark, M + 4, y); text(ln, 26, { indent: 36, after: 8 }); } };
-  const picture = (h, draw, caption) => { room(h + 50); x.save(); x.beginPath(); x.rect(M, y, CW, h); x.clip(); draw(x, M, y, CW, h); x.restore(); x.strokeStyle = "#cfd6de"; x.lineWidth = 2; x.strokeRect(M, y, CW, h); y += h + 8; if (caption) text(caption, 21, { color: MUTED, after: 14 }); };
+  const head = (t) => {
+    room(110); y += 18;
+    if (LL) { x.fillStyle = PC; x.fillRect(M, y, CW, 2.5); y += 16; x.font = F(23, 600, CAPS); x.fillStyle = PC; x.textBaseline = "top"; spaced(5, () => x.fillText(t.toUpperCase(), M, y)); y += 36; x.fillStyle = tintHex(PC, 0.45); x.fillRect(M, y, CW, 1.2); y += 16; return; }
+    x.font = F(30, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(t.toUpperCase(), M, y); y += 42; x.fillStyle = BLUE; x.fillRect(M, y, CW, 3); y += 18;
+  };
+  const bullets = (txt, mark = "•") => {
+    for (const ln of String(txt || "").split("\n").map((l) => l.trim()).filter(Boolean)) {
+      room(36);
+      if (LL) { x.save(); x.translate(M + 12, y + BODY * 0.62); x.rotate(Math.PI / 4); x.fillStyle = PC; x.fillRect(-4.5, -4.5, 9, 9); x.restore(); text(ln, BODY, { indent: 36, after: 7, color: "#443C34" }); continue; }
+      x.font = F(26); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(mark, M + 4, y); text(ln, 26, { indent: 36, after: 8 });
+    }
+  };
+  const picture = (h, draw, caption) => { room(h + 50); x.save(); x.beginPath(); x.rect(M, y, CW, h); x.clip(); draw(x, M, y, CW, h); x.restore(); x.strokeStyle = LL ? tintHex(PC, 0.45) : "#cfd6de"; x.lineWidth = 2; x.strokeRect(M, y, CW, h); y += h + 8; if (caption) text(caption, LL ? 22 : 21, { color: MUTED, after: 14, font: LL ? F(22, "italic 400") : undefined }); };
   page();
-  // letterhead
-  x.font = F(44, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(co.name || "Quote", M, y);
-  x.textAlign = "right"; x.font = F(28, 700); x.fillText(`Quote ${qd.quoteNumber}`, W - M, y + 6); x.font = F(21); x.fillStyle = MUTED; x.fillText(`Date ${qd.date} · Valid until ${qd.validUntil}`, W - M, y + 44); x.textAlign = "left";
-  y += 62; const contact = [co.address, co.phone, co.email].filter(Boolean).join(" · "); if (contact) text(contact, 21, { color: MUTED, after: 2 }); if (co.taxNumber) text(`GST/BN ${co.taxNumber}`, 21, { color: MUTED, after: 2 });
-  y += 8; x.fillStyle = BLUE; x.fillRect(M, y, CW, 5); y += 26;
-  text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 }); if (qd.client.email) text(qd.client.email, 24, { color: MUTED, after: 2 });
-  text(`Project: ${qd.job.name}`, 28, { weight: 600, after: 16 });
+  if (LL) { // centred engraved letterhead, then the ornament, then client and document details side by side
+    const cx = W / 2; x.textAlign = "center"; x.textBaseline = "top";
+    if (BRAND.logo) { const im = BRAND.logo, k = Math.min(380 / im.width, 230 / im.height, 1.6), w = im.width * k, h = im.height * k; x.save(); x.globalCompositeOperation = "multiply"; x.drawImage(im, cx - w / 2, y - 20, w, h); x.restore(); y += h - 4; }
+    else { x.drawImage(nautilusCanvas(PC, 0.9, 300), cx - 45, y, 90, 90); y += 104; }
+    x.font = F(46, 600, CAPS); x.fillStyle = "#1F1B17"; x.textAlign = "center"; spaced(9, () => x.fillText((co.name || "Your Business Name").toUpperCase(), cx, y)); y += 58;
+    if (cfull.tagline) { x.font = F(26, "italic 400"); x.fillStyle = PC; x.fillText(cfull.tagline, cx, y); y += 36; }
+    x.font = F(18); x.fillStyle = MUTED;
+    for (const l of [[co.phone, co.email, cfull.website].filter(Boolean).join("   ·   "), co.address, co.taxNumber ? `GST/BN ${co.taxNumber}` : ""].filter(Boolean)) { spaced(2.4, () => x.fillText(l.toUpperCase(), cx, y)); y += 27; }
+    y += 18; const ow = CW * 0.31; x.fillStyle = tintHex(PC, 0.6); x.fillRect(cx - ow, y, ow - 16, 1.4); x.fillRect(cx + 16, y, ow - 16, 1.4);
+    x.save(); x.translate(cx, y + 0.7); x.rotate(Math.PI / 4); x.fillStyle = PC; x.fillRect(-6, -6, 12, 12); x.restore(); y += 40;
+    const top = y; x.textAlign = "left";
+    x.font = F(16, 600, CAPS); x.fillStyle = PC; spaced(3.5, () => x.fillText("PREPARED FOR", M, y)); y += 28;
+    text(qd.client.name || "–", 30, { weight: 600, color: "#1F1B17", after: 4 });
+    for (const l of [qd.client.siteAddress, qd.client.email].filter(Boolean)) text(l, 21, { color: MUTED, after: 2 });
+    y += 10; x.font = F(16, 600, CAPS); x.fillStyle = PC; x.textBaseline = "top"; spaced(3.5, () => x.fillText("PROJECT", M, y)); y += 26; text(qd.job.name || "", 26, { weight: 600, color: "#1F1B17", after: 4 });
+    const left = y; y = top; x.textAlign = "right"; x.font = F(50, 500, CAPS); x.fillStyle = "#1F1B17"; x.textBaseline = "top"; spaced(11, () => x.fillText("PROPOSAL", W - M + 11, y)); y += 66;
+    const nice = (iso) => { const t = new Date(iso + "T12:00"); return isNaN(t) ? iso : t.toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" }); };
+    for (const [k, v] of [["Quote", qd.quoteNumber], ["Date", nice(qd.date)], ["Valid until", nice(qd.validUntil)]]) { x.font = F(21, "italic 400"); x.fillStyle = "#8A8076"; x.textAlign = "right"; x.fillText(k, W - M - 210, y); x.font = F(21); x.fillStyle = "#1F1B17"; x.fillText(v, W - M, y); y += 30; }
+    x.textAlign = "left"; y = Math.max(left, y) + 22;
+  } else {
+    x.font = F(44, 700); x.fillStyle = BLUE; x.textBaseline = "top"; x.fillText(co.name || "Quote", M, y);
+    x.textAlign = "right"; x.font = F(28, 700); x.fillText(`Quote ${qd.quoteNumber}`, W - M, y + 6); x.font = F(21); x.fillStyle = MUTED; x.fillText(`Date ${qd.date} · Valid until ${qd.validUntil}`, W - M, y + 44); x.textAlign = "left";
+    y += 62; const contact = [co.address, co.phone, co.email].filter(Boolean).join(" · "); if (contact) text(contact, 21, { color: MUTED, after: 2 }); if (co.taxNumber) text(`GST/BN ${co.taxNumber}`, 21, { color: MUTED, after: 2 });
+    y += 8; x.fillStyle = BLUE; x.fillRect(M, y, CW, 5); y += 26;
+    text(`Prepared for: ${qd.client.name || "–"}`, 28, { weight: 600, after: 2 }); if (qd.client.siteAddress) text(`Site: ${qd.client.siteAddress}`, 24, { color: MUTED, after: 2 }); if (qd.client.email) text(qd.client.email, 24, { color: MUTED, after: 2 });
+    text(`Project: ${qd.job.name}`, 28, { weight: 600, after: 16 });
+  }
   // the plan, realistic look, fitted to the box
   const on = d.parts;
   if (on.plan) picture(simplePlanBox(CW, H - y - M - foot - 60), (ctx, X, Y, w, h) => drawSimplePlan(ctx, X, Y, w, h, 1.4), "Plan from above: the finished work. What's included is listed under Scope of work.");
@@ -3633,7 +3721,7 @@ function clientPages() {
       x.font = F(18); x.fillStyle = MUTED; x.fillText(r.phase || "", M, y + 25);
       x.font = `400 20px "IBM Plex Mono", ui-monospace, monospace`; x.fillStyle = INK; x.fillText(tl.slice(0, 2).join("   "), M + CW * 0.22, y + 2); if (tl.length > 2) x.fillText(tl.slice(2).join("   "), M + CW * 0.22, y + 27);
       if (r.wmin) { x.textAlign = "right"; x.font = F(18); x.fillStyle = MUTED; x.fillText(`lowest 8–4: ${r.wmin[1].toFixed(1)} m`, W - M, y + 2); x.textAlign = "left"; }
-      y += 52; x.fillStyle = "#e6ebef"; x.fillRect(M, y - 6, CW, 1);
+      y += 52; x.fillStyle = RULE; x.fillRect(M, y - 6, CW, 1);
     }
     y += 10;
   }
@@ -3641,42 +3729,58 @@ function clientPages() {
   if (on.price) {
   head("Price");
   const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
-    const font = F(o.size || 23, o.weight || 400), lines = wrapLines(x, cells[0], cols[0] - 16, font), lh = (o.size || 23) * 1.35, h = lines.length * lh + 14;
+    const font = o.font || F(o.size || (LL ? 24 : 23), o.weight || 400), lines = wrapLines(x, cells[0], cols[0] - 16, font), lh = (o.size || (LL ? 24 : 23)) * 1.35, h = lines.length * lh + 14;
     room(h); if (o.fill) { x.fillStyle = o.fill; x.fillRect(M, y, CW, h); }
     x.font = font; x.fillStyle = o.color || INK; x.textBaseline = "top";
-    lines.forEach((ln, k) => { x.textAlign = "left"; x.fillText(ln, M + 8, y + 7 + k * lh); });
-    let cx = M + cols[0]; for (let k = 1; k < 4; k++) { cx += cols[k]; if (cells[k]) { x.textAlign = "right"; x.fillText(cells[k], cx - 8, y + 7); } }
-    x.textAlign = "left"; y += h; x.fillStyle = "#dde3ea"; x.fillRect(M, y - 1, CW, 1);
+    const put = () => { lines.forEach((ln, k) => { x.textAlign = "left"; x.fillText(ln, M + 8, y + 7 + k * lh); });
+      let cx = M + cols[0]; for (let k = 1; k < 4; k++) { cx += cols[k]; if (cells[k]) { x.textAlign = "right"; x.fillText(cells[k], cx - 8, y + 7); } } };
+    if (o.space) spaced(o.space, put); else put();
+    if (o.ruleTop) { x.fillStyle = PC; x.fillRect(M, y, CW, o.ruleTop); }
+    x.textAlign = "left"; y += h; x.fillStyle = o.ruleColor || RULE; x.fillRect(M, y - 1, CW, o.ruleW || 1);
   };
   const lumpy = qd.lines.some((l) => l.lump);
-  row(lumpy ? ["Item", "", "", "Amount"] : ["Item", "Qty", "Unit price", "Amount"], { weight: 700, fill: "#eef2f7" });
+  if (LL) row(lumpy ? ["DESCRIPTION", "", "", "AMOUNT"] : ["DESCRIPTION", "QTY", "RATE", "AMOUNT"], { font: F(15, 600, CAPS), size: 15, color: PC, space: 3, ruleTop: 2.5, ruleColor: tintHex(PC, 0.45), ruleW: 1.2 });
+  else row(lumpy ? ["Item", "", "", "Amount"] : ["Item", "Qty", "Unit price", "Amount"], { weight: 700, fill: FILL });
   if (lumpy) for (const l of qd.lines) row([l.description, "", "", money(l.lineTotal)]);
   else for (const cat of ["Materials", "Labour", "Equipment & disposal", "Other"]) {
     const ls = qd.lines.filter((l) => l.category === cat); if (!ls.length) continue;
-    row([cat.toUpperCase(), "", "", ""], { weight: 700, size: 20, color: BLUE });
+    row([cat.toUpperCase(), "", "", ""], LL ? { font: F(15, 600, CAPS), size: 15, color: PC, space: 3 } : { weight: 700, size: 20, color: BLUE });
     for (const l of ls) row([l.description, `${num1(l.quantity)} ${l.unit}`, money(l.unitPrice), money(l.lineTotal)]);
   }
   row(["Subtotal", "", "", money(qd.totals.beforeTax)], { weight: 600 });
   if (qd.rates.gstPercent) row([`GST ${qd.rates.gstPercent}%`, "", "", money(qd.totals.gst)]);
   if (qd.totals.pst) row([`PST ${qd.rates.pstPercent}% on materials`, "", "", money(qd.totals.pst)]);
-  row(["Total (CAD)", "", "", money(qd.totals.total)], { weight: 700, size: 27, fill: "#eef2f7" });
+  if (LL) { room(70); y += 6; x.fillStyle = PC; x.fillRect(M + CW * 0.45, y, CW * 0.55, 1.6); x.fillRect(M + CW * 0.45, y + 5, CW * 0.55, 1.6); y += 12;
+    x.textBaseline = "top"; x.textAlign = "left"; x.font = F(19, 600, CAPS); x.fillStyle = PC; spaced(3.5, () => x.fillText("TOTAL (CAD)", M + CW * 0.45, y + 10)); x.textAlign = "right"; x.font = F(36, 600); x.fillStyle = "#1F1B17"; x.fillText(money(qd.totals.total), W - M - 8, y); x.textAlign = "left"; y += 54; }
+  else row(["Total (CAD)", "", "", money(qd.totals.total)], { weight: 700, size: 27, fill: FILL });
   row([`Deposit ${qd.rates.depositPercent}% due on signing`, "", "", money(qd.totals.deposit)], { weight: 600 });
   }
   if (on.terms) {
   if (qd.terms) { head("Terms"); text(qd.terms, 23); }
-  room(200); y += 90; x.fillStyle = INK; x.fillRect(M, y, CW * 0.45, 2); x.fillRect(M + CW * 0.55, y, CW * 0.45, 2); y += 10;
-  x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "top"; x.fillText("Accepted by (client) and date", M, y); x.fillText(`${co.name || "Contractor"} and date`, M + CW * 0.55, y);
+  room(220); y += 90;
+  if (LL && BRAND.sig) { const im = BRAND.sig, k = Math.min(300 / im.width, 110 / im.height), w = im.width * k, h = im.height * k; x.drawImage(im, M + CW * 0.55 + (CW * 0.45 - w) / 2, y - h + 6, w, h); }
+  x.fillStyle = LL ? "#8A8076" : INK; x.fillRect(M, y, CW * 0.45, LL ? 1.4 : 2); x.fillRect(M + CW * 0.55, y, CW * 0.45, LL ? 1.4 : 2); y += 10;
+  x.font = LL ? F(21, "italic 400") : F(21); x.fillStyle = MUTED; x.textBaseline = "top"; x.fillText("Accepted by (client) and date", M, y); x.fillText(`${co.name || "Contractor"} and date`, M + CW * 0.55, y);
   }
   // footer on every page
   const notice = `© ${co.name ? co.name + " " : ""}${new Date().getFullYear()}. Prepared ${qd.client.name ? `for ${qd.client.name} ` : ""}for quote ${qd.quoteNumber} only. Not for use in construction by others.`;
-  pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(17, 600); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(notice, M, H - M * 0.6 - 28, CW);
+  pages.forEach((pg, k) => {
+    const g = pg.getContext("2d");
+    if (LL) { // Ledgerline's engraved footer: notice in italic, then the name and contact in spaced capitals, page number on the right
+      g.textBaseline = "alphabetic"; g.textAlign = "center"; g.fillStyle = MUTED; g.font = F(18, "italic 400"); g.fillText(notice, W / 2, H - 112, W - 2 * M);
+      g.font = F(15, 500, CAPS); g.fillStyle = "#8A8076"; try { g.letterSpacing = "3.5px"; } catch {} g.fillText([co.name, co.phone, co.email].filter(Boolean).join("   ·   ").toUpperCase(), W / 2, H - 76, W - 2 * M); try { g.letterSpacing = "0px"; } catch {}
+      if (pages.length > 1) { g.textAlign = "right"; g.font = F(17, "italic 400"); g.fillText(`Quote ${qd.quoteNumber}, page ${k + 1} of ${pages.length}`, W - M, H - 140); }
+      return;
+    }
+    g.font = F(17, 600); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(notice, M, H - M * 0.6 - 28, CW);
     g.font = F(19); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(`${co.name || ""}${co.name ? " · " : ""}Quote ${qd.quoteNumber} · ${qd.job.name}`, M, H - M * 0.6); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.6); });
   return pages;
 }
 let cpTimer = 0, cpPagesCache = null;
 function cpRender() {
   clearTimeout(cpTimer);
-  cpTimer = setTimeout(() => {
+  cpTimer = setTimeout(async () => {
+    try { await brandAssets(); } catch {}
     try {
       const n0 = cpPagesCache ? cpPagesCache.length : 0; cpPagesCache = clientPages(); if (cpPagesCache.length !== n0) cpSkip = new Set();
       $("cpPages").innerHTML = "";
@@ -3734,6 +3838,45 @@ $("cpPrintBtn").onclick = () => {
   window.addEventListener("afterprint", done);
   try { window.print(); } catch { done(); toast("This screen can't print directly. Tap Save PDF and print the PDF."); return; }
   setTimeout(() => { if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 1500);
+};
+// ---------- Send to Ledgerline: one file Ledgerline's Estimates → Import turns into a full proposal ----------
+// Client, the same lines and taxes as the quote (so the totals match to the cent), the proposal sections and the pictures.
+function jpegUnder(cv, maxLen = 140000) { // Ledgerline keeps each photo under about 140 KB
+  const src = stamped(cv); let max = 1400, q = 0.8, out = "";
+  for (let i = 0; i < 8; i++) {
+    const sc = Math.min(1, max / Math.max(src.width, src.height)), c = document.createElement("canvas"); c.width = Math.round(src.width * sc); c.height = Math.round(src.height * sc);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(src, 0, 0, c.width, c.height);
+    out = c.toDataURL("image/jpeg", q); if (out.length <= maxLen) break; max = Math.round(max * 0.82); q = Math.max(0.5, q - 0.06);
+  }
+  return out;
+}
+function proposalShots() {
+  const shots = [], mk = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); draw(g, w, h); return c; };
+  { const pw = 1600, ph = simplePlanBox(pw, 2200); shots.push(["plan", "Plan from above: the finished work", mk(pw, ph, (g, w, h) => drawSimplePlan(g, 0, 0, w, h, 1.6))]); }
+  if (job.items.some((i) => i.type === "steps")) shots.push(["side_view", "Side view of the whole stairway, bottom on the left", mk(2000, 1000, (g, w, h) => { renderStairs.client = true; try { renderStairs(g, 0, 0, w, h, 1.6, "all"); } finally { renderStairs.client = false; } })]);
+  if (R3) { R3.renderer.render(R3.scene, R3.camera); const s = R3.renderer.domElement; shots.push(["3d", "3D picture of the finished work", mk(s.width, s.height, (g) => g.drawImage(s, 0, 0))]); }
+  return shots;
+}
+function ledgerlineProposal() {
+  const qd = quoteData(), d = cdoc(), on = d.parts, n2 = (v) => String(Math.round(v * 100) / 100), gst = qd.rates.gstPercent || 0;
+  const items = qd.lines.map((l) => ({ desc: l.description, details: (l.note || "").replace(/ · incl\. .*$/, ""), qty: n2(l.quantity), rate: n2(l.unitPrice), unit: l.lump ? "" : (l.unit || ""),
+    kind: l.category === "Labour" ? "labour" : l.category === "Materials" ? "materials" : "", taxable: gst > 0 }));
+  if (qd.totals.pst) items.push({ desc: `PST ${qd.rates.pstPercent}% on materials`, details: "", qty: "1", rate: n2(qd.totals.pst), unit: "", kind: "", taxable: false });
+  const sections = [], add = (title, t) => { t = String(t || "").trim(); if (t) sections.push({ title, text: t }); };
+  if (on.value) add("Project value and benefits", d.value ?? valueAuto());
+  if (on.scope) add("Scope of work", d.scope ?? scopeAuto());
+  if (on.excl) add("Not included", d.excl ?? exclAuto());
+  if (on.time) add("Timeline", d.timeline ?? timelineAuto());
+  if (on.care) add("Care and maintenance", d.care ?? careAuto());
+  if (on.terms) add("Terms", [`Deposit ${qd.rates.depositPercent}% (${money(qd.totals.deposit)}) due on signing.`, qd.terms].filter(Boolean).join("\n"));
+  const photos = (on.plan || on.side || on.three ? proposalShots() : []).filter(([k]) => (k === "plan" && on.plan) || (k === "side_view" && on.side) || (k === "3d" && on.three)).map(([, caption, c]) => ({ src: jpegUnder(c), caption, wide: true }));
+  return { app: "block-step-planner", kind: "proposal", v: 1, quote: qd.quoteNumber, project: qd.job.name, date: qd.date, due: qd.validUntil,
+    client: { name: qd.client.name, email: qd.client.email || "", phone: "", address: qd.client.siteAddress }, taxRate: String(gst), items, sections, photos, notice: ownNotice(), total: qd.totals.total };
+}
+$("cpLedger").onclick = async () => {
+  try { const p = ledgerlineProposal(); saveFile(`${slug(job.name)}_${quoteNo()}_proposal.json`, new Blob([JSON.stringify(p)], { type: "application/json" }));
+    toast(`Saved the proposal (${plural(p.photos.length, "picture")}). In Ledgerline: Estimates, Import, and pick this file.`); }
+  catch (e) { toast("Couldn't make the Ledgerline file: " + e.message); }
 };
 // Pictures to attach to the estimate in Ledgerline (its CSV import carries no pictures)
 $("cpPics").onclick = async () => {
