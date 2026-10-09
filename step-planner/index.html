@@ -1623,7 +1623,7 @@ function drawItemReal(ctx, v, it, u, sel) {
           ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 9 * u * Math.cos(ang - 0.45), by - 9 * u * Math.sin(ang - 0.45)); ctx.lineTo(bx - 9 * u * Math.cos(ang + 0.45), by - 9 * u * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
         }
         const lp = rotPt(it, 0, -c.run / 2 - 22); const [lx, ly] = W2S(v, lp.x, lp.y);
-        realLabel(ctx, `${shortLabel(tag) || "Steps"}: ${c.count} step${c.count > 1 ? "s" : ""} up`, lx, ly, 11 * u, u);
+        realLabel(ctx, deferLabels ? (shortLabel(tag) || "Steps") : `${shortLabel(tag) || "Steps"}: ${c.count} step${c.count > 1 ? "s" : ""} up`, lx, ly, 11 * u, u); // the client plan names each flight without counting its steps
         return true;
       }
       case "wall": {
@@ -3412,9 +3412,10 @@ function scopeAuto() {
   const build = (it) => { const c = stepCalc(it); return `${matName(mat(it.block))} risers${c.cap ? ` and ${matName(mat(it.cap))} caps glued down` : ""}`; };
   if (flights.length) {
     const cs = flights.map(stepCalc), n = cs.reduce((a, c) => a + c.count, 0);
-    out.push(flights.length > 1 ? `Stairway: ${n} steps in ${flights.length} flights (${listAnd(cs.map((c) => String(c.count)))} steps).` : `${cleanName(flights[0]) || "Steps"}: ${plural(n, "step")}.`);
+    out.push(flights.length > 1 ? `Stairway: ${n} steps in ${flights.length} flights.` : `${cleanName(flights[0]) || "Steps"}: ${plural(n, "step")}.`);
   }
   if (singles.length) out.push(`${plural(singles.length, "single step")} between the ${singles.length > 1 ? "terraces" : "landings"}.`);
+  if (all.length > 1) out.push("The number of steps in each flight may vary slightly from the plan to suit the ground on site; the total number of steps stays the same.");
   if (all.length) {
     if (same((i) => i.w) && same((i) => stepCalc(i).H) && same((i) => i.tread)) { const c = stepCalc(all[0]); out.push(`Every step ${plainLen(all[0].w)} wide, ${fmtIn(c.H)} high, with an ${fmtIn(all[0].tread)} tread.`); }
     else for (const it of all) { const c = stepCalc(it); out.push(`${cleanName(it) || "Steps"}: ${plainLen(it.w)} wide, ${fmtIn(c.H)} high, ${fmtIn(it.tread)} tread.`); }
@@ -5231,7 +5232,7 @@ function renderStairs(ctx, X, Y, W, H, u, which) {
   if (!single) {
     for (const el of els) {
       const [a, b] = P(el.d0 + el.len / 2, el.e);
-      if (el.kind === "steps" && el.c.count > 1) { T(`${el.c.count} steps`, a, b - 26 * u, 12 * u, "#1d2733", 700); T(`up to ${fmtElev(el.e)}`, a, b - 12 * u, 11 * u, "#3d4a57", 500); }
+      if (el.kind === "steps" && el.c.count > 1) { if (renderStairs.client) T(`up to ${fmtElev(el.e)}`, a, b - 12 * u, 11 * u, "#1d2733", 600); else { T(`${el.c.count} steps`, a, b - 26 * u, 12 * u, "#1d2733", 700); T(`up to ${fmtElev(el.e)}`, a, b - 12 * u, 11 * u, "#3d4a57", 500); } } // no step counts on the client's copy
       else if (el.kind === "landing" && el.len * sc > 60 * u) T(`${fmtElev(el.it.h)}`, a, b - 12 * u, 11 * u, "#3d4a57", 600);
     }
   } else {
