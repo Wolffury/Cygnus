@@ -3345,7 +3345,7 @@ function placeNames(ctx, names, X, Y, w, h, u, blocked) {
 }
 const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["care", "Care and maintenance"], ["price", "Price"], ["terms", "Terms and signatures"]];
 const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, care: true, price: true, terms: true };
-function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 2, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
+function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 1, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
 const listAnd = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
@@ -3585,7 +3585,7 @@ function timelineAuto() {
   { const stats = []; for (const r = new Date(orderBy); r <= end; r.setDate(r.getDate() + 1)) { const n = statName(r); if (n && !(off && isoDay(r) >= off[0] && isoDay(r) <= off[1])) stats.push(`${dayName(r)} (${n})`); }
     if (stats.length) out.push(`No work on stat holidays: ${listAnd(stats)}; the dates above already allow for ${stats.length > 1 ? "them" : "it"}.`); }
   if (off && off[0] <= isoDay(end) && off[1] >= isoDay(t)) out.push(`No work ${dayName(new Date(off[0] + "T12:00"))} – ${dayName(new Date(off[1] + "T12:00"))} (holiday break); the dates above already allow for it.`);
-  out.push(`About ${plural(Math.ceil(day), "working day")} on site with a crew of ${d.crew}. Rain days and material delays can move these dates; we'll keep you posted.`);
+  out.push(`About ${plural(Math.ceil(day), "working day")} on site with ${d.crew > 1 ? `a crew of ${d.crew}` : "a one-person crew"}. Rain days and material delays can move these dates; we'll keep you posted.`);
   return out.join("\n");
 }
 // Lays text, pictures and the price table onto letter pages (150 dpi), starting a new page when one fills up
@@ -3979,7 +3979,7 @@ function sanitizeJob(j) {
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
       clientDetail: ["sections", "total"].includes(j.clientDetail) ? j.clientDetail : "lines",
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
-        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 2, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
+        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 1, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
