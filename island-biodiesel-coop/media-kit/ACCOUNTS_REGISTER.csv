@@ -1,9 +1,0 @@
-asset,url_or_identifier,owner_account_email,full_control_admins,other_access,two_factor_on,renewal_date,last_access_review,notes
-Website domain,[YOUR-DOMAIN],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",,yes,[YYYY-MM-DD],[YYYY-MM-DD],Auto-renew ON. Registrar: [REGISTRAR]
-Website hosting,[HOST e.g. Netlify / GitHub Pages],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",,yes,,[YYYY-MM-DD],
-Co-op email,info@[YOUR-DOMAIN] / media@[YOUR-DOMAIN],[ADMIN ACCOUNT],"[NAME 1]; [NAME 2]",,yes,[YYYY-MM-DD],[YYYY-MM-DD],
-Meta Business portfolio,[PORTFOLIO ID],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",,yes,,[YYYY-MM-DD],Owns the Facebook Page
-Facebook Page,facebook.com/[FACEBOOK-HANDLE],Meta Business portfolio,"[NAME 1]; [NAME 2]","[NAME 3] (content + messages)",yes,,[YYYY-MM-DD],
-Website forms,[FORM SERVICE],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",,yes,,[YYYY-MM-DD],Submissions go to info@
-Photo library,[SHARED DRIVE LINK],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",Volunteers (upload only),yes,,[YYYY-MM-DD],
-Password manager,[e.g. Bitwarden Organisation],media@[YOUR-DOMAIN],"[NAME 1]; [NAME 2]",,yes,[YYYY-MM-DD],[YYYY-MM-DD],NEVER store passwords in this file
