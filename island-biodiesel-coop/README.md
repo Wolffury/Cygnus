@@ -35,7 +35,7 @@ island-biodiesel-coop/
 Placeholders appear as `[BRACKETS]`. On the website they're also highlighted yellow so none slip through. Find them all with:
 
 ```sh
-grep -rn "\[[A-Z0-9$]" island-biodiesel-coop/
+grep -rnI "\[[A-Z0-9$]" island-biodiesel-coop/
 ```
 
 | Placeholder | Where |
