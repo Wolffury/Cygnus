@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="624" viewBox="0 0 1640 624">
+  <!-- Facebook cover. Keep text inside the central 1230x480 safe zone (mobile crops the sides). -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#073a50"/><stop offset=".6" stop-color="#0b4f6c"/><stop offset="1" stop-color="#4c9a2a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1640" height="624" fill="url(#sky)"/>
+  <circle cx="1300" cy="250" r="190" fill="#f2b134" opacity=".9"/>
+  <path d="M0 470 Q200 430 400 470 T800 470 T1200 470 T1640 470 V624 H0 Z" fill="#073a50"/>
+  <path d="M0 520 Q200 490 400 520 T800 520 T1200 520 T1640 520" fill="none" stroke="#f6f1e7" stroke-width="5" opacity=".5"/>
+  <path d="M1160 470 Q1280 340 1400 360 Q1520 380 1620 470 Z" fill="#4c9a2a"/>
+  <g font-family="Merriweather, Georgia, serif" fill="#ffffff">
+    <text x="230" y="250" font-size="86" font-weight="700">Local fuel from</text>
+    <text x="230" y="350" font-size="86" font-weight="700">local waste.</text>
+  </g>
+  <text x="232" y="420" font-family="Source Sans 3, Arial, sans-serif" font-size="36" fill="#f6f1e7">Island Biodiesel Co-op · member-owned · made on the island</text>
+</svg>
