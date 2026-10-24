@@ -2906,7 +2906,7 @@ function estimateRaw() {
     }
     if (!E.haulSelf && E.bulkSep && E.bulkDelivery > 0) L("Equipment & disposal", "Road base, gravel and sand: separate delivery", 1, "load", E.bulkDelivery);
     if (!E.haulSelf && E.ferryPerFt > 0 && !E.ferryIncl) L("Equipment & disposal", `Ferry for the delivery truck (${num1(E.ferryLoads)} load${E.ferryLoads === 1 ? "" : "s"}, ${num1(E.truckFt)} ft, ${num1(E.ferryWays)} crossing${E.ferryWays === 1 ? "" : "s"} each)`, Math.ceil(E.ferryLoads * E.ferryWays), "crossing", round2(E.truckFt * E.ferryPerFt));
-    L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
+    if (E.disposalPerYd > 0) L("Equipment & disposal", "Haul-away and disposal of excavated soil", ceilTo(w.excavYd * 1.25, 0.5), "yd³", E.disposalPerYd);
   }
   for (const x of job.extras || []) L(x.cat || "Other", x.desc, x.qty, x.unit || "ea", x.price, "Added line");
   // Not charging GST: you still pay GST on what you buy (materials, rentals, delivery, ferry, dumping) and can't claim it
@@ -3239,11 +3239,11 @@ function clientLines(q) {
 }
 // one plain line describing everything in a section of the price
 function sectionText(cat, rs) {
-  const all = rs.map((r) => r.description).join(" | ");
+  const all = rs.map((r) => r.description.replace(/\([^)]*\)/g, "")).join(" | ");
   const has = (re, t, a) => { if (re.test(all)) a.push(t); };
-  if (cat === "Materials") { const a = []; has(/block|cap max|\bcap\b/i, "block and caps", a); has(/paver|slab/i, "pavers", a); has(/gabion/i, "gabion baskets", a); has(/road base|drain rock|gravel|bedding sand|stone/i, "gravel, rock and sand", a); has(/drain pipe|filter fabric/i, "drainage", a); has(/handrail|lumber/i, "handrail and posts", a); has(/concrete/i, "concrete", a); has(/adhesive/i, "adhesive", a); has(/paint|primer/i, "paint", a); has(/edging/i, "edging", a);
+  if (cat === "Materials") { const a = []; has(/block|cap max|\bcap\b/i, "block and caps", a); has(/paver|slab/i, "pavers", a); has(/gabion/i, "gabion baskets", a); has(/road base|drain rock|gravel|bedding sand|stone/i, "gravel, rock and sand", a); has(/drain pipe|filter fabric/i, "drainage", a); if (/lumber/i.test(all)) a.push("handrail and posts"); else has(/handrail/i, "handrail posts", a); has(/concrete/i, "concrete", a); has(/adhesive/i, "adhesive", a); has(/paint|primer/i, "paint", a); has(/edging/i, "edging", a);
     return `All materials${a.length ? `: ${listAnd(a)}` : ""}`; }
-  if (cat === "Labour") return "All labour: layout, digging and base preparation, building the steps, landings and walls, handrail, finishing and clean-up";
+  if (cat === "Labour") return `All labour: layout, digging and base preparation, building the steps, landings and walls, ${/posts set in concrete, ready/i.test(all) ? "setting the handrail posts" : "handrail"}, finishing and clean-up`;
   if (cat === "Equipment & disposal") { const a = []; has(/deliver|ferry|truck/i, "delivery to site", a); has(/compactor|saw|excavator|rammer|wheelbarrow|equipment/i, "equipment", a); has(/haul-away|disposal/i, "hauling away the extra soil", a); return a.length ? listAnd(a).replace(/^./, (c) => c.toUpperCase()) : "Equipment and disposal"; }
   return "Other items";
 }
@@ -3400,7 +3400,7 @@ function scopeAuto() {
   const F = jobFacts();
   const out = [], its = job.items, q = estimate(), E = q.E, gab = its.filter((i) => i.type === "landing" && isGabion(mat(i.surface)));
   out.push(`Lay out the ${F.noun} on site and confirm the levels with you before digging.`);
-  out.push(`Dig out for the work, put down a compacted gravel base under ${F.units.length ? "all the new work" : "every step and landing"}, and haul away the extra soil.`);
+  out.push(`Dig out for the work, put down a compacted gravel base under ${F.units.length ? "all the new work" : "every step and landing"}, and ${E.disposalPerYd > 0 ? "haul away the extra soil" : "leave the dug soil on site for you"}.`);
   // placed blocks and pavers, by material and colour
   for (const g of F.pavers) out.push(`${matName(g.m)} pavers${colourIn(g)}: about ${Math.round(g.area)} sq ft${F.rise > 0.75 ? ", following the slope" : ""}${g.cut ? ", cut to fit at the edges" + (F.unitSteps ? " and steps" : "") : ""}, on bedding sand with polymeric sand in the joints.`);
   for (const g of F.trims) out.push(`${matName(g.m)}${colourIn(g)}: ${g.n} pieces ${F.unitSteps ? "as the step nosings and borders" : "as borders"}${g.glued ? ", glued down" : ""}.`);
@@ -3442,6 +3442,7 @@ function scopeAuto() {
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
   const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
   if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
+  for (const x of job.extras || []) if (x.cat === "Labour" && x.desc) out.push(/[.!?]$/.test(x.desc) ? x.desc : x.desc + ".");
   out.push("Clean up, and a walk-through with you when it's done.");
   return out.join("\n");
 }
@@ -3472,7 +3473,7 @@ function valueAuto() {
     const kg = haulList().reduce((a, x) => a + x.kg, 0), lb = kg * 2.20462;
     if (lb > 2000) out.push(`By weight: about ${num1(kg / 1000)} tonnes (${Math.round(lb / 1000).toLocaleString("en-CA")},000 lb) of ${F.units.length ? "pavers, block" : "block, stone"} and gravel, ${F.island ? "brought over to the island and " : ""}set by hand${F.beach ? " on a steep bank" : ""}. That's about ${Math.round(q.total / lb * 100)}¢ a pound, delivered and installed${q.total / lb < 0.8 ? ": cheaper by the pound than bananas at the grocery store" : ""}. The truck only brings it to ${F.beach ? "the top of the property" : "the driveway"}. From there we move every piece ourselves, most of it two or three times: off the truck, ${F.beach ? "down the bank to where it's needed" : "over to the work area"}, and into place. That's close to ${Math.round(kg * 3 / 1000)} tonnes of lifting and carrying in all.`);
   }
-  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ", with a handrail the whole way" : ""}. Steady, even steps are what make a ${F.beach ? "long stair easy on the knees, coming up from the beach with a load" : "stair easy and safe underfoot"}.`);
+  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ((job.est || {}).railOwner ? ", with handrail posts the whole way, ready for your rails" : ", with a handrail the whole way") : ""}. Steady, even steps are what make a ${F.beach ? "long stair easy on the knees, coming up from the beach with a load" : "stair easy and safe underfoot"}.`);
   else if (F.unitSteps) out.push(`Comfortable and safe to walk: even steps of the same height and tread, nearly flat with just enough fall to shed rain, and a contrasting nosing on every step edge so each one is easy to see.`);
   const built = [`${fmtIn(E.baseDepth)} of compacted gravel under ${F.units.length ? "all the new work" : "every step and landing"}`];
   if (cs.some((c) => c.under) || F.unitSteps) built.push("block walls hidden under the step edges to keep the steps firmly in place");
@@ -3536,7 +3537,7 @@ function careAuto() {
   if (pave) out.push("Top up the polymeric joint sand between the pavers every few years, or wherever weeds start to come through.");
   if (rails) out.push(`${E.railPaint ? "Repaint the rails and posts every 7–10 years, using a paint made for plastic lumber and galvanized steel. Touch up any chips sooner, especially at the base of the posts" : "Check the handrail posts and brackets once a year and tighten any loose bolts"}.`);
   if (gab) out.push("After big winter storms, check the gabion steps at the beach for torn or worn wire and lost stone. A small repair with lacing wire early on saves replacing a basket later.");
-  const surf = F.steps && F.paving ? "steps and pavers" : F.paving ? "pavers" : "steps";
+  const paved = F.pavers.length || job.items.some((i) => (i.type === "landing" || i.type === "path") && /paver|slab/.test((mat(i.surface) || {}).kind)), surf = F.steps && paved ? "steps and pavers" : paved ? "pavers" : F.paving ? "steps and landings" : "steps";
   out.push(`Keep tree roots and large shrubs trimmed back from the ${F.beach ? "steps and terraces" : surf} so they don't lift them.`);
   out.push(`Don't use de-icing salt on the ${surf}. Use sand or grit for grip in icy weather. Salt and steel shovels damage the concrete surface.`);
   out.push(`Sweep off moss and leaves now and then, and pressure-wash on a low setting${pave ? " (then top up the joint sand)" : ""} if the ${surf} get slippery.`);
@@ -3553,12 +3554,12 @@ function timelinePhases() {
     hrs[k] += l.qty;
   }
   const days = (h) => h > 0 ? Math.max(0.5, Math.ceil(h / perDay * 2) / 2) : 0, F = jobFacts();
-  const fin = [F.pavers.length ? "laying and cutting the pavers" : "pavers on the landings", F.gab.length && "gabion baskets", F.chans.length && "the channel drain", "edging", F.pavers.length && "polymeric sand"].filter(Boolean);
+  const fin = [F.pavers.length ? "laying and cutting the pavers" : job.items.some((i) => (i.type === "landing" || i.type === "path") && /paver|slab/.test((mat(i.surface) || {}).kind)) ? "pavers on the landings" : "gravel on the landings", F.gab.length && "gabion baskets", F.chans.length && "the channel drain", "edging", F.pavers.length && "polymeric sand"].filter(Boolean);
   return [
     ["Site preparation", "layout, digging, gravel base, and moving materials to the work area", days(hrs.prep)],
     [F.steps ? "Steps and walls" : "Block work", F.unitSteps ? "the block risers and hidden walls, then the nosings, bottom to top" : "building the steps, block walls and caps, bottom to top", days(hrs.steps)],
     [F.pavers.length ? "Paving and finishing" : "Landings and finishing", listAnd(fin), days(hrs.pave)],
-    ["Handrail", "posts set in concrete, then the rails", days(hrs.rail)],
+    ["Handrail", (job.est || {}).railOwner ? "posts set in concrete, ready for your rails" : "posts set in concrete, then the rails", days(hrs.rail)],
     ["Clean-up and walk-through", "", 0.5],
   ].filter((p) => p[2] > 0);
 }
