@@ -860,7 +860,7 @@ const newId = () => "i" + Date.now().toString(36) + (uid++);
 const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "Grey", capOver: 1, stepRise: 7.5, wallBlock: "ab-classic", wallCap: "pcm18", surface: "cs-standard", surfaceColor: "Shaded Grey", infill: "cs-standard" };
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
-  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, hrPlanning: 12, railPlastic: 0, plasticTopPerFt: 8.5, plasticRailPerFt: 6, railPaint: 0, paintPerGal: 80, primerPerGal: 60, hrPaintSqft: 0.015, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
+  hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, hrPlanning: 12, railPlastic: 0, plasticTopPerFt: 8.5, plasticRailPerFt: 6, railPaint: 0, railOwner: 0, paintPerGal: 80, primerPerGal: 60, hrPaintSqft: 0.015, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
   barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
@@ -2439,7 +2439,7 @@ function renderItemPane() {
     h += `<div class="grid2">${field("Length", "w", it)}${field("Height", "h", it)}${field("Post spacing", "spacing", it)}${field("Rotation °", "rot", it, "deg")}
       ${selectField("Finish", "color", it, RAIL_COLORS.map((c) => [c, c === "Cedar" ? "Cedar (natural wood)" : c]))}<span></span></div>
       <dl class="stats"><div><dt>Posts</dt><dd>${rc.posts}</dd></div><div><dt>Rail length</dt><dd>${fmtLen(it.w)}</dd></div></dl>
-      <div class="grid2">${selectField("Rail lumber", "railPlastic", { railPlastic: (job.est || {}).railPlastic ? "1" : "0" }, [["0", "Cedar"], ["1", "Recycled plastic lumber"]])}${selectField("Painted", "railPaint", { railPaint: (job.est || {}).railPaint ? "1" : "0" }, [["0", "No"], ["1", "Yes: rails and posts"]])}</div>
+      <div class="grid2">${selectField("Rail lumber", "railPlastic", { railPlastic: (job.est || {}).railPlastic ? "1" : "0" }, [["0", "Cedar"], ["1", "Recycled plastic lumber"]])}${selectField("Painted", "railPaint", { railPaint: (job.est || {}).railPaint ? "1" : "0" }, [["0", "No"], ["1", "Yes: rails and posts"]])}${selectField("Rails by", "railOwner", { railOwner: (job.est || {}).railOwner ? "1" : "0" }, [["0", "Us"], ["1", "Owner: we set the posts only"]])}</div>
       <p class="note">Priced as a 2x6 cap rail and a 2x4 rail on galvanized pipe posts set in concrete${(job.est || {}).railPaint ? ", primed and painted (2 coats)" : ""}. Lumber and paint choices apply to every rail on the job. Change the prices under Rates on the Quote tab.</p>`;
   } else if (t === "wall") {
     const wc = wallCalc(it);
@@ -2555,7 +2555,7 @@ function renderItemPane() {
 function setItemField(it, inp) {
   const key = inp.dataset.k, kind = inp.dataset.kind;
   snapshot();
-  if (key === "gabionDiy" || key === "gabionTide" || key === "railPlastic" || key === "railPaint") { job.est = { ...job.est, [key]: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
+  if (key === "gabionDiy" || key === "gabionTide" || key === "railPlastic" || key === "railPaint" || key === "railOwner") { job.est = { ...job.est, [key]: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
   if (kind === "text") it[key] = inp.value;
   else if (kind === "select") {
     it[key] = inp.value;
@@ -2735,7 +2735,7 @@ function haulList() {
   add("Bedding sand", ceilTo(w.sandYd, 0.25) * 1350, true);
   add("Polymeric sand", Math.ceil(w.polySqft / 60) * 23);
   add("Concrete for posts", w.railPosts * 2 * 30);
-  add("Handrail posts and lumber", w.railPosts * 9 + w.railFt * 2 * 1.6);
+  add("Handrail posts and lumber", w.railPosts * 9 + ((job.est || {}).railOwner ? 0 : w.railFt * 2 * 1.6));
   return out;
 }
 // Powered tracked wheelbarrow: everything delivered has to be moved from the drop spot to where it goes
@@ -2856,9 +2856,9 @@ function estimateRaw() {
   const rw = 1 + E.waste / 100;
   L("Materials", "Plastic edging (holds pavers or gravel)", Math.ceil(w.edgeFt * rw), "ft", E.edgePerFt);
   L("Materials", "Edging spikes (one per foot)", Math.ceil(w.edgeFt), "ea", E.edgeSpike);
-  L("Materials", `Handrail cap rail, 2x6 (top)${E.railPlastic ? ", recycled plastic lumber" : ""}`, Math.ceil(w.railFt * rw), "ft", E.railPlastic ? E.plasticTopPerFt : E.railTopPerFt);
-  L("Materials", `Handrail rail, 2x4${E.railPlastic ? ", recycled plastic lumber" : ""}`, Math.ceil(w.railFt * rw), "ft", E.railPlastic ? E.plasticRailPerFt : E.railPerFt);
-  if (E.railPaint && w.railFt) { // 2x6 and 2x4 all round is about 2 sq ft a foot; a pipe post about 1.5 sq ft above ground
+  if (!E.railOwner) L("Materials", `Handrail cap rail, 2x6 (top)${E.railPlastic ? ", recycled plastic lumber" : ""}`, Math.ceil(w.railFt * rw), "ft", E.railPlastic ? E.plasticTopPerFt : E.railTopPerFt);
+  if (!E.railOwner) L("Materials", `Handrail rail, 2x4${E.railPlastic ? ", recycled plastic lumber" : ""}`, Math.ceil(w.railFt * rw), "ft", E.railPlastic ? E.plasticRailPerFt : E.railPerFt);
+  if (E.railPaint && !E.railOwner && w.railFt) { // 2x6 and 2x4 all round is about 2 sq ft a foot; a pipe post about 1.5 sq ft above ground
     const rails = w.railFt * 2, posts = w.railPosts * 1.5, area = rails + posts;
     L("Materials", `Exterior paint for the rails and posts (2 coats)${E.railPlastic ? ", made for plastic lumber" : ""}`, ceilTo(area * 2 / 350, 0.25), "gal", E.paintPerGal);
     L("Materials", `Primer${E.railPlastic ? " (bonding primer for plastic and galvanized steel)" : " (metal primer for the posts, wood primer for the rails)"}`, ceilTo(area / 350, 0.25), "gal", E.primerPerGal);
@@ -2884,7 +2884,8 @@ function estimateRaw() {
   L("Labour", "Block and cap cutting", hrs(w.cutPieces * E.hrCut), "hr", E.labourRate);
   L("Labour", "Wall block installation", hrs(w.wallBlocks * E.hrWallBlock), "hr", E.labourRate);
   L("Labour", "Edging installation", hrs(w.edgeFt * E.hrEdgeFt), "hr", E.labourRate);
-  L("Labour", "Handrail posts and rails", hrs(w.railFt * E.hrRailFt), "hr", E.labourRate);
+  if (E.railOwner) L("Labour", "Handrail posts set in concrete, ready for the owner's rails", hrs(w.railPosts * 0.75), "hr", E.labourRate);
+  else L("Labour", "Handrail posts and rails", hrs(w.railFt * E.hrRailFt), "hr", E.labourRate);
   L("Labour", "Paving installation and jointing", hrs(w.paveSqft * E.hrPaveSqft + w.slabs * E.hrSlab + w.surfSqft * E.hrSurfSqft), "hr", E.labourRate);
   if (E.barrow) {
     const bp = barrowPlan(E);
@@ -3437,7 +3438,7 @@ function scopeAuto() {
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
   const rails = its.filter((i) => i.type === "rail");
-  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
+  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; if (RE.railOwner) out.push(`Handrail posts: ${rails.reduce((a, r) => a + railCalc(r).posts, 0)} galvanized steel pipe posts about every ${plainLen(rc.sp)} along about ${ft} ft of stair, set in concrete and ready for your rails. The rails and any painting are yours to supply and install.`); else out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
   const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
   if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
@@ -3480,7 +3481,8 @@ function valueAuto() {
   if (drains.length) built.push(`a drain line (${Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0))} ft) carrying ground water away in the rainy season`);
   if (chan) built.push(`a steel-grate channel drain catching surface water along the lower edge${F.drainOut ? " and piping it to a tidy pop-up outlet" : ""}`);
   if (gab.length) built.push(`marine-grade gabion steps at the beach, made for salt spray and storm waves`);
-  if (rails.length && E.railPlastic) built.push(`handrails of recycled plastic lumber that won't rot, split or splinter${E.railPaint ? ", primed and painted" : ""}`);
+  if (rails.length && E.railOwner) built.push("handrail posts set in concrete");
+  else if (rails.length && E.railPlastic) built.push(`handrails of recycled plastic lumber that won't rot, split or splinter${E.railPaint ? ", primed and painted" : ""}`);
   else if (rails.length && E.railPaint) built.push("handrails and posts primed and painted");
   out.push(`Built for ${F.beach ? "a wet coastal bank" : "our wet coastal winters"}: ${listAnd(built)}.`);
   const inc = [];
@@ -3517,7 +3519,8 @@ function bestLine(E) {
 function lifeLine() {
   const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, rails = its.some((i) => i.type === "rail"), gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
   const more = [];
-  if (rails) more.push(`The ${E.railPlastic ? "recycled plastic lumber rails won't rot and can last 50 years" : "cedar rails can last 25 years"}, and the hot-dip galvanized steel posts${E.railPaint ? ", kept painted," : ""} should last as long as the stair.`);
+  if (rails && E.railOwner) more.push("The hot-dip galvanized steel posts should last as long as the stair.");
+  else if (rails) more.push(`The ${E.railPlastic ? "recycled plastic lumber rails won't rot and can last 50 years" : "cedar rails can last 25 years"}, and the hot-dip galvanized steel posts${E.railPaint ? ", kept painted," : ""} should last as long as the stair.`);
   if (gab) more.push("The marine-grade gabion steps at the beach can last 50 years.");
   const F = jobFacts(), parts = [F.pavers.length && "pavers", (F.steps || F.blocks.length) && "block steps", F.its.some((i) => i.type === "wall") && "walls", F.glued && "caps"].filter(Boolean);
   return `Built to last a lifetime: built correctly, the ${F.units.length ? listAnd(parts) : "block steps, walls and caps"} can last 75 years or more. Our mild coastal winters have few freeze-thaw cycles, which are what usually break concrete down.${more.length ? " " + more.join(" ") : ""}`;
