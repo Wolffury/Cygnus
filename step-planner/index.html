@@ -682,6 +682,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
           <label class="f">Time off from (all jobs) <input type="date" id="cpOffFrom"></label>
           <label class="f">Time off to <input type="date" id="cpOffTo"></label>
         </div>
+        <label class="checkrow"><input type="checkbox" id="cpUndated"> No dates in the timeline: start to be agreed</label>
         <label class="checkrow"><input type="checkbox" id="cpGst"> Charge GST</label>
         <fieldset class="views"><legend>What goes in</legend>
           <div class="row"><button class="btn small" id="cpAllParts">Everything</button><button class="btn small" id="cpPriceOnly">Just the price</button></div>
@@ -3497,7 +3498,7 @@ function valueAuto() {
   const caps = F.units.length ? 0 : qty(/^(?!.*adhesive).*(\bcap\b|Cap Max)/i), counted = [];
   if (paveSq) counted.push(`${paveSq} sq ft of pavers`); if (blk) counted.push(`${blk} blocks`); if (caps) counted.push(`${caps} caps`);
   out.push(`Measured, not guessed: quantities come from a scaled plan and a 3D model of the ${F.rise > 0.75 || climb > 1 ? "slope" : "site"}${counted.length ? ` (${counted.join(", ")} and every bag and tonne of gravel)` : ""}, with a small ${E.waste}% allowance for cuts. You pay for what the job needs.`);
-  out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your ${F.rise > 0.75 || climb > 1 ? "slope" : "site"}, the quantities, a dated schedule${(cdoc().tides || []).length ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
+  out.push(`A free estimate and full planning: a site visit, a measured plan and 3D model of your ${F.rise > 0.75 || climb > 1 ? "slope" : "site"}, the quantities, ${cdoc().undated ? "a step-by-step schedule" : "a dated schedule"}${(cdoc().tides || []).length && (cdoc().parts || {}).tides !== false ? " and tide notes" : ""}, all at no charge, whether or not you go ahead.`);
   out.push(`One fixed price, a clear schedule and quality materials from established suppliers. ${E.deposit}% deposit to order materials, the balance on completion.`);
   out.push(F.beach ? "Safe year-round access to the beach is one of the most valued features of a waterfront home, and a solid, good-looking stair adds to the property for as long as you own it."
     : `Well-built ${F.noun} ${/s$/.test(F.noun) ? "add" : "adds"} to the look, safety and value of the property for as long as you own it.`);
@@ -3606,11 +3607,26 @@ function timelineAuto() {
     out.push(`${first === last ? `Day ${first}` : `Days ${first}–${last}`} (${first === last ? dayName(a) : `${dayName(a)} – ${dayName(b)}`}): ${name}${what ? ": " + what : ""}.`);
     day += n;
   }
+  if (d.undated) return undatedTimeline(out, ph, goods, gab, loads, E, ferry, shore, d);
   const off = timeOff(), end = addWorkdays(t, Math.max(0, Math.ceil(day) - 1));
   { const stats = []; for (const r = new Date(orderBy); r <= end; r.setDate(r.getDate() + 1)) { const n = statName(r); if (n && !(off && isoDay(r) >= off[0] && isoDay(r) <= off[1])) stats.push(`${dayName(r)} (${n})`); }
     if (stats.length) out.push(`No work on stat holidays: ${listAnd(stats)}; the dates above already allow for ${stats.length > 1 ? "them" : "it"}.`); }
   if (off && off[0] <= isoDay(end) && off[1] >= isoDay(t)) out.push(`No work ${dayName(new Date(off[0] + "T12:00"))} – ${dayName(new Date(off[1] + "T12:00"))} (holiday break); the dates above already allow for it.`);
   out.push(`About ${plural(Math.ceil(day), "working day")} on site with ${d.crew > 1 ? `a crew of ${d.crew}` : "a one-person crew"}. Rain days and material delays can move these dates; we'll keep you posted.`);
+  return out.join("\n");
+}
+// The same timeline with no calendar dates: the order of work and how long each part takes, the start to be agreed
+function undatedTimeline(dated, ph, goods, gab, loads, E, ferry, shore, d) {
+  const out = [], lead = Math.max(d.lead || 0, gab ? 21 : 0);
+  out.push("Start date to be agreed together, once the schedule allows.");
+  if (shore) out.push("Before we start: apply for foreshore authorization for the gabion steps below the high-water mark, if required (approvals can take several weeks).");
+  out.push(`About ${lead > 0 ? `${plural(Math.ceil(lead / 7), "week")}` : "a week"} before the start: order ${goods}${gab ? `, and the gabion ${E.gabionDiy ? "mesh, lacing wire and rings" : "baskets"} (shipped from out of province, allow 1–3 weeks)` : ""}, with the deposit.`);
+  if (E.haulSelf) out.push(`A couple of days before the start: materials hauled to site${ferry ? " by ferry" : ""}.`);
+  else out.push(`A couple of days before the start: ${plural(loads, "truck load")} of ${goods} delivered to site${ferry || E.ferryIncl ? " by ferry" : ""}${loads > 1 ? " (the second load as needed)" : ""}.`);
+  if (!E.haulSelf && E.bulkSep) out.push(`The day before the start: road base, drain rock${gab ? ", gabion stone" : ""} and sand delivered by the local gravel supplier.`);
+  let day = 0;
+  for (const [name, what, n] of ph) { const first = Math.floor(day) + 1, last = Math.ceil(day + n); out.push(`${first === last ? `Day ${first}` : `Days ${first}–${last}`}: ${name}${what ? ": " + what : ""}.`); day += n; }
+  out.push(`About ${plural(Math.ceil(day), "working day")} on site with ${d.crew > 1 ? `a crew of ${d.crew}` : "a one-person crew"}, not counting weekends, stat holidays and rain days.`);
   return out.join("\n");
 }
 // Lays text, pictures and the price table onto letter pages (150 dpi), starting a new page when one fills up
@@ -3811,7 +3827,7 @@ function renderCpParts() {
 function cpFill() {
   const d = cdoc();
   $("cpStart").value = d.start || isoDay(nextMonday()); $("cpCrew").value = d.crew; $("cpHrs").value = d.hrs; $("cpLead").value = d.lead;
-  $("cpGst").checked = !!job.est.chargeGst; renderCpParts();
+  $("cpGst").checked = !!job.est.chargeGst; $("cpUndated").checked = !!d.undated; $("cpStart").disabled = !!d.undated; renderCpParts();
   { const c = company(); $("cpOffFrom").value = c.offFrom || ""; $("cpOffTo").value = c.offTo || ""; }
   $("cpScope").value = d.scope ?? scopeAuto(); $("cpTime").value = d.timeline ?? timelineAuto(); $("cpExcl").value = d.excl ?? exclAuto(); $("cpValue").value = d.value ?? valueAuto(); $("cpCare").value = d.care ?? careAuto();
 }
@@ -3824,6 +3840,7 @@ $("cpClose").onclick = () => { $("cpDlg").hidden = true; };
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
 for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).addEventListener("change", (e) => { store.set("bsp.company", { ...company(), [k]: e.target.value }); if (cdoc().timeline == null) $("cpTime").value = timelineAuto(); cpRender(); });
+$("cpUndated").onchange = (e) => { const d = cdoc(); d.undated = e.target.checked; $("cpStart").disabled = d.undated; if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
 $("cpGst").onchange = (e) => { snapshot(); job.est.chargeGst = e.target.checked ? 1 : 0; commit(); renderEstFields(); cpRender(); };
 $("cpAllParts").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k !== "three" || !!R3; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
 $("cpPriceOnly").onclick = () => { const d = cdoc(); for (const [k] of CP_PARTS) d.parts[k] = k === "price" || k === "terms"; cpSkip = new Set(); cpSave(); renderCpParts(); cpRender(); };
@@ -4127,7 +4144,7 @@ function sanitizeJob(j) {
       clientLabour: ["task", "all"].includes(j.clientLabour) ? j.clientLabour : "hours",
       clientDetail: ["sections", "total"].includes(j.clientDetail) ? j.clientDetail : "lines",
       clientDoc: (() => { const d = j.clientDoc && typeof j.clientDoc === "object" ? j.clientDoc : {}; const t = (x, n) => typeof x === "string" ? x.slice(0, n) : null;
-        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", crew: num(d.crew, 1, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
+        return { scope: t(d.scope, 6000), timeline: t(d.timeline, 4000), excl: t(d.excl, 2000), start: /^\d{4}-\d{2}-\d{2}$/.test(d.start || "") ? d.start : "", undated: !!d.undated, crew: num(d.crew, 1, 1, 20), hrs: num(d.hrs, 8, 1, 16), lead: num(d.lead, 10, 0, 120), side: d.side !== false, three: !!d.three,
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
