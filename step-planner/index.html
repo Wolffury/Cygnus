@@ -4021,17 +4021,18 @@ $("qCsv").onclick = () => {
 function jobsSaved() { return store.get("bsp.jobs", []); }
 function renderJobs() {
   const list = jobsSaved();
-  $("jobList").innerHTML = list.length ? list.map((j, i) => `<button data-i="${i}"><span>${escapeHtml(j.name || "Untitled")}</span><span>${new Date(j.saved).toLocaleDateString()}</span></button>`).join("") : '<p class="note">No saved jobs on this tablet yet.</p>';
+  $("jobList").innerHTML = list.length ? list.map((j, i) => `<button data-i="${i}"><span>${escapeHtml(j.name || "Untitled")}</span><span>${new Date(j.saved).toLocaleDateString()}</span></button>`).join("") : '<p class="note">Your jobs are kept as files on your computer: use Save to my files, and Open from my files to bring one back.</p>';
   $("jobList").querySelectorAll("button").forEach((b) => b.onclick = () => { const pick = list[+b.dataset.i]; if (pick.name !== job.name) keepCurrent(); snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(pick.job))); selId = null; afterLoad(); toast("Opened " + (job.name || "job")); });
 }
-// put the open job in Saved jobs (replacing an older copy with the same name)
+// Jobs are kept as files on your own computer, not in the app: Save writes the job to a .json file, Open reads one back.
+// Before another job replaces the open one, it's saved to a file if it changed since it was last saved or opened.
+let fileMark = null;
+function saveJobFile() { const s = JSON.stringify(job, null, 2); fileMark = JSON.stringify(job); return saveFile(slug(job.name || "job") + ".json", new Blob([s], { type: "application/json" })); }
 function keepCurrent() {
-  if (!job.items.length) return false;
-  const list = jobsSaved().filter((j) => j.name !== job.name);
-  list.unshift({ name: job.name, saved: Date.now(), job: JSON.parse(JSON.stringify(job)) }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); return true;
+  if (!job.items.length || JSON.stringify(job) === fileMark) return false;
+  saveJobFile(); return true;
 }
-// Jobs are kept as files on your own computer: Save writes the job to a .json file, Open reads one back
-$("saveJob").onclick = () => saveFile(slug(job.name || "job") + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
+$("saveJob").onclick = () => saveJobFile();
 // ---------- My jobs: every saved plan in one list ----------
 function jobTotal(j) { const prev = job; try { job = sanitizeJob(JSON.parse(JSON.stringify(j))); return j.items && j.items.length ? estimate().total : 0; } catch { return 0; } finally { job = prev; } }
 function renderJobsDlg() {
@@ -4045,7 +4046,7 @@ function renderJobsDlg() {
   $("jobsCards").querySelectorAll("[data-jopen]").forEach((b) => b.onclick = () => { const pick = jobsSaved().find((x) => x.name === b.dataset.jopen); if (!pick) return; keepCurrent(); snapshot(); job = sanitizeJob(JSON.parse(JSON.stringify(pick.job))); selId = null; afterLoad(); $("jobsDlg").hidden = true; toast("Opened " + (job.name || "job")); });
   $("jobsCards").querySelectorAll("[data-jdel]").forEach((b) => b.onclick = () => { if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Tap again to delete"; b.classList.add("danger"); return; } store.set("bsp.jobs", jobsSaved().filter((x) => x.name !== b.dataset.jdel)); renderJobs(); renderJobsDlg(); toast("Deleted " + b.dataset.jdel); });
 }
-function startNewJob() { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); $("jobsDlg").hidden = true; showPane("pJob"); setTimeout(() => { const n = $("jName"); if (n) { n.focus(); n.select(); } }, 300); toast(kept ? `Saved "${was}" in My jobs. Type a name for the new job.` : "New job started. Type a name for it."); }
+function startNewJob() { const kept = keepCurrent(), was = job.name; snapshot(); job = sanitizeJob(freshJob()); selId = null; afterLoad(); $("jobsDlg").hidden = true; showPane("pJob"); setTimeout(() => { const n = $("jName"); if (n) { n.focus(); n.select(); } }, 300); toast(kept ? `Saved "${was}" to your files. Type a name for the new job.` : "New job started. Type a name for it."); }
 // dark or light background, remembered on this device only
 function applyUiTheme(t) {
   const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -4066,7 +4067,6 @@ async function saveAsFile(name, blob) {
 }
 const BACKUP_KEYS = ["jobs", "library", "prices", "company", "csvmap", "defaults", "est", "suppliers", "suppliersRemoved"];
 $("bkSave").onclick = () => {
-  keepCurrent();
   const data = { app: "Block Step Planner", kind: "backup", v: 1, saved: new Date().toISOString(), current: job };
   for (const k of BACKUP_KEYS) data[k] = store.get("bsp." + k, null);
   const name = (($("bkName").value || "").trim() || `Block Step Planner backup ${isoDay(new Date())}`).replace(/[\\/:*?"<>|]+/g, "-").replace(/\.json$/i, "") + ".json";
@@ -4103,7 +4103,7 @@ function freshJob() {
 $("newJob").onclick = startNewJob;
 $("importJson").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { const j = sanitizeJob(JSON.parse(await f.text())); snapshot(); job = j; selId = null; afterLoad(); toast("Opened " + (job.name || f.name)); }
+  try { const j = sanitizeJob(JSON.parse(await f.text())); const kept = keepCurrent(), was = job.name; snapshot(); job = j; fileMark = JSON.stringify(job); selId = null; afterLoad(); toast(`Opened ${job.name || f.name}${kept ? `. "${was}" was saved to your files first` : ""}`); e.target.value = ""; }
   catch { toast("That file isn't a Block Step Planner job."); }
   e.target.value = "";
 };
