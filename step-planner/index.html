@@ -842,6 +842,17 @@ const BUILT_TYPES = new Set(["steps", "landing", "path", "wall", "unit", "rail",
 // Handrail finishes: wood rails on posts (posts are galvanized pipe unless the whole rail is metal)
 const RAIL_COLORS = ["Cedar", "Brown", "Dark Brown", "Weathered grey", "Black", "Black (metal)"];
 // Edging along the open sides of a walkway or landing; a side that meets steps needs none (the step holds the gravel)
+// Edge restraint pieces joined end to end (a curve drawn as short straight runs) read as one run: one label, the total length,
+// carried by the labelled piece (or the middle one)
+function edgeChain(it) {
+  const eds = job.items.filter((e) => e.type === "edge"), ends = (e) => [[e.x, e.y], [e.x2, e.y2]];
+  const touch = (e, f) => ends(e).some((p) => ends(f).some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.75));
+  const seen = new Set([it.id]), todo = [it];
+  while (todo.length) { const e = todo.pop(); for (const f of eds) if (!seen.has(f.id) && touch(e, f)) { seen.add(f.id); todo.push(f); } }
+  const run = eds.filter((e) => seen.has(e.id)), L = run.reduce((a, e) => a + Math.hypot(e.x2 - e.x, e.y2 - e.y), 0);
+  const holder = run.find((e) => e.label) || run[Math.floor(run.length / 2)];
+  return { run, L, show: holder.id === it.id, label: holder.label || "" };
+}
 function edgingCalc(it) {
   if (it.edging !== "plastic") return { ft: 0, sides: [] };
   const hw = it.w / 2, hd = it.d / 2, sides = [];
@@ -1674,7 +1685,7 @@ function drawItemReal(ctx, v, it, u, sel) {
         const [ax, ay] = W2S(v, it.x, it.y), [bx, by] = W2S(v, it.x2, it.y2), L = Math.hypot(it.x2 - it.x, it.y2 - it.y);
         ctx.save(); ctx.lineCap = "round"; ctx.strokeStyle = "#1f2226"; ctx.lineWidth = Math.max(3 * u, 1.5 * v.s); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
         ctx.fillStyle = "#c9ccd0"; for (let t = 6; t < L; t += 12) { const px = ax + (bx - ax) * t / L, py = ay + (by - ay) * t / L; ctx.beginPath(); ctx.arc(px, py, Math.max(1.2 * u, 0.4 * v.s), 0, 7); ctx.fill(); } ctx.restore(); // spikes every foot
-        { const mx = (ax + bx) / 2, my = (ay + by) / 2; realLabel(ctx, `${shortLabel(tag) || "Edge restraint"} (${plainLen(L)})`, deferLabels ? mx : mx + (it.x2 < it.x ? -60 : 60) * u, my, 10 * u, u); } // client plan: the leader points at the middle of the line
+        { const ch = edgeChain(it), mx = (ax + bx) / 2, my = (ay + by) / 2; if (ch.show) realLabel(ctx, `${shortLabel(ch.run.length > 1 ? ch.label : tag) || "Edge restraint"} (${plainLen(ch.L)})`, deferLabels ? mx : mx + (it.x2 < it.x ? -60 : 60) * u, my, 10 * u, u); } // client plan: the leader points at the middle of the line
         return true;
       }
       case "drain": {
@@ -1850,7 +1861,7 @@ function drawItem(ctx, v, it, u, sel) {
       ctx.save(); ctx.strokeStyle = BP.ink; ctx.lineWidth = 2.5 * u; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
       const nx = -(by - ay) / (Math.hypot(bx - ax, by - ay) || 1), ny = (bx - ax) / (Math.hypot(bx - ax, by - ay) || 1); ctx.lineWidth = 1 * u;
       for (let t = 6; t < L; t += 12) { const px = ax + (bx - ax) * t / L, py = ay + (by - ay) * t / L; ctx.beginPath(); ctx.moveTo(px - nx * 4 * u, py - ny * 4 * u); ctx.lineTo(px + nx * 4 * u, py + ny * 4 * u); ctx.stroke(); }
-      { const west = it.x2 < it.x; nameLabel(ctx, v, it, `${(shortLabel(it.label) || "EDGE RESTRAINT").toUpperCase()} · ${fmtLen(L)}`, bx + (west ? -10 : 10) * u, by, 10 * u, west ? "right" : "left", BP.ink2); }
+      { const west = it.x2 < it.x, ch = edgeChain(it); if (ch.show) nameLabel(ctx, v, it, `${(shortLabel(ch.label) || "EDGE RESTRAINT").toUpperCase()} · ${fmtLen(ch.L)}`, bx + (west ? -10 : 10) * u, by, 10 * u, west ? "right" : "left", BP.ink2); }
       ctx.restore(); break;
     }
     case "drain": {
