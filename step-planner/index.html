@@ -3198,7 +3198,7 @@ $("exAdd").onclick = () => {
   $("exDesc").value = ""; $("exPrice").value = ""; $("exQty").value = "1"; commit();
 };
 const COMPANY_KEYS = [["coName", "name"], ["coPhone", "phone"], ["coEmail", "email"], ["coAddr", "address"], ["coTax", "taxNo"], ["coTerms", "terms"], ["coLook", "look"], ["coTagline", "tagline"]];
-const DEFAULT_TERMS = "Price includes materials, labour, equipment and disposal as listed. Deposit due on acceptance; balance on completion. Changes to the scope are quoted separately. Work is guaranteed for 2 years on workmanship; manufacturer warranties apply to materials.";
+const DEFAULT_TERMS = "Price includes materials, labour, equipment and disposal as listed. Deposit due on acceptance; balance on completion. Changes to the scope are quoted separately. Our stonework is guaranteed for 10 years on workmanship: if anything we built settles or comes loose because of our work, we will come back and fix it at no charge. This does not cover parts supplied or installed by others, existing work reused at your request, earth movement or landslides, storm or wave damage, tree roots, misuse, or damage from drains or outlets not kept clear. Manufacturer warranties apply to materials.";
 function company() { return { terms: DEFAULT_TERMS, ...store.get("bsp.company", {}) }; }
 function renderCompany() {
   const c = company(); for (const [id, k] of COMPANY_KEYS) $(id).value = c[k] || (k === "look" ? "ledgerline" : "");
