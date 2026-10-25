@@ -866,7 +866,19 @@ function edgingCalc(it) {
 function drawEdging(ctx, v, it, u, color) { const e = edgingCalc(it); if (!e.sides.length) return; ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = Math.max(2.2 * u, 1 * v.s); ctx.lineCap = "round"; for (const [x0, y0, x1, y1] of e.sides) lineL(ctx, v, it, x0, y0, x1, y1); ctx.restore(); }
 // handrail post: rail height less the 2x6 cap and the flange on top, plus 24" set in the concrete footing (whole inches)
 function postLength(it) { return Math.ceil((it && it.h ? it.h : 34) - 2 + 24); }
-function railCalc(it) { const sp = Math.max(24, it.spacing || 48), posts = Math.ceil(it.w / sp) + 1; return { posts, ft: it.w / 12, sp }; }
+// joinStart: the rail carries on from another piece (a bend), so its first post is that piece's last one and isn't counted twice
+// bend: a rail curved into an arc between its ends, bulging this far to its left (+y); posts then sit evenly along the arc
+function railArc(it) {
+  const s = +it.bend || 0, w = it.w;
+  if (Math.abs(s) < 0.01) return { bent: false, L: w, at: (t) => ({ x: -w / 2 + w * t, y: 0 }) };
+  const a = Math.abs(s), R = (w * w / 4 + a * a) / (2 * a), half = Math.asin(Math.min(1, w / (2 * R))), sg = Math.sign(s);
+  return { bent: true, L: 2 * R * half, at: (t) => { const f = -half + 2 * half * t; return { x: R * Math.sin(f), y: sg * (a - R + R * Math.cos(f)) }; } };
+}
+function railCalc(it) {
+  const sp = Math.max(24, it.spacing || 48), arc = railArc(it), all = Math.ceil(arc.L / sp - 1e-6) + 1, first = it.joinStart ? 1 : 0;
+  const at = (k) => arc.bent ? arc.at(k / Math.max(1, all - 1)) : { x: -it.w / 2 + Math.min(it.w, k * sp), y: 0 };
+  return { posts: all - first, all, first, ft: arc.L / 12, sp, at, arc };
+}
 let uid = 1;
 const newId = () => "i" + Date.now().toString(36) + (uid++);
 
@@ -1699,7 +1711,7 @@ function drawItemReal(ctx, v, it, u, sel) {
       }
       case "rail": {
         drawRail(ctx, v, it, u, hexOf(it.color), /^Black/.test(it.color || "") ? "#2b2b2b" : "#a7adb3"); // black rails get black posts
-        const lp = rotPt(it, 0, 14); const [lx, ly] = W2S(v, lp.x, lp.y);
+        const mid = railArc(it).at(0.5), lp = deferLabels ? rotPt(it, mid.x, mid.y) : rotPt(it, mid.x, mid.y + 14); const [lx, ly] = W2S(v, lp.x, lp.y);
         realLabel(ctx, `${shortLabel(tag) || "Handrail"} (${plainLen(it.h)} high)`, lx, ly, 10.5 * u, u);
         return true;
       }
@@ -1716,9 +1728,10 @@ function drawItemReal(ctx, v, it, u, sel) {
 function drawRail(ctx, v, it, u, railCol, postCol) {
   const rc = railCalc(it);
   ctx.save(); ctx.lineCap = "round";
-  ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = Math.max(3 * u, it.d * v.s + 2 * u); lineL(ctx, v, it, -it.w / 2, 0, it.w / 2, 0);
-  ctx.strokeStyle = railCol; ctx.lineWidth = Math.max(2 * u, it.d * v.s); lineL(ctx, v, it, -it.w / 2, 0, it.w / 2, 0);
-  for (let k = 0; k < rc.posts; k++) { const lx = -it.w / 2 + Math.min(it.w, k * rc.sp); const p = rotPt(it, lx, 0), [sx, sy] = W2S(v, p.x, p.y), r = Math.max(2.5 * u, 1 * v.s); ctx.fillStyle = postCol; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1 * u; ctx.stroke(); }
+  const path = () => { const n = rc.arc.bent ? 32 : 1; ctx.beginPath(); for (let i = 0; i <= n; i++) { const q = rc.arc.at(i / n), p = rotPt(it, q.x, q.y), [sx, sy] = W2S(v, p.x, p.y); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); } ctx.stroke(); };
+  ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = Math.max(3 * u, it.d * v.s + 2 * u); path();
+  ctx.strokeStyle = railCol; ctx.lineWidth = Math.max(2 * u, it.d * v.s); path();
+  for (let k = rc.first; k < rc.all; k++) { const q = rc.at(k); const p = rotPt(it, q.x, q.y), [sx, sy] = W2S(v, p.x, p.y), r = Math.max(2.5 * u, 1 * v.s); ctx.fillStyle = postCol; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1 * u; ctx.stroke(); }
   ctx.restore();
 }
 function drawItem(ctx, v, it, u, sel) {
@@ -4115,7 +4128,7 @@ function sanitizeItem(raw, legacy) {
   if ((out.type === "landing" || out.type === "path") && /gabion/i.test(out.label) && out.surface === "gravel") out.surface = "gabion"; // named gabion but drawn as loose gravel
   if (out.surface) out.color = validColor(out.surface, raw.color ?? d.color);
   if (out.type === "landing" && out.block) out.blockColor = validColor(out.block, raw.blockColor ?? d.blockColor);
-  if (out.type === "rail") { out.color = RAIL_COLORS.includes(raw.color) ? raw.color : "Cedar"; out.d = clamp(out.d, 2, 12); }
+  if (out.type === "rail") { out.color = RAIL_COLORS.includes(raw.color) ? raw.color : "Cedar"; out.d = clamp(out.d, 2, 12); if (raw.joinStart) out.joinStart = true; if (raw.bend != null && isFinite(+raw.bend) && +raw.bend !== 0) out.bend = clamp(+raw.bend, -out.w / 2, out.w / 2); }
   if (LINE_TYPES.has(out.type)) {
     out.pts = (Array.isArray(raw.pts) ? raw.pts : []).filter((p) => Array.isArray(p) && isFinite(+p[0]) && isFinite(+p[1])).slice(0, 2000).map((p) => [+p[0], +p[1]]);
     if (out.pts.length < 2) return null;
@@ -5613,13 +5626,21 @@ function build3d() {
         const rc = railCalc(it), metal = /^Black/.test(it.color || "");
         const wood = mat3("wood|" + it.color, () => new THREE.MeshStandardMaterial({ map: noiseTex(hexOf(it.color), 18, 128, 0.85), roughness: 0.85 })), post = new THREE.MeshStandardMaterial({ color: metal ? "#2b2b2b" : "#a7adb3", roughness: 0.4, metalness: 0.6 });
         const g = new THREE.Group(); place(g, it, 0, 0, 0);
-        const xs = []; for (let k = 0; k < rc.posts; k++) xs.push(-it.w / 2 + Math.min(it.w, k * rc.sp));
+        const ps = []; for (let k = 0; k < rc.all; k++) ps.push(rc.at(k));
         // a post stands a few inches off the step edge, so look either side for the steps it follows
-        const zs = xs.map((lx) => { let z = -Infinity; for (const ly of [0, -6, 6, -10, 10]) { const p = rotPt(it, lx, ly); let zz = groundAt(p.x, p.y, it.id); const b = builtAt(p.x, p.y); if (b && b[0] > -1e8) zz = Math.max(zz, b[0]); if (ly === 0 || (b && b[0] > -1e8)) z = Math.max(z, zz); } return z; });
-        xs.forEach((lx, k) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, it.h, 10), post); m.castShadow = true; m.position.set(lx, zs[k] + it.h / 2, 0); g.add(m); });
-        for (let k = 1; k < xs.length; k++) {
-          const dx = xs[k] - xs[k - 1], dz = zs[k] - zs[k - 1], L = Math.hypot(dx, dz), a = Math.atan2(dz, dx);
-          for (const [hh, th, wd] of [[it.h + 0.75, 1.5, 5.5], [it.h * 0.55, 3.5, 1.5]]) { const r = new THREE.Mesh(new THREE.BoxGeometry(L + (hh > it.h ? 1 : 0), th, wd), wood); r.castShadow = true; r.position.set((xs[k] + xs[k - 1]) / 2, (zs[k] + zs[k - 1]) / 2 + hh, 0); r.rotation.z = a; g.add(r); }
+        const zs = ps.map((q) => { let z = -Infinity; for (const ly of [0, -6, 6, -10, 10]) { const p = rotPt(it, q.x, q.y + ly); let zz = groundAt(p.x, p.y, it.id); const b = builtAt(p.x, p.y); if (b && b[0] > -1e8) zz = Math.max(zz, b[0]); if (ly === 0 || (b && b[0] > -1e8)) z = Math.max(z, zz); } return z; });
+        ps.forEach((q, k) => { if (k < rc.first) return; const m = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, it.h, 10), post); m.castShadow = true; m.position.set(q.x, zs[k] + it.h / 2, -q.y); g.add(m); });
+        // rails run post top to post top; a bent rail follows its arc in short pieces between the posts
+        const n = rc.arc.bent ? 6 : 1;
+        for (let k = 1; k < ps.length; k++) for (let i = 0; i < n; i++) {
+          const t0 = (k - 1 + i / n) / (ps.length - 1), t1 = (k - 1 + (i + 1) / n) / (ps.length - 1);
+          const A = rc.arc.bent ? rc.arc.at(t0) : { x: ps[k - 1].x + (ps[k].x - ps[k - 1].x) * i / n, y: 0 }, B = rc.arc.bent ? rc.arc.at(t1) : { x: ps[k - 1].x + (ps[k].x - ps[k - 1].x) * (i + 1) / n, y: 0 };
+          const zA = zs[k - 1] + (zs[k] - zs[k - 1]) * i / n, zB = zs[k - 1] + (zs[k] - zs[k - 1]) * (i + 1) / n;
+          const hd = Math.hypot(B.x - A.x, B.y - A.y), L = Math.hypot(hd, zB - zA);
+          for (const [hh, th, wd] of [[it.h + 0.75, 1.5, 5.5], [it.h * 0.55, 3.5, 1.5]]) {
+            const r = new THREE.Mesh(new THREE.BoxGeometry(L + (hh > it.h ? (n > 1 ? 0.3 : 1) : 0.05), th, wd), wood); r.castShadow = true;
+            r.position.set((A.x + B.x) / 2, (zA + zB) / 2 + hh, -(A.y + B.y) / 2); r.rotation.order = "YZX"; r.rotation.y = Math.atan2(B.y - A.y, B.x - A.x); r.rotation.z = Math.atan2(zB - zA, hd); g.add(r);
+          }
         }
         break;
       }
