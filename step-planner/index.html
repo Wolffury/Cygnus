@@ -610,10 +610,9 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
         <p class="note" id="syncNote">Sync works when the planner is open in the Claude app or claude.ai. Every device signed in to your Claude account sees the same job, saved jobs, prices, materials and company details, and changes show up on the others within a few seconds.</p>
         <h3>Saved jobs</h3>
         <div class="row">
-          <button class="btn" id="saveJob">Save job</button>
+          <button class="btn primary" id="saveJob">Save to my files</button>
+          <label class="btn" for="importJson">Open from my files</label>
           <button class="btn" id="newJob">New job</button>
-          <button class="btn" id="exportJson">Export file</button>
-          <label class="btn" for="importJson">Open file</label>
           <input type="file" id="importJson" accept=".json,application/json" hidden>
         </div>
         <div class="list" id="jobList"></div>
@@ -4031,7 +4030,8 @@ function keepCurrent() {
   const list = jobsSaved().filter((j) => j.name !== job.name);
   list.unshift({ name: job.name, saved: Date.now(), job: JSON.parse(JSON.stringify(job)) }); store.set("bsp.jobs", list.slice(0, 40)); renderJobs(); return true;
 }
-$("saveJob").onclick = () => { keepCurrent(); toast("Saved " + (job.name || "job")); };
+// Jobs are kept as files on your own computer: Save writes the job to a .json file, Open reads one back
+$("saveJob").onclick = () => saveFile(slug(job.name || "job") + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
 // ---------- My jobs: every saved plan in one list ----------
 function jobTotal(j) { const prev = job; try { job = sanitizeJob(JSON.parse(JSON.stringify(j))); return j.items && j.items.length ? estimate().total : 0; } catch { return 0; } finally { job = prev; } }
 function renderJobsDlg() {
@@ -4101,7 +4101,6 @@ function freshJob() {
   return j;
 }
 $("newJob").onclick = startNewJob;
-$("exportJson").onclick = () => saveFile(slug(job.name) + ".json", new Blob([JSON.stringify(job, null, 2)], { type: "application/json" }));
 $("importJson").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
   try { const j = sanitizeJob(JSON.parse(await f.text())); snapshot(); job = j; selId = null; afterLoad(); toast("Opened " + (job.name || f.name)); }
