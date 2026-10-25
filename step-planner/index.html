@@ -2464,7 +2464,7 @@ function renderItemPane() {
     h += `<div class="grid2">${field("Length", "w", it)}${field("Height", "h", it)}${field("Post spacing", "spacing", it)}${field("Rotation °", "rot", it, "deg")}
       ${selectField("Finish", "color", it, RAIL_COLORS.map((c) => [c, c === "Cedar" ? "Cedar (natural wood)" : c]))}<span></span></div>
       <dl class="stats"><div><dt>Posts</dt><dd>${rc.posts}</dd></div><div><dt>Rail length</dt><dd>${fmtLen(it.w)}</dd></div></dl>
-      <div class="grid2">${selectField("Rail lumber", "railPlastic", { railPlastic: (job.est || {}).railPlastic ? "1" : "0" }, [["0", "Cedar"], ["1", "Recycled plastic lumber"]])}${selectField("Painted", "railPaint", { railPaint: (job.est || {}).railPaint ? "1" : "0" }, [["0", "No"], ["1", "Yes: rails and posts"]])}${selectField("Rails by", "railOwner", { railOwner: (job.est || {}).railOwner ? "1" : "0" }, [["0", "Us"], ["1", "Owner: we set the posts only"]])}</div>
+      <div class="grid2">${selectField("Rail lumber", "railPlastic", { railPlastic: (job.est || {}).railPlastic ? "1" : "0" }, [["0", "Cedar"], ["1", "Recycled plastic lumber"]])}${selectField("Painted", "railPaint", { railPaint: (job.est || {}).railPaint ? "1" : "0" }, [["0", "No"], ["1", "Yes: rails and posts"]])}${selectField("Rails by", "railOwner", { railOwner: String((job.est || {}).railOwner || 0) }, [["0", "Us"], ["1", "Owner: we set the posts only"], ["2", "Owner: the whole handrail"]])}</div>
       <p class="note">Priced as a 2x6 cap rail and a 2x4 rail on galvanized pipe posts set in concrete${(job.est || {}).railPaint ? ", primed and painted (2 coats)" : ""}. Lumber and paint choices apply to every rail on the job. Change the prices under Rates on the Quote tab.</p>`;
   } else if (t === "wall") {
     const wc = wallCalc(it);
@@ -2580,7 +2580,7 @@ function renderItemPane() {
 function setItemField(it, inp) {
   const key = inp.dataset.k, kind = inp.dataset.kind;
   snapshot();
-  if (key === "gabionDiy" || key === "gabionTide" || key === "railPlastic" || key === "railPaint" || key === "railOwner") { job.est = { ...job.est, [key]: inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
+  if (key === "gabionDiy" || key === "gabionTide" || key === "railPlastic" || key === "railPaint" || key === "railOwner") { job.est = { ...job.est, [key]: key === "railOwner" ? clamp(+inp.value || 0, 0, 2) : inp.value === "1" ? 1 : 0 }; commit(); renderEstFields(); return; } // job-wide, not per basket
   if (kind === "text") it[key] = inp.value;
   else if (kind === "select") {
     it[key] = inp.value;
@@ -2759,8 +2759,9 @@ function haulList() {
   if (w.gabStoneYd) add("Gabion stone", ceilTo(w.gabStoneYd * 1.15, 0.25) * 1600, true);
   add("Bedding sand", ceilTo(w.sandYd, 0.25) * 1350, true);
   add("Polymeric sand", Math.ceil(w.polySqft / 60) * 23);
-  add("Concrete for posts", w.railPosts * 2 * 30);
-  add("Handrail posts and lumber", w.railPosts * 9 + ((job.est || {}).railOwner ? 0 : w.railFt * 2 * 1.6));
+  const railAll = (job.est || {}).railOwner === 2; // the owner supplies and puts in the whole handrail
+  if (!railAll) add("Concrete for posts", w.railPosts * 2 * 30);
+  if (!railAll) add("Handrail posts and lumber", w.railPosts * 9 + ((job.est || {}).railOwner ? 0 : w.railFt * 2 * 1.6));
   return out;
 }
 // Powered tracked wheelbarrow: everything delivered has to be moved from the drop spot to where it goes
@@ -2889,9 +2890,11 @@ function estimateRaw() {
     L("Materials", `Primer${E.railPlastic ? " (bonding primer for plastic and galvanized steel)" : " (metal primer for the posts, wood primer for the rails)"}`, ceilTo(area / 350, 0.25), "gal", E.primerPerGal);
     L("Labour", "Painting the rails and posts: clean, prime and 2 coats", ceilTo(area * 3 * E.hrPaintSqft, 0.5), "hr", E.labourRate);
   }
-  L("Materials", "Handrail posts, galvanized pipe", w.railPosts, "ea", E.railPost);
-  L("Materials", "Concrete for post footings (30 kg bags)", w.railPosts * 2, "bag", E.concreteBag);
-  L("Materials", "Handrail brackets, bolts and screws", w.railPosts, "set", E.railHardware);
+  if (E.railOwner !== 2) {
+    L("Materials", "Handrail posts, galvanized pipe", w.railPosts, "ea", E.railPost);
+    L("Materials", "Concrete for post footings (30 kg bags)", w.railPosts * 2, "bag", E.concreteBag);
+    L("Materials", "Handrail brackets, bolts and screws", w.railPosts, "set", E.railHardware);
+  }
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
   const hrs = (n) => ceilTo(n, 0.5);
   L("Labour", `Excavation and grading${E.hrExcavYd >= 2 ? " (by hand)" : ""}`, hrs(w.excavYd * E.hrExcavYd), "hr", E.labourRate);
@@ -2909,7 +2912,8 @@ function estimateRaw() {
   L("Labour", "Block and cap cutting", hrs(w.cutPieces * E.hrCut), "hr", E.labourRate);
   L("Labour", "Wall block installation", hrs(w.wallBlocks * E.hrWallBlock), "hr", E.labourRate);
   L("Labour", "Edging installation", hrs(w.edgeFt * E.hrEdgeFt), "hr", E.labourRate);
-  if (E.railOwner) L("Labour", "Handrail posts set in concrete, ready for the owner's rails", hrs(w.railPosts * 0.75), "hr", E.labourRate);
+  if (E.railOwner === 2) { /* the whole handrail is the owner's */ }
+  else if (E.railOwner) L("Labour", "Handrail posts set in concrete, ready for the owner's rails", hrs(w.railPosts * 0.75), "hr", E.labourRate);
   else L("Labour", "Handrail posts and rails", hrs(w.railFt * E.hrRailFt), "hr", E.labourRate);
   L("Labour", "Paving installation and jointing", hrs(w.paveSqft * E.hrPaveSqft + w.slabs * E.hrSlab + w.surfSqft * E.hrSurfSqft), "hr", E.labourRate);
   if (E.barrow) {
@@ -3270,7 +3274,7 @@ function sectionText(cat, rs) {
   const has = (re, t, a) => { if (re.test(all)) a.push(t); };
   if (cat === "Materials") { const a = []; has(/block|cap max|\bcap\b/i, "block and caps", a); has(/paver|slab/i, "pavers", a); has(/gabion/i, "gabion baskets", a); has(/road base|drain rock|gravel|bedding sand|stone/i, "gravel, rock and sand", a); has(/drain pipe|filter fabric/i, "drainage", a); if (/lumber/i.test(all)) a.push("handrail and posts"); else has(/handrail/i, "handrail posts", a); has(/concrete/i, "concrete", a); has(/adhesive/i, "adhesive", a); has(/paint|primer/i, "paint", a); has(/edging/i, "edging", a);
     return `All materials${a.length ? `: ${listAnd(a)}` : ""}`; }
-  if (cat === "Labour") return `All labour: layout, digging and base preparation, building the steps, landings and walls, ${/posts set in concrete, ready/i.test(all) ? "setting the handrail posts" : "handrail"}, finishing and clean-up`;
+  if (cat === "Labour") return `All labour: layout, digging and base preparation, building the steps, landings and walls, ${/posts set in concrete, ready/i.test(all) ? "setting the handrail posts, " : /handrail/i.test(all) ? "handrail, " : ""}finishing and clean-up`;
   if (cat === "Equipment & disposal") { const a = []; has(/deliver|ferry|truck/i, "delivery to site", a); has(/compactor|saw|excavator|rammer|wheelbarrow|equipment/i, "equipment", a); has(/haul-away|disposal/i, "hauling away the extra soil", a); return a.length ? listAnd(a).replace(/^./, (c) => c.toUpperCase()) : "Equipment and disposal"; }
   return "Other items";
 }
@@ -3465,7 +3469,7 @@ function scopeAuto() {
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
   const rails = its.filter((i) => i.type === "rail");
-  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; if (RE.railOwner) out.push(`Handrail posts: ${rails.reduce((a, r) => a + railCalc(r).posts, 0)} galvanized steel pipe posts about every ${plainLen(rc.sp)} along about ${ft} ft of stair, set in concrete and ready for your rails. The rails and any painting are yours to supply and install.`); else out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
+  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; if (RE.railOwner === 2) out.push(`Handrail: shown on the plan, about ${ft} ft long. You supply and install it, so it isn't included in this price.`); else if (RE.railOwner) out.push(`Handrail posts: ${rails.reduce((a, r) => a + railCalc(r).posts, 0)} galvanized steel pipe posts about every ${plainLen(rc.sp)} along about ${ft} ft of stair, set in concrete and ready for your rails. The rails and any painting are yours to supply and install.`); else out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
   const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
   if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
@@ -3492,7 +3496,7 @@ function valueAuto() {
   { const land = its.filter((i) => (i.type === "landing" && !isGabion(mat(i.surface))) || i.type === "path").length, railFt = Math.round(rails.reduce((a, i) => a + i.w / 12, 0)), more = [];
     if (paveSq) more.push(`${paveSq} sq ft of pavers`); if (F.unitSteps) more.push("block steps with feature nosings");
     if (land) more.push(`${plural(land, "landing and terrace").replace("landing and terraces", "landings and terraces")}`);
-    if (railFt) more.push((job.est || {}).railOwner ? `handrail posts along ${railFt} ft of stair` : `${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (chan) more.push("a steel-grate channel drain"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
+    if (railFt && (job.est || {}).railOwner !== 2) more.push((job.est || {}).railOwner ? `handrail posts along ${railFt} ft of stair` : `${railFt} ft of handrail`); if (drains.length) more.push("a drain line"); if (chan) more.push("a steel-grate channel drain"); if (gab.length) more.push(`${plural(gab.length, "gabion step")} at the beach`);
     if (F.edges.length) more.push("edge restraints");
     if (has(/delivery/i)) more.push(`delivery to ${where}`); if (has(/wheelbarrow|hauling/i)) more.push("moving every block and bag down the slope by machine");
     const what = F.beach ? `safe access to your beach${climb > 1 ? ` down a ${Math.round(climb)} ft bank` : ""}` : `${F.noun} you'll use every day`;
@@ -3500,7 +3504,7 @@ function valueAuto() {
     const kg = haulList().reduce((a, x) => a + x.kg, 0), lb = kg * 2.20462;
     if (lb > 2000) out.push(`By weight: about ${num1(kg / 1000)} tonnes (${Math.round(lb / 1000).toLocaleString("en-CA")},000 lb) of ${F.units.length ? "pavers, block" : "block, stone"} and gravel, ${F.island ? "brought over to the island and " : ""}set by hand${F.beach ? " on a steep bank" : ""}. That's about ${Math.round(q.total / lb * 100)}¢ a pound, delivered and installed${q.total / lb < 0.8 ? ": cheaper by the pound than bananas at the grocery store" : ""}. The truck only brings it to ${F.beach ? "the top of the property" : "the driveway"}. From there we move every piece ourselves, most of it two or three times: off the truck, ${F.beach ? "down the bank to where it's needed" : "over to the work area"}, and into place. That's close to ${Math.round(kg * 3 / 1000)} tonnes of lifting and carrying in all.`);
   }
-  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length ? ((job.est || {}).railOwner ? ", with handrail posts the whole way, ready for your rails" : ", with a handrail the whole way") : ""}. Steady, even steps are what make a ${F.beach ? "long stair easy on the knees, coming up from the beach with a load" : "stair easy and safe underfoot"}.`);
+  if (w0 && c0) out.push(`Comfortable and safe to walk: every step ${fmtIn(c0.H)} high with an ${fmtIn(w0.tread)} tread and ${plainLen(w0.w).replace(/ 0 in$/, "")} wide${rails.length && (job.est || {}).railOwner !== 2 ? ((job.est || {}).railOwner ? ", with handrail posts the whole way, ready for your rails" : ", with a handrail the whole way") : ""}. Steady, even steps are what make a ${F.beach ? "long stair easy on the knees, coming up from the beach with a load" : "stair easy and safe underfoot"}.`);
   else if (F.unitSteps) out.push(`Comfortable and safe to walk: even steps of the same height and tread, nearly flat with just enough fall to shed rain, and a contrasting nosing on every step edge so each one is easy to see.`);
   const built = [`${fmtIn(E.baseDepth)} of compacted gravel under ${F.units.length ? "all the new work" : "every step and landing"}`];
   if (cs.some((c) => c.under) || F.unitSteps) built.push("block walls hidden under the step edges to keep the steps firmly in place");
@@ -3509,7 +3513,8 @@ function valueAuto() {
   if (drains.length) built.push(`a drain line (${Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0))} ft) carrying ground water away in the rainy season`);
   if (chan) built.push(`a steel-grate channel drain catching surface water along the lower edge${F.drainOut ? " and piping it to a tidy pop-up outlet" : ""}`);
   if (gab.length) built.push(`marine-grade gabion steps at the beach, made for salt spray and storm waves`);
-  if (rails.length && E.railOwner) built.push("handrail posts set in concrete");
+  if (rails.length && E.railOwner === 2) { /* owner's handrail */ }
+  else if (rails.length && E.railOwner) built.push("handrail posts set in concrete");
   else if (rails.length && E.railPlastic) built.push(`handrails of recycled plastic lumber that won't rot, split or splinter${E.railPaint ? ", primed and painted" : ""}`);
   else if (rails.length && E.railPaint) built.push("handrails and posts primed and painted");
   out.push(`Built for ${F.beach ? "a wet coastal bank" : "our wet coastal winters"}: ${listAnd(built)}.`);
@@ -3547,7 +3552,8 @@ function bestLine(E) {
 function lifeLine() {
   const E = { ...EST_DEFAULTS, ...job.est }, its = job.items, rails = its.some((i) => i.type === "rail"), gab = its.some((i) => i.type === "landing" && isGabion(mat(i.surface)));
   const more = [];
-  if (rails && E.railOwner) more.push("The hot-dip galvanized steel posts should last as long as the stair.");
+  if (rails && E.railOwner === 2) { /* owner's handrail */ }
+  else if (rails && E.railOwner) more.push("The hot-dip galvanized steel posts should last as long as the stair.");
   else if (rails) more.push(`The ${E.railPlastic ? "recycled plastic lumber rails won't rot and can last 50 years" : "cedar rails can last 25 years"}, and the hot-dip galvanized steel posts${E.railPaint ? ", kept painted," : ""} should last as long as the stair.`);
   if (gab) more.push("The marine-grade gabion steps at the beach can last 50 years.");
   const F = jobFacts(), parts = [F.pavers.length && "pavers", (F.steps || F.blocks.length) && "block steps", F.its.some((i) => i.type === "wall") && "walls", F.glued && "caps"].filter(Boolean);
@@ -3622,7 +3628,7 @@ function timelineAuto() {
   const backDays = (n) => { const r = new Date(t); r.setDate(r.getDate() - n); while (!isWorkday(r)) r.setDate(r.getDate() - 1); return r; };
   const orderBy = backDays(Math.max(d.lead || 0, gab ? 21 : 0) + 2), hiab = subWorkdays(t, 2), gravel = subWorkdays(t, 1);
   if (shore) out.push(`Now: apply for foreshore authorization for the gabion steps below the high-water mark, if required (approvals can take several weeks).`);
-  const F = jobFacts(), goods = F.units.length ? listAnd([F.pavers.length && "pavers", F.blocks.length && "blocks", F.trims.length && "nosings", F.chans.length && "the channel drain", F.edges.length && "edging"].filter(Boolean)) : listAnd(["blocks", "caps", job.items.some((i) => (i.type === "landing" || i.type === "path") && /paver|slab/.test((mat(i.surface) || {}).kind)) && "pavers", F.rails.length && ((job.est || {}).railOwner ? "handrail posts" : "handrail materials")].filter(Boolean));
+  const F = jobFacts(), goods = F.units.length ? listAnd([F.pavers.length && "pavers", F.blocks.length && "blocks", F.trims.length && "nosings", F.chans.length && "the channel drain", F.edges.length && "edging"].filter(Boolean)) : listAnd(["blocks", "caps", job.items.some((i) => (i.type === "landing" || i.type === "path") && /paver|slab/.test((mat(i.surface) || {}).kind)) && "pavers", F.rails.length && (job.est || {}).railOwner !== 2 && ((job.est || {}).railOwner ? "handrail posts" : "handrail materials")].filter(Boolean));
   out.push(`Order ${orderBy > new Date() ? "by " + dayName(orderBy) : "right away"}, on signing with the deposit: ${goods}${gab ? `, and the gabion ${E.gabionDiy ? "mesh, lacing wire and rings" : "baskets"} (shipped from out of province, allow 1–3 weeks)` : ""}.`);
   if (E.haulSelf) out.push(`${dayName(hiab)}: materials hauled to site${ferry ? " by ferry" : ""}.`);
   else out.push(`${dayName(hiab)}: ${plural(loads, "truck load")} of ${goods} delivered to site${ferry || E.ferryIncl ? " by ferry" : ""}${loads > 1 ? " (the second load as needed)" : ""}.`);
