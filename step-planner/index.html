@@ -1712,6 +1712,12 @@ function drawItemReal(ctx, v, it, u, sel) {
         drawRail(ctx, v, it, u, hexOf(it.color), /^Black/.test(it.color || "") ? "#2b2b2b" : "#a7adb3"); // black rails get black posts
         const mid = railArc(it).at(0.5), lp = deferLabels ? rotPt(it, mid.x, mid.y) : rotPt(it, mid.x, mid.y + 14); const [lx, ly] = W2S(v, lp.x, lp.y);
         realLabel(ctx, `${shortLabel(tag) || "Handrail"} (${plainLen(it.h)} high)`, lx, ly, 10.5 * u, u);
+        // where each pipe post goes, when the owner puts the handrail in or there are only a few
+        const rc = railCalc(it), own = (job.est || {}).railOwner === 2;
+        if (own || rc.posts <= 4) for (let k = rc.first, n = 1; k < rc.all; k++, n++) {
+          const q = rc.at(k), p = rotPt(it, q.x, q.y), [px, py] = W2S(v, p.x, p.y);
+          realLabel(ctx, `Pipe post ${n}${n === 1 && rc.posts > 1 ? ` (posts ${plainLen(rc.arc.L / Math.max(1, rc.all - 1))} apart)` : ""}`, px, py, 10 * u, u);
+        }
         return true;
       }
       case "contour": {
@@ -1730,7 +1736,7 @@ function drawRail(ctx, v, it, u, railCol, postCol) {
   const path = () => { const n = rc.arc.bent ? 32 : 1; ctx.beginPath(); for (let i = 0; i <= n; i++) { const q = rc.arc.at(i / n), p = rotPt(it, q.x, q.y), [sx, sy] = W2S(v, p.x, p.y); if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); } ctx.stroke(); };
   ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = Math.max(3 * u, it.d * v.s + 2 * u); path();
   ctx.strokeStyle = railCol; ctx.lineWidth = Math.max(2 * u, it.d * v.s); path();
-  for (let k = rc.first; k < rc.all; k++) { const q = rc.at(k); const p = rotPt(it, q.x, q.y), [sx, sy] = W2S(v, p.x, p.y), r = Math.max(2.5 * u, 1 * v.s); ctx.fillStyle = postCol; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.lineWidth = 1 * u; ctx.stroke(); }
+  for (let k = rc.first; k < rc.all; k++) { const q = rc.at(k); const p = rotPt(it, q.x, q.y), [sx, sy] = W2S(v, p.x, p.y), r = Math.max(3.2 * u, 1.2 * v.s); ctx.fillStyle = postCol; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill(); const dark = /^#[0-3]/.test(postCol); ctx.strokeStyle = dark ? "#fff" : "rgba(0,0,0,.6)"; ctx.lineWidth = (dark ? 1.6 : 1) * u; ctx.stroke(); } // dark posts on a dark rail get a white ring
   ctx.restore();
 }
 function drawItem(ctx, v, it, u, sel) {
@@ -3469,7 +3475,7 @@ function scopeAuto() {
   const drains = its.filter((i) => i.type === "drain");
   if (drains.length) { const ft = Math.round(drains.reduce((a, i) => a + drainCalc(i).ft, 0)), name = cleanName(drains[0]).replace(/\s*\b(run|outlet run|outlet)\b.*$/i, "") || "Drain line"; out.push(`${name}: about ${ft} ft of 4" perforated pipe in drain rock wrapped in filter fabric, carrying ground water away to a rock outlet in the rainy season.`); }
   const rails = its.filter((i) => i.type === "rail");
-  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; if (RE.railOwner === 2) out.push(`Handrail: shown on the plan, about ${ft} ft long. You supply and install it, so it isn't included in this price.`); else if (RE.railOwner) out.push(`Handrail posts: ${rails.reduce((a, r) => a + railCalc(r).posts, 0)} galvanized steel pipe posts about every ${plainLen(rc.sp)} along about ${ft} ft of stair, set in concrete and ready for your rails. The rails and any painting are yours to supply and install.`); else out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
+  if (rails.length) { const ft = Math.round(rails.reduce((a, r) => a + r.w / 12, 0)), r0 = rails[0], rc = railCalc(r0); const RE = job.est || {}; if (RE.railOwner === 2) { const np = rails.reduce((a, r) => a + railCalc(r).posts, 0), gap = rc.arc.L / Math.max(1, rc.all - 1); out.push(`Handrail: about ${ft} ft long, on ${np} steel pipe post${np === 1 ? "" : "s"} about ${plainLen(gap)} apart; each post's position is marked on the plan. You supply and install it, so it isn't included in this price.`); } else if (RE.railOwner) out.push(`Handrail posts: ${rails.reduce((a, r) => a + railCalc(r).posts, 0)} galvanized steel pipe posts about every ${plainLen(rc.sp)} along about ${ft} ft of stair, set in concrete and ready for your rails. The rails and any painting are yours to supply and install.`); else out.push(`Handrail: about ${ft} ft, ${RE.railPlastic ? `${/^Black/.test(r0.color || "") ? "black " : ""}recycled plastic lumber` : (r0.color || "cedar")} rail ${plainLen(r0.h || 34)} high on posts about every ${plainLen(rc.sp)}, set in concrete${RE.railPaint ? ". Rails and posts cleaned, primed and given 2 coats of exterior paint" : ""}.`); }
   out.push(`All materials delivered to the site${E.ferryPerFt > 0 || E.haulSelf ? ", ferry included" : ""}, and moved to the work area.`);
   const own = (job.equip || []).filter((e) => e.use && !(+e.rate > 0)).map((e) => e.name.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
   if (own.length && !(job.equip || []).some((e) => e.use && +e.rate > 0)) out.push(`Done with our own equipment (${listAnd(own)}): no rental charges.`);
