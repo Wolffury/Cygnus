@@ -1,0 +1,66 @@
+name: Daily saying
+
+# Posts one saying from the lexicon to Discord each day.
+#
+# Setup: add a repository secret named DISCORD_WEBHOOK_URL holding a Discord
+# incoming webhook for the channel you want (Discord: Channel Settings →
+# Integrations → Webhooks → New Webhook → Copy Webhook URL). Until that
+# secret exists the job previews the post instead of sending it, so it
+# never fails loudly.
+
+on:
+  schedule:
+    # 13:00 UTC daily. GitHub cron is always UTC, and may fire late when
+    # Actions is busy.
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+    inputs:
+      situation:
+        description: "Post from this situation (substring match). Blank posts today's saying."
+        required: false
+        type: string
+      part:
+        description: "Post from this part (substring match)."
+        required: false
+        type: string
+      random:
+        description: "Post a random saying instead of today's."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-saying
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Post saying
+        env:
+          # Inputs go through the environment, never interpolated into the
+          # script, so channel text cannot become shell.
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SITUATION: ${{ inputs.situation }}
+          PART: ${{ inputs.part }}
+          RANDOM_PICK: ${{ inputs.random }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "${SITUATION:-}" ]; then args+=(--situation "${SITUATION}"); fi
+          if [ -n "${PART:-}" ]; then args+=(--part "${PART}"); fi
+          if [ "${RANDOM_PICK:-false}" = "true" ]; then args+=(--random); fi
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::warning title=No webhook::DISCORD_WEBHOOK_URL is not set. Previewing instead of posting."
+            python3 tools/post_saying.py --dry-run "${args[@]+"${args[@]}"}"
+            exit 0
+          fi
+
+          python3 tools/post_saying.py "${args[@]+"${args[@]}"}"
