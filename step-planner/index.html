@@ -709,7 +709,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
   <div class="modalbox wide">
     <div class="row" style="justify-content:space-between"><h2 id="mlTitle">Materials checklist</h2><button class="btn" id="mlClose" aria-label="Close">✕</button></div>
     <p class="note">Everything to order for this job, grouped by supplier, with boxes to tick when it's ordered and when it's on site, then the deliveries and equipment. Quantities come from the quote. For your own use: no prices.</p>
-    <details id="mlTickBox"><summary>Tick what's ordered and what's on site</summary><div id="mlTicks" class="list" style="max-height:30vh;overflow:auto"></div></details>
+    <details id="mlTickBox"><summary>Tick what's ordered and on site, and enter quoted prices (before tax)</summary><div id="mlTicks" class="list" style="max-height:30vh;overflow:auto"></div></details>
     <div class="cppages" id="mlPages" aria-label="Preview of the materials checklist" style="max-height:52vh"></div>
     <div class="row"><button class="btn primary" id="mlPdf">Save PDF</button><button class="btn" id="mlPrint">Print</button></div>
   </div>
@@ -3900,29 +3900,40 @@ function checklistPages() {
   };
   const room = (h) => { if (y + h > H - M - foot) { page(); return true; } return false; };
   // columns: ordered box, on-site box, quantity, item, notes line
-  const cx = { ord: M + 4, site: M + 130, qty: M + 300, item: M + 318, notes: M + CW * 0.72 }, BOX = 26, LH = 31;
+  const cx = { ord: M + 4, site: M + 130, qty: M + 300, item: M + 318, notes: M + CW * 0.64, bud: M + CW * 0.83, quo: M + CW }, BOX = 26, LH = 31;
+  const GSTF = 1 + (E.gst || 0) / 100, pre = (l) => /GST you pay/.test(l.note || "") ? round2(l.total / GSTF) : l.total; // budgets before tax, like supplier quotes
+  const tally = { B: 0, Bq: 0, Q: 0, Bu: 0 }; let sub = null;
   const header = () => {
     x.textBaseline = "alphabetic";
-    spaced(3, () => { x.font = F(15, 600, HEAD); x.fillStyle = PC; x.textAlign = "center"; x.fillText("ORDERED", cx.ord + 22 + BOX / 2, y); x.fillText("ON SITE", cx.site + 18 + BOX / 2, y); x.textAlign = "right"; x.fillText("QTY", cx.qty, y); x.textAlign = "left"; x.fillText("ITEM", cx.item, y); x.fillText("NOTES", cx.notes, y); });
+    spaced(3, () => { x.font = F(15, 600, HEAD); x.fillStyle = PC; x.textAlign = "center"; x.fillText("ORDERED", cx.ord + 22 + BOX / 2, y); x.fillText("ON SITE", cx.site + 18 + BOX / 2, y); x.textAlign = "right"; x.fillText("QTY", cx.qty, y); x.textAlign = "left"; x.fillText("ITEM", cx.item, y); x.textAlign = "right"; x.fillText("BUDGET", cx.bud, y); x.fillText("QUOTED", cx.quo, y); x.textAlign = "left"; });
     y += 12; x.strokeStyle = PC; x.lineWidth = 2; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 16;
   };
   const section = (title, sub, cols = true) => {
-    room(150); y += 18; x.textBaseline = "alphabetic"; x.textAlign = "left";
+    subtotal(); room(cols ? 230 : 150); y += 18; x.textBaseline = "alphabetic"; x.textAlign = "left";
     spaced(LL ? 5 : 2, () => { x.font = F(25, 600, HEAD); x.fillStyle = PC; x.fillText(title.toUpperCase(), M, y + 24); });
     y += 34; if (sub) { x.font = F(20, 400); x.fillStyle = MUTED; x.fillText(sub, M, y + 18); y += 28; }
     y += 14; if (cols) header();
   };
+  const subtotal = () => { if (!sub || !sub.n) { sub = null; return; } room(40); x.textBaseline = "top"; x.font = F(21, 600); x.fillStyle = INK; x.textAlign = "left"; x.fillText("Subtotal", cx.item, y + 8);
+    x.textAlign = "right"; x.fillText(money(sub.b), cx.bud, y + 8); if (sub.q) x.fillText(money(sub.q), cx.quo, y + 8); x.textAlign = "left"; y += 40; sub = null; };
   const box = (bx, by, on) => { x.strokeStyle = INK; x.lineWidth = 2; x.strokeRect(bx, by, BOX, BOX); if (on) { x.strokeStyle = PC; x.lineWidth = 4; x.lineCap = "round"; x.beginPath(); x.moveTo(bx + 5, by + 14); x.lineTo(bx + 11, by + 21); x.lineTo(bx + 22, by + 5); x.stroke(); x.lineCap = "butt"; } };
-  const row = (qty, item, sub, cols = ["ord", "site"], key = item) => { const ck = (job.checks || {})[key] || {};
-    const lines = wrapLines(x, item, cx.notes - cx.item - 24, F(23, 500)), subs = sub ? wrapLines(x, sub, cx.notes - cx.item - 24, F(19, 400)) : [];
+  const row = (qty, item, subt, cols = ["ord", "site"], key = item, bud = null) => { const ck = (job.checks || {})[key] || {}, sub2 = subt;
+    const subtxt = [sub2, ck.ref].filter(Boolean).join(" · ");
+    const lines = wrapLines(x, item, cx.notes - cx.item - 16, F(23, 500)), subs = subtxt ? wrapLines(x, subtxt, cx.notes - cx.item - 16, F(19, 400)) : [];
     const h = Math.max(BOX + 14, lines.length * LH + subs.length * 25 + 14);
     if (room(h)) header();
     const top = y + 6; for (const k of cols) box(cx[k] + (k === "ord" ? 22 : 18), top, k === "ord" ? ck.o : ck.s);
     x.textBaseline = "top"; x.textAlign = "right"; x.font = F(23, 600); x.fillStyle = INK; x.fillText(qty, cx.qty, top + 2);
     x.textAlign = "left"; lines.forEach((ln, i) => { x.font = F(23, 500); x.fillStyle = INK; x.fillText(ln, cx.item, top + 2 + i * LH); });
     subs.forEach((ln, i) => { x.font = F(19, 400); x.fillStyle = MUTED; x.fillText(ln, cx.item, top + 4 + lines.length * LH + i * 25); });
-    x.strokeStyle = RULE; x.lineWidth = 1.2; x.beginPath(); x.moveTo(cx.notes, top + BOX); x.lineTo(M + CW, top + BOX); x.stroke();
-    y += h; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke();
+    if (bud != null) {
+      x.textAlign = "right"; x.font = F(22, 400); x.fillStyle = MUTED; x.fillText(money(bud), cx.bud, top + 3);
+      if (ck.q != null) { x.font = F(22, 600); x.fillStyle = ck.q > bud + 0.5 ? "#a33a2a" : INK; x.fillText(money(ck.q), cx.quo, top + 3); }
+      else { x.strokeStyle = RULE; x.lineWidth = 1.2; x.beginPath(); x.moveTo(cx.quo - 130, top + BOX); x.lineTo(cx.quo, top + BOX); x.stroke(); }
+      x.textAlign = "left"; tally.B += bud; if (ck.q != null) { tally.Bq += bud; tally.Q += ck.q; } else tally.Bu += bud;
+      if (sub) { sub.b += bud; if (ck.q != null) sub.q += ck.q; }
+    }
+    x.strokeStyle = RULE; x.lineWidth = 1.2; y += h; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke();
   };
   const qtyText = (l) => { const n = num1(l.qty); return l.unit === "ea" ? n : `${n} ${l.unit}`; };
   const strip = (d) => d.replace(/^Abbotsford /, "");
@@ -3943,7 +3954,8 @@ function checklistPages() {
   for (const [name, ls] of groups) {
     const sup = (typeof suppliers === "function" ? suppliers() : []).find((s) => s.name === name);
     section(name, sup ? [sup.phone, sup.address].filter(Boolean).join(" · ") : "");
-    for (const l of ls) row(qtyText(l), strip(l.desc), /incl\. \d+% waste/.test(l.note || "") ? (l.note.match(/incl\. \d+% waste/) || [""])[0] : "", undefined, l.desc);
+    sub = { b: 0, q: 0, n: ls.length };
+    for (const l of ls) row(qtyText(l), strip(l.desc), /incl\. \d+% waste/.test(l.note || "") ? (l.note.match(/incl\. \d+% waste/) || [""])[0] : "", undefined, l.desc, pre(l));
   }
   // ---- what the client supplies
   const R = job.est || {}, rails = job.items.filter((i) => i.type === "rail");
@@ -3951,8 +3963,25 @@ function checklistPages() {
   // ---- deliveries and equipment
   const eq = q.lines.filter((l) => l.cat === "Equipment & disposal");
   const del = eq.filter((l) => /deliver|ferry|fuel|truck|load|haul-away|disposal/i.test(l.desc)), gear = eq.filter((l) => !del.includes(l));
-  if (del.length) { section("Deliveries and haul-away", "Booked = arranged with the supplier; done = on site or taken away", true); for (const l of del) row(qtyText(l), l.desc, "", undefined, l.desc); }
-  if (gear.length) { section("Equipment", "Booked, then picked up", true); for (const l of gear) row(qtyText(l), l.desc, "", undefined, l.desc); }
+  if (del.length) { section("Deliveries and haul-away", "Booked = arranged with the supplier; done = on site or taken away", true); sub = { b: 0, q: 0, n: del.length }; for (const l of del) row(qtyText(l), l.desc, "", undefined, l.desc, pre(l)); }
+  if (gear.length) { section("Equipment", "Booked, then picked up", true); sub = { b: 0, q: 0, n: gear.length }; for (const l of gear) row(qtyText(l), l.desc, "", undefined, l.desc, pre(l)); }
+  subtotal();
+  // ---- budget summary
+  room(470); y += 30; x.textBaseline = "alphabetic"; x.textAlign = "left";
+  spaced(LL ? 5 : 2, () => { x.font = F(25, 600, HEAD); x.fillStyle = PC; x.fillText("BUDGET", M, y + 24); }); y += 40;
+  x.font = F(19, 400); x.fillStyle = MUTED; x.fillText("Materials, deliveries and equipment from the estimate, before GST and PST, against the supplier quotes entered so far.", M, y + 16); y += 34;
+  const left = round2(tally.Bq - tally.Q), sumRows = [["Budget", tally.B], ["Quoted so far", tally.Q, `for items budgeted at ${money(tally.Bq)}`], ["Not quoted yet (at budget)", tally.Bu], ["Estimated spend", round2(tally.Q + tally.Bu)]];
+  for (const [k, v, note] of sumRows) { x.font = F(23, 500); x.fillStyle = INK; x.fillText(k, M, y + 20); if (note) { x.font = F(19, 400); x.fillStyle = MUTED; x.fillText(note, M + 330, y + 20); } x.textAlign = "right"; x.font = F(23, 600); x.fillStyle = INK; x.fillText(money(v), M + CW, y + 20); x.textAlign = "left"; y += 36; }
+  x.strokeStyle = PC; x.lineWidth = 2; x.beginPath(); x.moveTo(M, y + 2); x.lineTo(M + CW, y + 2); x.stroke(); y += 10;
+  x.font = F(26, 600, HEAD); x.fillStyle = left >= 0 ? PC : "#a33a2a"; spaced(LL ? 3 : 1, () => x.fillText(left >= 0 ? "UNDER BUDGET SO FAR" : "OVER BUDGET SO FAR", M, y + 26));
+  x.textAlign = "right"; x.font = F(28, 700); x.fillText(money(Math.abs(left)), M + CW, y + 26); x.textAlign = "left"; y += 50;
+  // what the job's price leaves after these costs
+  const price = round2(q.beforeTax || 0), rest = round2(price - tally.Q - tally.Bu);
+  if (price > 0) {
+    for (const [k, v] of [["Job price before tax", price], ["Less estimated spend", -(tally.Q + tally.Bu)]]) { x.font = F(23, 500); x.fillStyle = INK; x.fillText(k, M, y + 20); x.textAlign = "right"; x.font = F(23, 600); x.fillText((v < 0 ? "− " : "") + money(Math.abs(v)), M + CW, y + 20); x.textAlign = "left"; y += 36; }
+    x.strokeStyle = PC; x.lineWidth = 1.2; x.beginPath(); x.moveTo(M, y + 2); x.lineTo(M + CW, y + 2); x.stroke(); y += 8;
+    x.font = F(24, 600); x.fillStyle = INK; x.fillText("Left for labour, overhead and profit", M, y + 24); x.textAlign = "right"; x.font = F(26, 700); x.fillStyle = rest >= 0 ? PC : "#a33a2a"; x.fillText(money(rest), M + CW, y + 24); x.textAlign = "left"; y += 44;
+  }
   // ---- sign-off
   room(120); y += 40; x.font = F(21, 400); x.fillStyle = MUTED; x.textBaseline = "alphabetic";
   x.fillText("Checked by", M, y); x.strokeStyle = INK; x.lineWidth = 1.2; x.beginPath(); x.moveTo(M + 130, y + 4); x.lineTo(M + 520, y + 4); x.stroke();
@@ -3967,7 +3996,10 @@ async function mlRender() { await brandAssets(); mlPagesCache = checklistPages()
 function mlTicks() {
   const q = estimate(), ls = q.lines.filter((l) => l.cat === "Materials" || l.cat === "Equipment & disposal");
   $("mlTicks").innerHTML = ls.map((l, i) => { const ck = (job.checks || {})[l.desc] || {};
-    return `<div class="row" style="gap:12px;padding:4px 8px;border-bottom:1px solid var(--line)"><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="o"${ck.o ? " checked" : ""}> Ordered</label><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="s"${ck.s ? " checked" : ""}> On site</label><span style="flex:1;min-width:0">${escapeHtml(num1(l.qty) + " " + l.unit + " · " + l.desc)}</span></div>`; }).join("");
+    return `<div class="row" style="gap:12px;padding:4px 8px;border-bottom:1px solid var(--line)"><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="o"${ck.o ? " checked" : ""}> Ordered</label><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="s"${ck.s ? " checked" : ""}> On site</label><span style="flex:1;min-width:0">${escapeHtml(num1(l.qty) + " " + l.unit + " · " + l.desc)}</span><input class="in" style="width:96px" inputmode="decimal" placeholder="Quoted $" aria-label="Quoted price, before tax" data-mq="${i}" value="${ck.q != null ? ck.q : ""}"><input class="in" style="width:120px" placeholder="Quote no." aria-label="Quote number" data-mr="${i}" value="${escapeHtml(ck.ref || "")}"></div>`; }).join("");
+  const setCk = (l, f) => { const ch = { ...(job.checks || {}) }, v = { ...(ch[l.desc] || {}) }; f(v); if (v.o || v.s || v.q != null || v.ref) ch[l.desc] = v; else delete ch[l.desc]; snapshot(); job.checks = ch; commit(); mlRender(); };
+  $("mlTicks").querySelectorAll("[data-mq]").forEach((b) => b.onchange = () => setCk(ls[+b.dataset.mq], (v) => { const n = parseFloat(String(b.value).replace(/[$,]/g, "")); if (isFinite(n)) v.q = round2(n); else delete v.q; }));
+  $("mlTicks").querySelectorAll("[data-mr]").forEach((b) => b.onchange = () => setCk(ls[+b.dataset.mr], (v) => { const t = b.value.trim(); if (t) v.ref = t; else delete v.ref; }));
   $("mlTicks").querySelectorAll("[data-ml]").forEach((b) => b.onchange = () => {
     const l = ls[+b.dataset.ml], ch = { ...(job.checks || {}) }, v = { ...(ch[l.desc] || {}) }; v[b.dataset.k] = b.checked;
     if (v.o || v.s) ch[l.desc] = v; else delete ch[l.desc]; snapshot(); job.checks = ch; commit(); mlRender();
@@ -4292,7 +4324,7 @@ function sanitizeJob(j) {
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
-      checks: Object.fromEntries(Object.entries(j.checks && typeof j.checks === "object" ? j.checks : {}).slice(0, 300).map(([k, v]) => [String(k).slice(0, 160), { o: !!(v && v.o), s: !!(v && v.s) }]).filter(([, v]) => v.o || v.s)),
+      checks: Object.fromEntries(Object.entries(j.checks && typeof j.checks === "object" ? j.checks : {}).slice(0, 300).map(([k, v]) => [String(k).slice(0, 160), { o: !!(v && v.o), s: !!(v && v.s), ...(v && v.q != null && isFinite(+v.q) && v.q !== "" ? { q: round2(+v.q) } : {}), ...(v && v.ref ? { ref: String(v.ref).slice(0, 60) } : {}) }]).filter(([, v]) => v.o || v.s || v.q != null || v.ref)),
       neg: Object.fromEntries(Object.entries(j.neg && typeof j.neg === "object" ? j.neg : {}).filter(([k, v]) => v === true && /^[a-z0-9]{1,20}$/i.test(k)).slice(0, 40)),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
