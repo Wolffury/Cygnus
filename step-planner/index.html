@@ -302,6 +302,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <button class="btn" id="exportBtn">Export sheet</button>
     <button class="btn" id="mailTop">Order emails</button>
     <button class="btn primary" id="cpTop">Client package</button>
+    <button class="btn" id="mlTop">Materials checklist</button>
     <button class="btn" id="printBtn">Print</button>
   </header>
 
@@ -4005,7 +4006,7 @@ function mlTicks() {
     if (v.o || v.s) ch[l.desc] = v; else delete ch[l.desc]; snapshot(); job.checks = ch; commit(); mlRender();
   });
 }
-$("mlOpen").onclick = () => { $("mlDlg").hidden = false; mlTicks(); mlRender(); };
+$("mlOpen").onclick = $("mlTop").onclick = () => { $("mlDlg").hidden = false; mlTicks(); mlRender(); };
 $("mlClose").onclick = () => { $("mlDlg").hidden = true; };
 $("mlPdf").onclick = async () => { try { const out = []; for (const pg of mlPagesCache) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } saveFile(`${slug(job.name || "job")}_materials_checklist.pdf`, pdfFromJpegs(out)); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
 $("mlPrint").onclick = () => printPages(mlPagesCache, `${slug(job.name || "job")}_materials_checklist.pdf`);
