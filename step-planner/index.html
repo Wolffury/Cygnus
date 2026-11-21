@@ -450,6 +450,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
       <div class="pane" id="pQuote" role="tabpanel" hidden>
         <h2>Estimate &amp; quote</h2>
         <button class="btn primary" id="cpOpen">Client package: preview, pick pages, print or PDF</button>
+        <button class="btn" id="mlOpen">Materials checklist: print or PDF</button>
         <div id="quoteSummary"></div>
         <details id="negBox"><summary>Room to negotiate (only you see this)</summary><div id="negList"></div></details>
         <h3>Where to buy</h3>
@@ -702,6 +703,15 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     </div>
     <p class="note" id="cpInfo"></p>
     <div class="row"><button class="btn primary" id="cpPdf">Save PDF (to print or send)</button><button class="btn" id="cpPrintBtn">Print</button><button class="btn" id="cpLedger">Send to Ledgerline</button><button class="btn" id="cpPics">Save pictures (for Ledgerline)</button></div>
+  </div>
+</div>
+<div class="modal" id="mlDlg" hidden role="dialog" aria-modal="true" aria-labelledby="mlTitle">
+  <div class="modalbox wide">
+    <div class="row" style="justify-content:space-between"><h2 id="mlTitle">Materials checklist</h2><button class="btn" id="mlClose" aria-label="Close">✕</button></div>
+    <p class="note">Everything to order for this job, grouped by supplier, with boxes to tick when it's ordered and when it's on site, then the deliveries and equipment. Quantities come from the quote. For your own use: no prices.</p>
+    <details id="mlTickBox"><summary>Tick what's ordered and what's on site</summary><div id="mlTicks" class="list" style="max-height:30vh;overflow:auto"></div></details>
+    <div class="cppages" id="mlPages" aria-label="Preview of the materials checklist" style="max-height:52vh"></div>
+    <div class="row"><button class="btn primary" id="mlPdf">Save PDF</button><button class="btn" id="mlPrint">Print</button></div>
   </div>
 </div>
 <div id="cpPrint"></div>
@@ -3875,6 +3885,106 @@ $("cpOpen").onclick = cpShow; $("cpTop").onclick = cpShow;
 $("mailTop").onclick = () => { showPane("pMail"); document.querySelector(".panel").scrollIntoView({ behavior: "smooth", block: "start" }); $("pMail").scrollIntoView({ block: "nearest" }); };
 $("prClient").onclick = () => { $("printDlg").hidden = true; cpShow(); };
 $("cpClose").onclick = () => { $("cpDlg").hidden = true; };
+// ---------- materials checklist: what to order, by supplier, to tick off as it's ordered and as it arrives ----------
+function checklistPages() {
+  const D = 150, W = 8.5 * D, H = 11 * D, co = company(), LL = co.look !== "plain", q = estimate(), E = q.E, pages = []; let c, x, y = 0;
+  const PC = LL ? (/^#[0-9a-f]{6}$/i.test(co.color || "") ? co.color : "#8B6B3E") : "#173f73";
+  const SANS = `"IBM Plex Sans", system-ui, sans-serif`, SERIF = `"EB Garamond", Garamond, Georgia, serif`, CAPS = `Cinzel, "Trajan Pro", Georgia, serif`;
+  const F = (size, weight = 400, fam) => `${weight} ${size}px ${fam || (LL ? SERIF : SANS)}`, HEAD = LL ? CAPS : SANS;
+  const INK = LL ? "#2A2520" : "#1c2530", MUTED = LL ? "#6E655B" : "#5d6b7a", RULE = LL ? "#E8E2D9" : "#dde3ea";
+  const M = LL ? 0.78 * D : 0.6 * D, CW = W - 2 * M, foot = 0.55 * D;
+  const spaced = (px, fn) => { const had = x.letterSpacing; try { x.letterSpacing = px + "px"; } catch {} fn(); try { x.letterSpacing = had || "0px"; } catch {} };
+  const page = () => {
+    c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M;
+    if (LL) { x.strokeStyle = tintHex(PC, 0.55); x.lineWidth = 1.6; x.strokeRect(38, 38, W - 76, H - 76); x.strokeStyle = tintHex(PC, 0.28); x.lineWidth = 1.2; x.strokeRect(46, 46, W - 92, H - 92); }
+  };
+  const room = (h) => { if (y + h > H - M - foot) { page(); return true; } return false; };
+  // columns: ordered box, on-site box, quantity, item, notes line
+  const cx = { ord: M + 4, site: M + 130, qty: M + 300, item: M + 318, notes: M + CW * 0.72 }, BOX = 26, LH = 31;
+  const header = () => {
+    x.textBaseline = "alphabetic";
+    spaced(3, () => { x.font = F(15, 600, HEAD); x.fillStyle = PC; x.textAlign = "center"; x.fillText("ORDERED", cx.ord + 22 + BOX / 2, y); x.fillText("ON SITE", cx.site + 18 + BOX / 2, y); x.textAlign = "right"; x.fillText("QTY", cx.qty, y); x.textAlign = "left"; x.fillText("ITEM", cx.item, y); x.fillText("NOTES", cx.notes, y); });
+    y += 12; x.strokeStyle = PC; x.lineWidth = 2; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 16;
+  };
+  const section = (title, sub, cols = true) => {
+    room(150); y += 18; x.textBaseline = "alphabetic"; x.textAlign = "left";
+    spaced(LL ? 5 : 2, () => { x.font = F(25, 600, HEAD); x.fillStyle = PC; x.fillText(title.toUpperCase(), M, y + 24); });
+    y += 34; if (sub) { x.font = F(20, 400); x.fillStyle = MUTED; x.fillText(sub, M, y + 18); y += 28; }
+    y += 14; if (cols) header();
+  };
+  const box = (bx, by, on) => { x.strokeStyle = INK; x.lineWidth = 2; x.strokeRect(bx, by, BOX, BOX); if (on) { x.strokeStyle = PC; x.lineWidth = 4; x.lineCap = "round"; x.beginPath(); x.moveTo(bx + 5, by + 14); x.lineTo(bx + 11, by + 21); x.lineTo(bx + 22, by + 5); x.stroke(); x.lineCap = "butt"; } };
+  const row = (qty, item, sub, cols = ["ord", "site"], key = item) => { const ck = (job.checks || {})[key] || {};
+    const lines = wrapLines(x, item, cx.notes - cx.item - 24, F(23, 500)), subs = sub ? wrapLines(x, sub, cx.notes - cx.item - 24, F(19, 400)) : [];
+    const h = Math.max(BOX + 14, lines.length * LH + subs.length * 25 + 14);
+    if (room(h)) header();
+    const top = y + 6; for (const k of cols) box(cx[k] + (k === "ord" ? 22 : 18), top, k === "ord" ? ck.o : ck.s);
+    x.textBaseline = "top"; x.textAlign = "right"; x.font = F(23, 600); x.fillStyle = INK; x.fillText(qty, cx.qty, top + 2);
+    x.textAlign = "left"; lines.forEach((ln, i) => { x.font = F(23, 500); x.fillStyle = INK; x.fillText(ln, cx.item, top + 2 + i * LH); });
+    subs.forEach((ln, i) => { x.font = F(19, 400); x.fillStyle = MUTED; x.fillText(ln, cx.item, top + 4 + lines.length * LH + i * 25); });
+    x.strokeStyle = RULE; x.lineWidth = 1.2; x.beginPath(); x.moveTo(cx.notes, top + BOX); x.lineTo(M + CW, top + BOX); x.stroke();
+    y += h; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke();
+  };
+  const qtyText = (l) => { const n = num1(l.qty); return l.unit === "ea" ? n : `${n} ${l.unit}`; };
+  const strip = (d) => d.replace(/^Abbotsford /, "");
+  // ---- page 1 heading
+  page(); x.textAlign = "left"; x.textBaseline = "alphabetic";
+  spaced(LL ? 6 : 1, () => { x.font = F(40, 600, HEAD); x.fillStyle = INK; x.fillText((co.name || "Materials").toUpperCase(), M, y + 34); });
+  y += 50; spaced(LL ? 5 : 2, () => { x.font = F(24, 600, HEAD); x.fillStyle = PC; x.fillText("MATERIALS CHECKLIST", M, y + 20); });
+  y += 44;
+  const info = [["Job", job.name || ""], ["Client", job.client || ""], ["Site", job.address || ""], ["Quote", quoteNo()], ["Printed", new Date().toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })]].filter((r) => r[1]);
+  for (const [k, v] of info) { x.font = F(21, 400); x.fillStyle = MUTED; x.fillText(k, M, y + 18); x.font = F(23, 500); x.fillStyle = INK; x.fillText(v, M + 120, y + 18); y += 32; }
+  y += 6; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke();
+  // ---- materials by supplier
+  const groups = new Map();
+  for (const l of q.lines.filter((l) => l.cat === "Materials")) {
+    const k = mailSup(l, E), sup = MAIL_SUPS.find((s) => s.k === k), name = sup ? sup.name : "Gravel, rock and sand (local)";
+    if (!groups.has(name)) groups.set(name, []); groups.get(name).push(l);
+  }
+  for (const [name, ls] of groups) {
+    const sup = (typeof suppliers === "function" ? suppliers() : []).find((s) => s.name === name);
+    section(name, sup ? [sup.phone, sup.address].filter(Boolean).join(" · ") : "");
+    for (const l of ls) row(qtyText(l), strip(l.desc), /incl\. \d+% waste/.test(l.note || "") ? (l.note.match(/incl\. \d+% waste/) || [""])[0] : "", undefined, l.desc);
+  }
+  // ---- what the client supplies
+  const R = job.est || {}, rails = job.items.filter((i) => i.type === "rail");
+  if (rails.length && R.railOwner) { section("Supplied by the client", "", false); row("", R.railOwner === 2 ? "The whole handrail: posts and rails, in the client's choice of materials" : "Handrail rails (and any painting)", R.railOwner === 2 ? "Post positions are marked on the plan" : "", []); }
+  // ---- deliveries and equipment
+  const eq = q.lines.filter((l) => l.cat === "Equipment & disposal");
+  const del = eq.filter((l) => /deliver|ferry|fuel|truck|load|haul-away|disposal/i.test(l.desc)), gear = eq.filter((l) => !del.includes(l));
+  if (del.length) { section("Deliveries and haul-away", "Booked = arranged with the supplier; done = on site or taken away", true); for (const l of del) row(qtyText(l), l.desc, "", undefined, l.desc); }
+  if (gear.length) { section("Equipment", "Booked, then picked up", true); for (const l of gear) row(qtyText(l), l.desc, "", undefined, l.desc); }
+  // ---- sign-off
+  room(120); y += 40; x.font = F(21, 400); x.fillStyle = MUTED; x.textBaseline = "alphabetic";
+  x.fillText("Checked by", M, y); x.strokeStyle = INK; x.lineWidth = 1.2; x.beginPath(); x.moveTo(M + 130, y + 4); x.lineTo(M + 520, y + 4); x.stroke();
+  x.fillText("Date", M + 580, y); x.beginPath(); x.moveTo(M + 650, y + 4); x.lineTo(M + CW, y + 4); x.stroke();
+  // ---- footers
+  pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(18, 400); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left";
+    g.fillText(`${co.name ? co.name + " · " : ""}${job.name || "Job"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
+  return pages;
+}
+let mlPagesCache = [];
+async function mlRender() { await brandAssets(); mlPagesCache = checklistPages(); $("mlPages").innerHTML = ""; for (const pg of mlPagesCache) { const f = document.createElement("figure"), im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.85); im.alt = "Checklist page"; f.appendChild(im); $("mlPages").appendChild(f); } }
+function mlTicks() {
+  const q = estimate(), ls = q.lines.filter((l) => l.cat === "Materials" || l.cat === "Equipment & disposal");
+  $("mlTicks").innerHTML = ls.map((l, i) => { const ck = (job.checks || {})[l.desc] || {};
+    return `<div class="row" style="gap:12px;padding:4px 8px;border-bottom:1px solid var(--line)"><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="o"${ck.o ? " checked" : ""}> Ordered</label><label class="checkrow"><input type="checkbox" data-ml="${i}" data-k="s"${ck.s ? " checked" : ""}> On site</label><span style="flex:1;min-width:0">${escapeHtml(num1(l.qty) + " " + l.unit + " · " + l.desc)}</span></div>`; }).join("");
+  $("mlTicks").querySelectorAll("[data-ml]").forEach((b) => b.onchange = () => {
+    const l = ls[+b.dataset.ml], ch = { ...(job.checks || {}) }, v = { ...(ch[l.desc] || {}) }; v[b.dataset.k] = b.checked;
+    if (v.o || v.s) ch[l.desc] = v; else delete ch[l.desc]; snapshot(); job.checks = ch; commit(); mlRender();
+  });
+}
+$("mlOpen").onclick = () => { $("mlDlg").hidden = false; mlTicks(); mlRender(); };
+$("mlClose").onclick = () => { $("mlDlg").hidden = true; };
+$("mlPdf").onclick = async () => { try { const out = []; for (const pg of mlPagesCache) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } saveFile(`${slug(job.name || "job")}_materials_checklist.pdf`, pdfFromJpegs(out)); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
+$("mlPrint").onclick = () => {
+  const box = $("cpPrint"); box.innerHTML = "";
+  for (const pg of mlPagesCache) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
+  document.body.classList.add("cp-printing");
+  const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  try { window.print(); } catch { done(); toast("This screen can't print directly. Tap Save PDF and print the PDF."); return; }
+  setTimeout(() => { if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 1500);
+};
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
 for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).addEventListener("change", (e) => { store.set("bsp.company", { ...company(), [k]: e.target.value }); if (cdoc().timeline == null) $("cpTime").value = timelineAuto(); cpRender(); });
@@ -4186,6 +4296,7 @@ function sanitizeJob(j) {
           tides: Array.isArray(d.tides) ? d.tides.slice(0, 200).filter((r) => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).map((r) => ({ date: r.date, phase: String(r.phase || "").slice(0, 60), tides: (Array.isArray(r.tides) ? r.tides : []).slice(0, 6).map((x) => [String(x[0]).slice(0, 5), x[1] === "H" ? "H" : "L", num(x[2], 0, -5, 10)]), wmin: Array.isArray(r.wmin) ? [String(r.wmin[0]).slice(0, 5), num(r.wmin[1], 0, -5, 10)] : null })) : null,
           tideNote: t(d.tideNote, 1500), value: t(d.value, 6000), care: t(d.care, 4000), parts: { ...CP_PARTS_ON, ...(d.parts && typeof d.parts === "object" ? Object.fromEntries(Object.entries(d.parts).filter(([k]) => k in CP_PARTS_ON).map(([k, v]) => [k, !!v])) : {}) } }; })(),
       mail: Object.fromEntries(["slegg", "windsor", "dugums", "gabion"].map((k) => ({ k })).filter((m) => j.mail && j.mail[m.k] && typeof j.mail[m.k] === "object").map((m) => { const o = j.mail[m.k], t = (x, n) => typeof x === "string" ? x.slice(0, n) : undefined; return [m.k, { subject: t(o.subject, 200), body: t(o.body, 8000), sent: t(o.sent, 30) || "" }]; })),
+      checks: Object.fromEntries(Object.entries(j.checks && typeof j.checks === "object" ? j.checks : {}).slice(0, 300).map(([k, v]) => [String(k).slice(0, 160), { o: !!(v && v.o), s: !!(v && v.s) }]).filter(([, v]) => v.o || v.s)),
       neg: Object.fromEntries(Object.entries(j.neg && typeof j.neg === "object" ? j.neg : {}).filter(([k, v]) => v === true && /^[a-z0-9]{1,20}$/i.test(k)).slice(0, 40)),
       hideLines: (Array.isArray(j.hideLines) ? j.hideLines : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 80)),
       pick: (Array.isArray(j.pick) ? j.pick : []).filter((x) => typeof x === "string").slice(0, 200).map((x) => x.slice(0, 40)),
@@ -5002,7 +5113,7 @@ function mailQty(q, unit) {
 }
 // which supplier each quote line is ordered from
 function mailSup(l, E) {
-  if (/^¾" road base|^road base/i.test(l.desc)) return E.bulkSep ? "dugums" : "slegg";
+  if (/^¾" road base|^road base|^¾" crushed gravel|^gravel for/i.test(l.desc)) return E.bulkSep ? "dugums" : "slegg";
   if (E.bulkSep && /^¾" clear drain rock|^bedding sand|^gabion stone/i.test(l.desc)) return ""; // small amounts: not on the Hiab (weight) or the road base order
   if (/^gabion mesh|^lacing wire|c-rings|^gabion basket/i.test(l.desc)) return "gabion";
   if (E.railPlastic && /recycled plastic lumber|^exterior paint|^primer/i.test(l.desc)) return "windsor";
