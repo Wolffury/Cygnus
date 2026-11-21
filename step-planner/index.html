@@ -885,7 +885,7 @@ const DEFAULTS = { block: "ab-classic", color: "Grey", cap: "pcm18", capColor: "
 const EST_DEFAULTS = {
   labourRate: 85, waste: 5, baseDepth: 6, hrStepBlock: 0.35, hrCut: 0.15, hrCap: 0.25, hrWallBlock: 0.15, hrPaveSqft: 0.12, hrSlab: 0.2, hrSurfSqft: 0.06,
   hrExcavYd: 1.0, hrBaseTon: 0.5, basePerTon: 38, drainPerYd: 65, drainPipeFt: 2.5, fabricSqft: 0.15, hrDrainFt: 0.2, hrGabion: 1.5, hrPlanning: 12, railPlastic: 0, plasticTopPerFt: 8.5, plasticRailPerFt: 6, railPaint: 0, railOwner: 0, paintPerGal: 80, primerPerGal: 60, hrPaintSqft: 0.015, gabionDiy: 0, gabionTide: 0, meshM2: 43, lacingCoil: 35, ringEach: 0.35, gabionStoneYd: 88, hrGabionBuild: 1.5, sandPerYd: 70, polyBag: 38, adhesive: 12, capsPerTube: 6,
-  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, railHardware: 8, hrRailFt: 0.3,
+  barrow: 0, barrowKg: 300, barrowMin: 12, barrowDay: 0, barrowHrsDay: 8, ferryPerFt: 0, ferryIncl: 0, bulkSep: 0, bulkDelivery: 0, truckKg: 14000, truckFt: 30, ferryLoads: 1, ferryWays: 1, haulSelf: 0, payloadKg: 1000, rigFt: 32, fareBase: 89, farePerFtOver: 8, hrsPerTrip: 3, haulBulk: 1, edgePerFt: 1.6, edgeSpike: 0.6, hrEdgeFt: 0.05, railTopPerFt: 4.5, railPerFt: 3, railPost: 45, concreteBag: 9, concreteBagKg: 30, railHardware: 8, hrRailFt: 0.3,
   equipment: 450, delivery: 175, disposalPerYd: 55, contingency: 5, markup: 20, gst: 5, chargeGst: 1, pst: 7, deposit: 30, validDays: 30,
 };
 function stepDefaults(d) {
@@ -2898,7 +2898,7 @@ function estimateRaw() {
   }
   if (E.railOwner !== 2) {
     L("Materials", "Handrail posts, galvanized pipe", w.railPosts, "ea", E.railPost);
-    L("Materials", "Concrete for post footings (30 kg bags)", w.railPosts * 2, "bag", E.concreteBag);
+    L("Materials", `Concrete for post footings (${E.concreteBagKg || 30} kg bags)`, Math.ceil(w.railPosts * 60 / (E.concreteBagKg || 30)), "bag", E.concreteBag); // about 60 kg of mix a post
     L("Materials", "Handrail brackets, bolts and screws", w.railPosts, "set", E.railHardware);
   }
   L("Materials", "Concrete cap adhesive", Math.ceil(w.adhesiveCaps / Math.max(1, E.capsPerTube)), "tube", E.adhesive);
@@ -2983,7 +2983,7 @@ const EST_FIELDS = [
   ["baseDepth", 'Base depth (in)'], ["basePerTon", "Road base $/ton"], ["drainPerYd", "Drain rock $/yd³"], ["sandPerYd", "Bedding sand $/yd³"],
   ["polyBag", "Polymeric sand $/bag"], ["adhesive", "Adhesive $/tube"], ["capsPerTube", "Caps per tube"], ["equipment", "Equipment $ (lot)"],
   ["delivery", "Delivery $ per truck load"], ["disposalPerYd", "Disposal $/yd³"], ["hrStepBlock", "Hours per step block"], ["hrCap", "Hours per cap"],
-  ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["plasticTopPerFt", "Plastic lumber 2x6 $/ft"], ["plasticRailPerFt", "Plastic lumber 2x4 $/ft"], ["paintPerGal", "Exterior paint $/gal"], ["primerPerGal", "Primer $/gal"], ["hrPaintSqft", "Hours per sq ft per coat of paint"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
+  ["edgePerFt", "Plastic edging $/ft"], ["edgeSpike", "Edging spike $"], ["hrEdgeFt", "Hours per ft of edging"], ["railTopPerFt", "Handrail 2x6 $/ft"], ["railPerFt", "Handrail 2x4 $/ft"], ["plasticTopPerFt", "Plastic lumber 2x6 $/ft"], ["plasticRailPerFt", "Plastic lumber 2x4 $/ft"], ["paintPerGal", "Exterior paint $/gal"], ["primerPerGal", "Primer $/gal"], ["hrPaintSqft", "Hours per sq ft per coat of paint"], ["railPost", "Handrail post $"], ["concreteBag", "Concrete $/bag"], ["concreteBagKg", "Concrete bag size (kg)"], ["railHardware", "Rail hardware $/post"], ["hrRailFt", "Hours per ft of handrail"],
   ["hrCut", "Hours per cut piece"], ["hrWallBlock", "Hours per wall block"], ["hrPaveSqft", "Hours per sq ft paver"], ["hrSlab", "Hours per slab"],
   ["hrSurfSqft", "Hours per sq ft other surface"], ["hrExcavYd", "Hours per yd³ excavation (about 1 by machine, 3 by hand)"], ["hrDrainFt", "Hours per ft of drain line"], ["hrGabion", "Hours per gabion basket (set and fill)"], ["hrPlanning", "Hours of free estimate and planning (not charged)"], ["hrGabionBuild", "Hours to build a gabion basket from mesh"], ["meshM2", "Gabion mesh $ per m²"], ["lacingCoil", "Lacing wire $ per 50 m coil"], ["ringEach", "C-rings $ each"], ["gabionStoneYd", "Gabion stone $ per yd³"], ["drainPipeFt", "Drain pipe $ per ft"], ["fabricSqft", "Filter fabric $ per sq ft"], ["hrBaseTon", "Hours per ton base"],
 ];
