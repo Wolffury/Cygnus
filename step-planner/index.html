@@ -3976,15 +3976,7 @@ function mlTicks() {
 $("mlOpen").onclick = () => { $("mlDlg").hidden = false; mlTicks(); mlRender(); };
 $("mlClose").onclick = () => { $("mlDlg").hidden = true; };
 $("mlPdf").onclick = async () => { try { const out = []; for (const pg of mlPagesCache) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } saveFile(`${slug(job.name || "job")}_materials_checklist.pdf`, pdfFromJpegs(out)); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
-$("mlPrint").onclick = () => {
-  const box = $("cpPrint"); box.innerHTML = "";
-  for (const pg of mlPagesCache) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
-  document.body.classList.add("cp-printing");
-  const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); };
-  window.addEventListener("afterprint", done);
-  try { window.print(); } catch { done(); toast("This screen can't print directly. Tap Save PDF and print the PDF."); return; }
-  setTimeout(() => { if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 1500);
-};
+$("mlPrint").onclick = () => printPages(mlPagesCache, `${slug(job.name || "job")}_materials_checklist.pdf`);
 for (const [id, k, conv] of [["cpStart", "start", String], ["cpCrew", "crew", (v) => clamp(parseFloat(v) || 2, 1, 20)], ["cpHrs", "hrs", (v) => clamp(parseFloat(v) || 8, 1, 16)], ["cpLead", "lead", (v) => clamp(parseFloat(v) || 0, 0, 120)]])
   $(id).addEventListener("change", (e) => { const d = cdoc(); d[k] = conv(e.target.value); if (d.timeline == null) $("cpTime").value = timelineAuto(); cpSave(); cpRender(); });
 for (const [id, k] of [["cpOffFrom", "offFrom"], ["cpOffTo", "offTo"]]) $(id).addEventListener("change", (e) => { store.set("bsp.company", { ...company(), [k]: e.target.value }); if (cdoc().timeline == null) $("cpTime").value = timelineAuto(); cpRender(); });
@@ -3999,16 +3991,20 @@ $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = sc
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
 async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
 $("cpPdf").onclick = async () => { try { if (!cpChosen().length) { toast("Tick at least one page."); return; } saveFile(`${slug(clientTitle())}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
-$("cpPrintBtn").onclick = () => {
-  if (!cpChosen().length) { toast("Tick at least one page."); return; }
+async function pagesPdf(pages, name) { const out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return saveFile(name, pdfFromJpegs(out)); }
+function printPages(pages, pdfName) {
   const box = $("cpPrint"); box.innerHTML = "";
-  for (const pg of cpChosen()) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
+  for (const pg of pages) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
   document.body.classList.add("cp-printing");
-  const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); };
-  window.addEventListener("afterprint", done);
-  try { window.print(); } catch { done(); toast("This screen can't print directly. Tap Save PDF and print the PDF."); return; }
-  setTimeout(() => { if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 1500);
-};
+  let opened = false; const seen = () => { opened = true; };
+  const done = () => { document.body.classList.remove("cp-printing"); box.innerHTML = ""; window.removeEventListener("afterprint", done); window.removeEventListener("beforeprint", seen); };
+  const fallback = () => { done(); pagesPdf(pages, pdfName).then(() => toast("This window can't open the print dialog, so the PDF was saved instead. Open it and print from there.")).catch(() => toast("This window can't print. Tap Save PDF and print the PDF.")); };
+  window.addEventListener("beforeprint", seen); window.addEventListener("afterprint", done);
+  try { window.print(); } catch { fallback(); return; }
+  // a blocked print dialog returns at once without a beforeprint event
+  setTimeout(() => { if (!opened) fallback(); else if (document.body.classList.contains("cp-printing") && !matchMedia("print").matches) done(); }, 700);
+}
+$("cpPrintBtn").onclick = () => { if (!cpChosen().length) { toast("Tick at least one page."); return; } printPages(cpChosen(), `${slug(clientTitle())}_${quoteNo()}_client.pdf`); };
 // ---------- Send to Ledgerline: one file Ledgerline's Estimates → Import turns into a full proposal ----------
 // Client, the same lines and taxes as the quote (so the totals match to the cent), the proposal sections and the pictures.
 function jpegUnder(cv, maxLen = 140000) { // Ledgerline keeps each photo under about 140 KB
