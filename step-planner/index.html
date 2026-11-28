@@ -717,6 +717,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
 </div>
 <div id="cpPrint"></div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js" defer></script>
 <script>
 "use strict";
@@ -3412,8 +3413,8 @@ function placeNames(ctx, names, X, Y, w, h, u, blocked) {
     ctx.font = font(n); ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = "#1d2733"; ctx.fillText(n.t, b[0] + 4 * u, (b[1] + b[3]) / 2); ctx.restore();
   }
 }
-const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["care", "Care and maintenance"], ["price", "Price"], ["terms", "Terms and signatures"]];
-const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, care: true, price: true, terms: true };
+const CP_PARTS = [["plan", "Plan"], ["side", "Side view"], ["three", "3D picture"], ["value", "Project value and benefits"], ["scope", "Scope of work"], ["excl", "Not included"], ["time", "Timeline"], ["tides", "Tide notes"], ["care", "Care and maintenance"], ["mats", "Materials, with photos online"], ["words", "Words used in this proposal"], ["price", "Price"], ["terms", "Terms and signatures"]];
+const CP_PARTS_ON = { plan: true, side: true, three: false, value: true, scope: true, excl: true, time: true, tides: true, care: true, mats: true, words: true, price: true, terms: true };
 function cdoc() { const d = job.clientDoc || (job.clientDoc = { scope: null, timeline: null, excl: null, start: "", crew: 1, hrs: 8, lead: 10, side: true, three: false }); if (!d.parts) d.parts = { ...CP_PARTS_ON, side: d.side !== false, three: !!d.three }; return d; }
 let cpSkip = new Set(); // pages left out of this PDF / print (by page number); cleared when the pages change
 const cleanName = (it) => shortLabel(it.label).replace(/\s*\bEL\b\s*[\d.]+"?/i, "").replace(/^\d+'\s*x\s*\d+'\s*/i, "").replace(/^./, (c) => c.toUpperCase()).trim();
@@ -3704,6 +3705,88 @@ function nautilusCanvas(hex, alpha = 1, size = 700) {
   return (_naut[key] = cv);
 }
 const tintHex = (hex, f) => { const n = parseInt(hex.slice(1), 16), t = (v) => Math.round(255 - (255 - v) * f); return `rgb(${t(n >> 16 & 255)},${t(n >> 8 & 255)},${t(n & 255)})`; };
+// The materials a client will see in the finished work, each with what it's for and a link to photos of it online
+function clientMaterials() {
+  const F = jobFacts(), E = F.E, its = job.items, out = new Map(), img = (q) => "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(q);
+  const nameOf = (m) => `${m.brand === "Generic" ? "" : m.brand === ABB ? "Abbotsford " : m.brand + " "}${m.line && m.brand !== "Generic" ? m.line + " " : ""}${m.name}`.replace(/\s+/g, " ").trim();
+  const add = (id, color, use) => { const m = mat(id); if (!m || /check size/i.test(m.name) && !/channel/i.test(m.name)) return; const k = id + "|" + (color || ""); const e = out.get(k) || { m, color, uses: new Set() }; e.uses.add(use); out.set(k, e); };
+  for (const i of its) {
+    if (i.type === "steps") { add(i.block, i.color, "the face of each step (the riser)"); if (i.cap) add(i.cap, i.capColor, "the top of each step, glued down (the tread)"); }
+    if (i.type === "landing" && !isGabion(mat(i.surface))) { add(i.surface, i.color, F.beach ? "the landings and terraces" : "the landings"); if (i.edge === "caps") { add(i.block, i.blockColor, "the low walls around the landings"); if (i.cap) add(i.cap, i.capColor, "the caps on those walls"); } }
+    if (i.type === "landing" && isGabion(mat(i.surface))) add(i.surface, i.color, "the steps at the bottom: wire baskets filled with rock");
+    if (i.type === "path") add(i.surface, i.color, "the walkway");
+    if (i.type === "wall") { add(i.block, i.color, "the retaining wall"); if (i.cap) add(i.cap, i.capColor, "the wall caps"); }
+  }
+  for (const g of F.pavers) add(g.m.id, g.color, "the paved surface");
+  for (const g of F.trims) add(g.m.id, g.color, F.steps ? "the step edges (nosings) and borders" : "the borders");
+  for (const g of F.chans) add(g.m.id, g.color, "the drain across the bottom, to catch surface water");
+  const list = [...out.values()].map((e) => { const nm = nameOf(e.m); return { m: e.m, color: e.color, name: nm + (e.color ? ` – ${e.color}` : ""), size: e.m.L ? `${fmtIn(e.m.L)} × ${fmtIn(e.m.D)} × ${fmtIn(e.m.H)}` : "", use: "Used for " + listAnd([...e.uses]) + ".", url: img(`${e.m.brand === ABB ? "Abbotsford Concrete " : ""}${nm.replace(/^Abbotsford /, "")} ${e.color || ""}`.trim()) }; });
+  const R = E.railOwner || 0;
+  if (F.rails.length && R !== 2) list.push({ name: "Galvanized steel handrail posts", use: "Used for the handrail posts, set in concrete" + (R ? ", ready for your rails." : "."), url: img("galvanized steel pipe handrail post"), pic: "posts" });
+  if (F.rails.length && !R) list.push({ name: E.railPlastic ? "Recycled plastic lumber rails" : "Cedar rails", use: `Used for the handrail itself: a 2x6 top rail and a 2x4 lower rail${E.railPaint ? ", primed and painted" : ""}.`, url: img(E.railPlastic ? "recycled plastic lumber handrail" : "cedar handrail on steel posts"), pic: "rails" });
+  if (F.edges.length || its.some((i) => i.edging === "plastic")) list.push({ name: "Plastic paver edge restraint", use: "Used along the sides, spiked down and hidden under the soil, to keep the pavers and gravel in place.", url: img("plastic paver edge restraint installed"), pic: "edging" });
+  if (F.drains.length) list.push({ name: "Perforated drain pipe in clear drain rock", use: "Used for the drain line that carries ground water away from the work, wrapped in filter fabric.", url: img("french drain perforated pipe drain rock filter fabric"), pic: "drain" });
+  list.push({ name: "Compacted gravel base", use: "Used under every step and landing: crushed gravel compacted in layers, so nothing settles.", url: img("compacted gravel base for pavers and steps"), pic: "base" });
+  return list;
+}
+// Plain meanings of the trade words the proposal uses, only the ones that apply to this job
+function glossary() {
+  const F = jobFacts(), its = job.items, g = [];
+  if (F.steps) { g.push(["Riser", "The upright face of a step: how high you lift your foot."], ["Tread", "The flat top of a step that you stand on. Here it is a concrete cap, glued down."]); }
+  if (F.trims.length && F.steps) g.push(["Nosing", "The front edge of a tread, in a contrasting stone so the edge is easy to see."]);
+  if (its.some((i) => i.type === "landing")) g.push(["Landing", "A flat resting area between flights of steps."]);
+  if (F.beach && its.some((i) => i.type === "landing")) g.push(["Terrace", "A wide, flat step on the gentle part of the slope."]);
+  if (F.flights.some((i) => i.cheek && i.cheek !== "none") || F.blocks.length) g.push(["Hidden wall", "Block buried under the edges of the steps or landings that holds them in place. You don't see it."]);
+  g.push(["Compacted base", "Layers of crushed gravel packed down with a compactor under the work, so it doesn't sink or heave."]);
+  if (F.edges.length || its.some((i) => i.edging === "plastic")) g.push(["Edge restraint", "Edging spiked along the sides to keep the pavers or gravel from spreading."]);
+  if (F.pavers.length) g.push(["Polymeric sand", "Sand swept into the joints between pavers that hardens when wet, to lock them and keep weeds out."]);
+  if (F.drains.length) g.push(["Drain line", "A perforated pipe in clean rock that collects ground water and carries it away."]);
+  if (F.chans.length) g.push(["Channel drain", "A narrow drain with a steel grate set flush with the paving to catch surface water."]);
+  if (F.gab.length) g.push(["Gabion", "A wire basket filled with rock, used here as a step that storms and waves can't wash away."]);
+  if (F.rails.length) g.push(["Handrail post", "An upright post set in concrete that holds the rail."]);
+  if (F.rails.length && (F.E.railOwner || 0) === 2) g.push(["Sleeve", "A short pipe set in concrete at each post position, so the posts can drop in after the paving is done."]);
+  return g;
+}
+// Simple drawings for the parts that aren't in the materials list: posts, rails, edging, the drain line and the gravel base
+function miniPic(x, W, H, kind) {
+  const bg = x.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#eef2f5"); bg.addColorStop(1, "#d9dee3"); x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  const rnd = (k) => { const v = Math.sin(k * 12.9898) * 43758.5453; return v - Math.floor(v); };
+  const stones = (x0, y0, w, h, base, n, r) => { x.fillStyle = base; x.fillRect(x0, y0, w, h); for (let k = 0; k < n; k++) { const sx = x0 + rnd(k) * w, sy = y0 + rnd(k + 99) * h, rr = r * (0.5 + rnd(k + 7)); x.fillStyle = `hsl(35, 6%, ${38 + rnd(k + 3) * 30}%)`; x.beginPath(); x.ellipse(sx, sy, rr, rr * 0.75, rnd(k + 5) * 3, 0, 7); x.fill(); } };
+  const label = (t) => { x.fillStyle = "#3a3f45"; x.font = `600 ${Math.round(H * 0.07)}px system-ui, sans-serif`; x.textAlign = "left"; x.textBaseline = "bottom"; x.fillText(t, W * 0.05, H * 0.96); };
+  if (kind === "posts" || kind === "rails") {
+    const g = H * 0.8; x.fillStyle = "#b9b1a3"; x.fillRect(0, g, W, H - g);
+    const xs = [0.22, 0.5, 0.78].map((f) => f * W), top = H * 0.2;
+    if (kind === "rails") { x.fillStyle = "#3a3a3a"; x.fillRect(W * 0.12, top - H * 0.05, W * 0.76, H * 0.06); x.fillRect(W * 0.14, H * 0.45, W * 0.72, H * 0.035); }
+    for (const px of xs) { const gr = x.createLinearGradient(px - W * 0.02, 0, px + W * 0.02, 0); gr.addColorStop(0, "#7f8790"); gr.addColorStop(0.5, "#d4d9de"); gr.addColorStop(1, "#6f777f"); x.fillStyle = gr; x.fillRect(px - W * 0.018, top, W * 0.036, g - top); x.fillStyle = "#9aa1a8"; x.fillRect(px - W * 0.05, g - H * 0.01, W * 0.1, H * 0.03); }
+    label(kind === "rails" ? "Rails on posts" : "Steel pipe posts in concrete"); return;
+  }
+  if (kind === "edging") {
+    stones(0, H * 0.35, W * 0.55, H * 0.45, "#a39d92", 260, W * 0.012);
+    x.fillStyle = "#6b5a45"; x.fillRect(W * 0.6, H * 0.3, W * 0.4, H * 0.5);
+    x.fillStyle = "#22252a"; x.fillRect(W * 0.55, H * 0.3, W * 0.05, H * 0.5); x.fillRect(W * 0.55, H * 0.72, W * 0.2, H * 0.06);
+    x.fillStyle = "#8c8f94"; for (const f of [0.6, 0.7]) x.fillRect(W * f, H * 0.68, W * 0.012, H * 0.2);
+    label("Edging holds the edge in"); return;
+  }
+  if (kind === "drain") {
+    x.fillStyle = "#7a6a55"; x.fillRect(0, 0, W, H); x.fillStyle = "#e9e4d6"; x.beginPath(); x.ellipse(W / 2, H * 0.48, W * 0.3, H * 0.3, 0, 0, 7); x.fill();
+    x.save(); x.beginPath(); x.ellipse(W / 2, H * 0.48, W * 0.28, H * 0.28, 0, 0, 7); x.clip(); stones(0, 0, W, H, "#b8b3a8", 520, W * 0.014); x.restore();
+    x.fillStyle = "#2c2f33"; x.beginPath(); x.arc(W / 2, H * 0.52, H * 0.12, 0, 7); x.fill(); x.fillStyle = "#4a4e54"; x.beginPath(); x.arc(W / 2, H * 0.52, H * 0.09, 0, 7); x.fill();
+    x.fillStyle = "#e9e4d6"; for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; x.beginPath(); x.arc(W / 2 + Math.cos(a) * H * 0.105, H * 0.52 + Math.sin(a) * H * 0.105, H * 0.012, 0, 7); x.fill(); }
+    label("Pipe in rock, wrapped in fabric"); return;
+  }
+  // gravel base: layers under a step
+  x.fillStyle = "#6b5a45"; x.fillRect(0, H * 0.78, W, H * 0.22);
+  stones(0, H * 0.45, W, H * 0.33, "#9c968a", 420, W * 0.01);
+  x.fillStyle = "#c7c3bb"; x.fillRect(W * 0.15, H * 0.22, W * 0.7, H * 0.23); x.fillStyle = "#b6b1a8"; x.fillRect(W * 0.15, H * 0.22, W * 0.7, H * 0.04);
+  x.strokeStyle = "rgba(60,60,60,.5)"; x.setLineDash([W * 0.02, W * 0.015]); x.lineWidth = 2; for (const f of [0.56, 0.67]) { x.beginPath(); x.moveTo(0, H * f); x.lineTo(W, H * f); x.stroke(); } x.setLineDash([]);
+  label("Gravel packed down in layers");
+}
+// A QR code as a picture (needs the qrcode-generator script; none if it hasn't loaded)
+function qrCanvas(text, size) {
+  if (typeof qrcode !== "function") return null;
+  try { const q = qrcode(0, "M"); q.addData(text); q.make(); const n = q.getModuleCount(), c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d"), cell = size / (n + 4);
+    x.fillStyle = "#fff"; x.fillRect(0, 0, size, size); x.fillStyle = "#1F1B17"; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(Math.floor((k + 2) * cell), Math.floor((r + 2) * cell), Math.ceil(cell), Math.ceil(cell)); return c; } catch { return null; }
+}
 function clientPages() {
   const d = cdoc(), D = 150, W = 8.5 * D, H = 11 * D, qd = quoteData(), co = qd.company, cfull = company(), pages = []; let c, x, y = 0;
   const LL = cfull.look !== "plain"; // the Ledgerline look: engraved letterhead, bronze frame, shell watermark
@@ -3779,6 +3862,27 @@ function clientPages() {
   if (on.value) { head("Project value and benefits"); bullets(d.value ?? valueAuto(), "✓"); }
   if (on.scope) { head("Scope of work"); bullets(d.scope ?? scopeAuto()); }
   const ex = d.excl ?? exclAuto(); if (on.excl && ex.trim()) { if (!on.scope) head("Not included"); else { y += 6; text("Not included:", 24, { weight: 600, after: 4 }); } bullets(ex, "–"); }
+  if (on.mats) { const list = clientMaterials(); if (list.length) {
+    head("Materials, with photos online");
+    text("What your project is built with. Scan a code with your phone's camera, or click it in the PDF, to see photos of each one online.", LL ? 22 : 21, { color: MUTED, after: 14 });
+    const PH = 190, PW = 250, QR = 150;
+    for (const e of list) {
+      const tw = CW - PW - QR - 60, nameL = wrapLines(x, e.name, tw, F(25, 600)), useL = wrapLines(x, e.use, tw, F(21)), boxH = Math.max(PH, 40 + nameL.length * 32 + (e.size ? 30 : 0) + useL.length * 28) + 22;
+      room(boxH); const top = y;
+      const pc = document.createElement("canvas"); pc.width = PW * 2; pc.height = PH * 2; const pctx = pc.getContext("2d");
+      if (e.m) drawMaterialPic(pctx, PW * 2, PH * 2, e.m, e.color, false); else miniPic(pctx, PW * 2, PH * 2, e.pic);
+      x.drawImage(pc, M, top, PW, PH); x.strokeStyle = RULE; x.lineWidth = 1.5; x.strokeRect(M, top, PW, PH);
+      let ty = top + 2; x.textBaseline = "top"; x.textAlign = "left";
+      for (const ln of nameL) { x.font = F(25, 600); x.fillStyle = INK; x.fillText(ln, M + PW + 24, ty); ty += 32; }
+      if (e.size) { x.font = F(20); x.fillStyle = MUTED; x.fillText(e.size, M + PW + 24, ty + 2); ty += 30; }
+      for (const ln of useL) { x.font = F(21); x.fillStyle = "#443C34"; x.fillText(ln, M + PW + 24, ty + 4); ty += 28; }
+      const qx = M + CW - QR, qr = qrCanvas(e.url, QR);
+      if (qr) { x.drawImage(qr, qx, top); x.font = F(16); x.fillStyle = MUTED; x.textAlign = "center"; x.fillText("Scan for photos", qx + QR / 2, top + QR + 4); x.textAlign = "left"; }
+      else { x.font = F(18); x.fillStyle = PC; x.textAlign = "right"; x.fillText("Photos online ›", M + CW, top + 4); x.textAlign = "left"; }
+      (c.__links = c.__links || []).push({ x: M, y: top, w: CW, h: Math.max(PH, QR + 24), url: e.url });
+      y = top + boxH; x.fillStyle = RULE; x.fillRect(M, y - 10, CW, 1);
+    }
+  } }
   if (on.time) { head("Timeline"); bullets(d.timeline ?? timelineAuto()); }
   if (on.tides && d.tides && d.tides.length) {
     head("Tides at the beach");
@@ -3796,6 +3900,7 @@ function clientPages() {
     y += 10;
   }
   if (on.care) { const c = d.care ?? careAuto(); if (c.trim()) { head("Care and maintenance"); bullets(c); } }
+  if (on.words) { const g = glossary(); if (g.length) { head("Words used in this proposal"); for (const [w, t] of g) { room(60); text(w, LL ? 24 : 23, { weight: 600, after: 2 }); text(t, LL ? 22 : 21, { color: "#443C34", after: 12, indent: 0 }); } } }
   if (on.price) {
   head("Price");
   const cols = [CW * 0.58, CW * 0.12, CW * 0.14, CW * 0.16], row = (cells, o = {}) => {
@@ -4022,9 +4127,9 @@ $("cpValueReset").onclick = () => { cdoc().value = null; $("cpValue").value = va
 for (const [id, k] of [["cpScope", "scope"], ["cpTime", "timeline"], ["cpExcl", "excl"], ["cpValue", "value"], ["cpCare", "care"]]) $(id).addEventListener("input", (e) => { cdoc()[k] = e.target.value; cpSave(); cpRender(); });
 $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = scopeAuto(); cpSave(); cpRender(); };
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
-async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return out; }
+async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()), links: pg.__links || [] }); } return out; }
 $("cpPdf").onclick = async () => { try { if (!cpChosen().length) { toast("Tick at least one page."); return; } saveFile(`${slug(clientTitle())}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
-async function pagesPdf(pages, name) { const out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()) }); } return saveFile(name, pdfFromJpegs(out)); }
+async function pagesPdf(pages, name) { const out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()), links: pg.__links || [] }); } return saveFile(name, pdfFromJpegs(out)); }
 function printPages(pages, pdfName) {
   const box = $("cpPrint"); box.innerHTML = "";
   for (const pg of pages) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
@@ -4758,7 +4863,9 @@ function pdfFromJpegs(pages) {
   obj(2, () => put(`<< /Type /Pages /Kids [${kids}] /Count ${N} >>`));
   pages.forEach((pg, k) => {
     const id = 3 + k * 3, W = (pg.w * 72).toFixed(2), H = (pg.h * 72).toFixed(2), cs = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
-    obj(id, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R >>`));
+    const sx = (pg.w * 72) / pg.px, sy = (pg.h * 72) / pg.py, esc = (u) => String(u).replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7e]/g, encodeURIComponent);
+    const annots = (pg.links || []).map((l) => `<< /Type /Annot /Subtype /Link /Rect [${(l.x * sx).toFixed(1)} ${((pg.py - l.y - l.h) * sy).toFixed(1)} ${((l.x + l.w) * sx).toFixed(1)} ${((pg.py - l.y) * sy).toFixed(1)}] /Border [0 0 0] /A << /S /URI /URI (${esc(l.url)}) >> >>`).join(" ");
+    obj(id, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R${annots ? ` /Annots [${annots}]` : ""} >>`));
     obj(id + 1, () => put(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
     obj(id + 2, () => { put(`<< /Type /XObject /Subtype /Image /Width ${pg.px} /Height ${pg.py} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpg.length} >>\nstream\n`); put(pg.jpg); put("\nendstream"); });
   });
