@@ -303,6 +303,7 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <button class="btn" id="mailTop">Order emails</button>
     <button class="btn primary" id="cpTop">Client package</button>
     <button class="btn" id="mlTop">Materials checklist</button>
+    <button class="btn" id="chTop">Client choices</button>
     <button class="btn" id="printBtn">Print</button>
   </header>
 
@@ -713,6 +714,14 @@ label.f.checkf input { width: 24px; height: 24px; min-height: 0; }
     <details id="mlTickBox"><summary>Tick what's ordered and on site, and enter quoted prices (before tax)</summary><div id="mlTicks" class="list" style="max-height:30vh;overflow:auto"></div></details>
     <div class="cppages" id="mlPages" aria-label="Preview of the materials checklist" style="max-height:52vh"></div>
     <div class="row"><button class="btn primary" id="mlPdf">Save PDF</button><button class="btn" id="mlPrint">Print</button></div>
+  </div>
+</div>
+<div class="modal" id="chDlg" hidden role="dialog" aria-modal="true" aria-labelledby="chTitle">
+  <div class="modalbox wide">
+    <div class="row" style="justify-content:space-between"><h2 id="chTitle">Client choices</h2><button class="btn" id="chClose" aria-label="Close">✕</button></div>
+    <p class="note">Only the looks the client picks before you order: one tick per item, with photos online for each colour, then their signature. No prices, no scope. When it comes back, set the colours on the plan and order.</p>
+    <div class="cppages" id="chPages" aria-label="Preview of the client choices" style="max-height:60vh"></div>
+    <div class="row"><button class="btn primary" id="chPdf">Save PDF</button><button class="btn" id="chPrint">Print</button></div>
   </div>
 </div>
 <div id="cpPrint"></div>
@@ -4097,6 +4106,95 @@ function checklistPages() {
     g.fillText(`${co.name ? co.name + " · " : ""}${job.name || "Job"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
   return pages;
 }
+// ---------- client choices: only the looks the client picks, so the order can be placed ----------
+function clientChoices() {
+  const out = [], seen = new Map(), img = (q) => "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(q);
+  for (const e of clientMaterials()) {
+    if (!e.m || !(e.m.colors || []).length || e.m.colors.length < 2) continue;
+    const k = e.m.id, base = e.name.replace(/ – .*$/, "");
+    if (seen.has(k)) { const o = seen.get(k); if (e.color && !o.planned.includes(e.color)) o.planned.push(e.color); o.use = o.use.replace(/\.$/, "") + "; " + e.use.replace(/^Used for /, ""); continue; }
+    const o = { m: e.m, name: base, size: e.size, use: e.use, planned: e.color ? [e.color] : [], opts: e.m.colors.map((c) => ({ c, url: img(`${e.m.brand === ABB ? "Abbotsford Concrete " : ""}${base.replace(/^Abbotsford /, "")} ${c}`) })) };
+    seen.set(k, o); out.push(o);
+  }
+  const R = (job.est || {}).railOwner || 0, rails = job.items.filter((i) => i.type === "rail");
+  if (rails.length && !R) { const pl = !!(job.est || {}).railPlastic, cols = RAIL_COLORS.filter((c) => !pl || c !== "Cedar");
+    out.push({ rail: true, name: pl ? "Handrail: recycled plastic lumber" : "Handrail", use: "The colour of the handrail.", planned: [...new Set(rails.map((r) => r.color))], opts: cols.map((c) => ({ c, url: img(`${pl ? "recycled plastic lumber" : "wood"} handrail ${c}`) })) }); }
+  return out;
+}
+function choicesPages() {
+  const D = 150, W = 8.5 * D, H = 11 * D, co = company(), LL = co.look !== "plain", pages = []; let c, x, y = 0;
+  const PC = LL ? (/^#[0-9a-f]{6}$/i.test(co.color || "") ? co.color : "#8B6B3E") : "#173f73";
+  const SANS = `"IBM Plex Sans", system-ui, sans-serif`, SERIF = `"EB Garamond", Garamond, Georgia, serif`, CAPS = `Cinzel, "Trajan Pro", Georgia, serif`;
+  const F = (size, weight = 400, fam) => `${weight} ${size}px ${fam || (LL ? SERIF : SANS)}`, HEAD = LL ? CAPS : SANS;
+  const INK = LL ? "#2A2520" : "#1c2530", MUTED = LL ? "#6E655B" : "#5d6b7a", RULE = LL ? "#E8E2D9" : "#dde3ea";
+  const M = LL ? 0.78 * D : 0.6 * D, CW = W - 2 * M, foot = 0.55 * D;
+  const spaced = (px, fn) => { const had = x.letterSpacing; try { x.letterSpacing = px + "px"; } catch {} fn(); try { x.letterSpacing = had || "0px"; } catch {} };
+  const page = () => { c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M;
+    if (LL) { x.strokeStyle = tintHex(PC, 0.55); x.lineWidth = 1.6; x.strokeRect(38, 38, W - 76, H - 76); x.strokeStyle = tintHex(PC, 0.28); x.lineWidth = 1.2; x.strokeRect(46, 46, W - 92, H - 92); } };
+  const room = (h) => { if (y + h > H - M - foot) { page(); return true; } return false; };
+  const para = (t, size, col, after = 10, weight = 400) => { for (const ln of wrapLines(x, t, CW, F(size, weight))) { room(size * 1.4); x.font = F(size, weight); x.fillStyle = col; x.textBaseline = "top"; x.textAlign = "left"; x.fillText(ln, M, y); y += size * 1.38; } y += after; };
+  const box = (bx, by, s) => { x.strokeStyle = INK; x.lineWidth = 2.2; x.strokeRect(bx, by, s, s); };
+  const line = (x0, x1, yy) => { x.strokeStyle = INK; x.lineWidth = 1.2; x.beginPath(); x.moveTo(x0, yy); x.lineTo(x1, yy); x.stroke(); };
+  const list = clientChoices();
+  // ---- heading
+  page(); x.textAlign = "left"; x.textBaseline = "alphabetic";
+  spaced(LL ? 6 : 1, () => { x.font = F(40, 600, HEAD); x.fillStyle = INK; x.fillText((co.name || "").toUpperCase(), M, y + 34); });
+  y += 50; spaced(LL ? 5 : 2, () => { x.font = F(26, 600, HEAD); x.fillStyle = PC; x.fillText("YOUR CHOICES", M, y + 22); }); y += 46;
+  const info = [["Project", clientTitle()], ["For", job.client || ""], ["Site", job.address || ""], ["Quote", quoteNo()]].filter((r) => r[1]);
+  for (const [k, v] of info) { x.font = F(21, 400); x.fillStyle = MUTED; x.fillText(k, M, y + 18); x.font = F(23, 500); x.fillStyle = INK; x.fillText(v, M + 120, y + 18); y += 32; }
+  y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
+  if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
+  else {
+    para(`Please tick one colour for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
+    para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
+  }
+  // ---- one block per choice
+  const GAP = 22, COLS = 4, TW = (CW - GAP * (COLS - 1)) / COLS, PH = Math.round(TW * 0.5), QR = 86, BOX = 30;
+  list.forEach((e, n) => {
+    const rows = Math.ceil(e.opts.length / COLS), tileH = PH + 12 + QR + 22, useL = wrapLines(x, e.use, CW, F(20));
+    room(70 + useL.length * 28 + tileH); y += 8;
+    x.textBaseline = "top"; x.textAlign = "left"; x.font = F(27, 600); x.fillStyle = PC; x.fillText(`${n + 1}.  ${e.name}`, M, y);
+    if (e.size) { x.font = F(19); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText(e.size, M + CW, y + 6); x.textAlign = "left"; }
+    y += 40; for (const ln of useL) { x.font = F(20); x.fillStyle = "#443C34"; x.fillText(ln, M, y); y += 28; } y += 10;
+    for (let r = 0; r < rows; r++) {
+      room(tileH + 10); const top = y;
+      e.opts.slice(r * COLS, r * COLS + COLS).forEach((o, k) => {
+        const tx = M + k * (TW + GAP), pc = document.createElement("canvas"); pc.width = TW * 2; pc.height = PH * 2; const g = pc.getContext("2d");
+        if (e.rail) { g.fillStyle = "#eef2f5"; g.fillRect(0, 0, pc.width, pc.height); g.fillStyle = hexOf(o.c); g.fillRect(pc.width * 0.06, pc.height * 0.3, pc.width * 0.88, pc.height * 0.16); g.fillRect(pc.width * 0.08, pc.height * 0.6, pc.width * 0.84, pc.height * 0.1); g.fillStyle = "#8f979e"; for (const f of [0.2, 0.5, 0.8]) g.fillRect(pc.width * f - 8, pc.height * 0.26, 16, pc.height * 0.74); }
+        else drawMaterialPic(g, pc.width, pc.height, e.m, o.c, false);
+        x.drawImage(pc, tx, top, TW, PH); const plan = e.planned.includes(o.c);
+        x.strokeStyle = plan ? PC : RULE; x.lineWidth = plan ? 3 : 1.5; x.strokeRect(tx, top, TW, PH);
+        if (plan) { x.font = F(16, 600, SANS); const tw = x.measureText("In the plan").width + 16; x.fillStyle = PC; x.fillRect(tx + TW - tw - 6, top + 6, tw, 26); x.fillStyle = "#fff"; x.textBaseline = "middle"; x.fillText("In the plan", tx + TW - tw + 2, top + 19); }
+        let ty = top + PH + 12; box(tx, ty, BOX); x.textBaseline = "top"; x.font = F(22, 600); x.fillStyle = INK;
+        const nm = wrapLines(x, o.c, TW - BOX - QR - 22, F(22, 600)); nm.slice(0, 2).forEach((ln, i) => x.fillText(ln, tx + BOX + 10, ty + 2 + i * 25));
+        const q = qrCanvas(o.url, QR);
+        if (q) { x.drawImage(q, tx + TW - QR, ty); x.font = F(14); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText("Scan for photos", tx + TW, ty + QR + 2); x.textAlign = "left"; }
+        else { x.font = F(18); x.fillStyle = PC; x.fillText("Photos ›", tx + TW - QR, ty); }
+        (c.__links = c.__links || []).push({ x: tx, y: top, w: TW, h: tileH - 8, url: o.url });
+      });
+      y = top + tileH + 6;
+    }
+    y += 8; x.fillStyle = RULE; x.fillRect(M, y, CW, 1.5); y += 22;
+  });
+  // ---- notes and sign-off
+  if (list.length) {
+    room(190); x.textBaseline = "alphabetic"; spaced(LL ? 4 : 1, () => { x.font = F(22, 600, HEAD); x.fillStyle = PC; x.fillText("ANYTHING ELSE?", M, y + 20); }); y += 46;
+    line(M, M + CW, y); y += 52; x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "alphabetic";
+    x.fillText("Name", M, y); line(M + 80, M + CW * 0.5, y + 4); x.fillText("Date", M + CW * 0.56, y); line(M + CW * 0.56 + 60, M + CW, y + 4); y += 50;
+    x.fillText("Signature", M, y); line(M + 110, M + CW, y + 4); y += 40;
+    const back = [co.phone, co.email].filter(Boolean).join(" · ");
+    if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back to Peter: ${back}`, M, y); }
+  }
+  pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(18, 400); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left";
+    g.fillText(`${co.name ? co.name + " · " : ""}${clientTitle() || "Project"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
+  return pages;
+}
+let chPagesCache = [];
+async function chRender() { await brandAssets(); chPagesCache = choicesPages(); $("chPages").innerHTML = ""; for (const pg of chPagesCache) { const f = document.createElement("figure"), im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.85); im.alt = "Client choices page"; f.appendChild(im); $("chPages").appendChild(f); } }
+$("chTop").onclick = () => { $("chDlg").hidden = false; chRender(); };
+$("chClose").onclick = () => { $("chDlg").hidden = true; };
+$("chPdf").onclick = async () => { try { await pagesPdf(chPagesCache, `${slug(clientTitle() || job.name || "job")}_${quoteNo()}_your_choices.pdf`); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
+$("chPrint").onclick = () => printPages(chPagesCache, `${slug(clientTitle() || job.name || "job")}_${quoteNo()}_your_choices.pdf`);
 let mlPagesCache = [];
 async function mlRender() { await brandAssets(); mlPagesCache = checklistPages(); $("mlPages").innerHTML = ""; for (const pg of mlPagesCache) { const f = document.createElement("figure"), im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.85); im.alt = "Checklist page"; f.appendChild(im); $("mlPages").appendChild(f); } }
 function mlTicks() {
