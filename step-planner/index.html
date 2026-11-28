@@ -4246,7 +4246,7 @@ function choicesPages() {
     x.fillText("Name", M, y); line(M + 80, M + CW * 0.5, y + 4); x.fillText("Date", M + CW * 0.56, y); line(M + CW * 0.56 + 60, M + CW, y + 4); y += 50;
     x.fillText("Signature", M, y); line(M + 110, M + CW, y + 4); y += 40;
     const back = [co.phone, co.email].filter(Boolean).join(" · ");
-    if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back, or just call or text Peter with your picks: ${back}`, M, y); }
+    if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back, or just call or text me with your picks: ${back}`, M, y); }
   }
   pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(18, 400); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left";
     g.fillText(`${co.name ? co.name + " · " : ""}${clientTitle() || "Project"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
