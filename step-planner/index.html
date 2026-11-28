@@ -781,7 +781,7 @@ const HEX = {
   "Weathered grey": "#9a9488", "Black (metal)": "#2b2b2b", Black: "#232323", Grey: "#9c9b97", Charcoal: "#5a5a5c", "Rocky Mountain": "#8d7f6e", Granite: "#8f8c88", Sandalwood: "#b8a58a", Teak: "#8b6c52",
   "Moroccan Sunset": "#ad7a58", "Autumn Blend": "#8a5534", "Galvanized steel": "#8f979e", "Black steel": "#3a3d40", Natural: "#b9b3a8", Midnight: "#4a4b50", "Shaded Grey": "#8a8987", "Indian Summer": "#a37c5c",
   "La Jolla Blend": "#a99c88", Tan: "#c2ad8c", "Desert Sand": "#cdb99a", Red: "#9a5a48", Brown: "#7a5e48", Green: "#7d8a72",
-  Sandstone: "#c9b28d", "Granite Grey": "#8e8e8c", "Light Grey": "#bdbbb6", Cedar: "#9c6b45", "Dark Brown": "#5b4433", "Grey Mix": "#9a9a96",
+  Sandstone: "#c9b28d", Plain: "#aaa8a3", "Exposed aggregate": "#9d9384", "Granite Grey": "#8e8e8c", "Light Grey": "#bdbbb6", Cedar: "#9c6b45", "Dark Brown": "#5b4433", "Grey Mix": "#9a9a96",
 };
 function hexOf(name) {
   if (/^#[0-9a-f]{6}$/i.test(name || "")) return name;
@@ -820,6 +820,7 @@ const CATALOG = [
   // Hydrapressed slabs (priced each)
   { id: "texada-2412", brand: ABB, line: "Texada HydraPressed", name: 'Slab 24×12×2"', kind: "slab", L: 24, D: 12, H: 2, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 11, note: SPEC },
   { id: "texada-2424", brand: ABB, line: "Texada HydraPressed", name: 'Slab 24×24×2"', kind: "slab", L: 24, D: 24, H: 2, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 21, note: SPEC },
+  { id: "slegg-1818", brand: "Slegg", line: "", name: '18×18×2" patio slab', kind: "slab", L: 18, D: 18, H: 2, colors: ["Plain", "Exposed aggregate"], price: 9, note: "Slegg's standard concrete patio slab, plain or exposed aggregate. Confirm size and stock with Slegg. Price is a placeholder until you get a quote" },
   { id: "texada-1818", brand: ABB, line: "Texada HydraPressed", name: 'Slab 18×18×1⅝"', kind: "slab", L: 18, D: 18, H: 1.625, colors: ["Natural", "Charcoal", "Tan", "Desert Sand", "Red", "Brown"], price: 11.5, note: SPEC },
   { id: "saturna-2412", brand: ABB, line: "Saturna HydraPressed", name: 'Slab 24×12×2"', kind: "slab", L: 24, D: 12, H: 2, colors: ["Natural", "Charcoal", "Tan", "Green", "Desert Sand", "Brown", "Red"], price: 12, note: SPEC },
   { id: "saturna-2424", brand: ABB, line: "Saturna HydraPressed", name: 'Slab 24×24×2"', kind: "slab", L: 24, D: 24, H: 2, colors: ["Natural", "Charcoal", "Tan", "Green", "Desert Sand", "Brown", "Red"], price: 23, note: SPEC },
@@ -4108,6 +4109,7 @@ function checklistPages() {
 }
 // ---------- client choices: only the looks the client picks, so the order can be placed ----------
 function clientChoices() {
+  const panel = new Map(); for (const i of job.items) { const mm = /^([A-Z]{1,2})\s*[-–:]/.exec(i.label || ""); const id = i.surface || i.block; if (mm && id) { const k = id + "|" + (i.color || ""); panel.set(k, [...(panel.get(k) || []), mm[1]]); } }
   const out = [], seen = new Map(), img = (q) => "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(q);
   for (const e of clientMaterials()) {
     if (!e.m || !(e.m.colors || []).length || e.m.colors.length < 2) continue;
@@ -4116,6 +4118,9 @@ function clientChoices() {
     const o = { m: e.m, name: base, size: e.size, use: e.use, planned: e.color ? [e.color] : [], opts: e.m.colors.map((c) => ({ c, url: img(`${e.m.brand === ABB ? "Abbotsford Concrete " : ""}${base.replace(/^Abbotsford /, "")} ${c}`) })) };
     seen.set(k, o); out.push(o);
   }
+  for (const o of out) { o.tags = {}; if (o.m) for (const op of o.opts) { const L = panel.get(o.m.id + "|" + op.c); if (L) o.tags[op.c] = "Panel " + L.join(", "); } }
+  out.sample = out.length > 1 && out.every((o) => Object.keys(o.tags).length);
+  if (out.sample) for (const o of out) { const ls = Object.values(o.tags).map((t) => t.replace(/^Panel /, "")).join(", ").split(", "); o.use = `Shown on the plan as panel${ls.length > 1 ? "s" : ""} ${listAnd(ls)}.${o.opts.length > Object.keys(o.tags).length ? " The other colours can be ordered too." : ""}`; }
   const R = (job.est || {}).railOwner || 0, rails = job.items.filter((i) => i.type === "rail");
   if (rails.length && !R) { const pl = !!(job.est || {}).railPlastic, cols = RAIL_COLORS.filter((c) => !pl || c !== "Cedar");
     out.push({ rail: true, name: pl ? "Handrail: recycled plastic lumber" : "Handrail", use: "The colour of the handrail.", planned: [...new Set(rails.map((r) => r.color))], opts: cols.map((c) => ({ c, url: img(`${pl ? "recycled plastic lumber" : "wood"} handrail ${c}`) })) }); }
@@ -4144,6 +4149,10 @@ function choicesPages() {
   for (const [k, v] of info) { x.font = F(21, 400); x.fillStyle = MUTED; x.fillText(k, M, y + 18); x.font = F(23, 500); x.fillStyle = INK; x.fillText(v, M + 120, y + 18); y += 32; }
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
+  else if (list.sample) {
+    para("Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.", 24, INK, 6, 600);
+    para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
+  }
   else {
     para(`Please tick one colour for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
@@ -4162,9 +4171,9 @@ function choicesPages() {
         const tx = M + k * (TW + GAP), pc = document.createElement("canvas"); pc.width = TW * 2; pc.height = PH * 2; const g = pc.getContext("2d");
         if (e.rail) { g.fillStyle = "#eef2f5"; g.fillRect(0, 0, pc.width, pc.height); g.fillStyle = hexOf(o.c); g.fillRect(pc.width * 0.06, pc.height * 0.3, pc.width * 0.88, pc.height * 0.16); g.fillRect(pc.width * 0.08, pc.height * 0.6, pc.width * 0.84, pc.height * 0.1); g.fillStyle = "#8f979e"; for (const f of [0.2, 0.5, 0.8]) g.fillRect(pc.width * f - 8, pc.height * 0.26, 16, pc.height * 0.74); }
         else drawMaterialPic(g, pc.width, pc.height, e.m, o.c, false);
-        x.drawImage(pc, tx, top, TW, PH); const plan = e.planned.includes(o.c);
+        x.drawImage(pc, tx, top, TW, PH); const tag = (e.tags || {})[o.c] || (!list.sample && e.planned.includes(o.c) ? "In the plan" : ""), plan = !!tag;
         x.strokeStyle = plan ? PC : RULE; x.lineWidth = plan ? 3 : 1.5; x.strokeRect(tx, top, TW, PH);
-        if (plan) { x.font = F(16, 600, SANS); const tw = x.measureText("In the plan").width + 16; x.fillStyle = PC; x.fillRect(tx + TW - tw - 6, top + 6, tw, 26); x.fillStyle = "#fff"; x.textBaseline = "middle"; x.fillText("In the plan", tx + TW - tw + 2, top + 19); }
+        if (plan) { x.font = F(16, 600, SANS); const tw = x.measureText(tag).width + 16; x.fillStyle = PC; x.fillRect(tx + TW - tw - 6, top + 6, tw, 26); x.fillStyle = "#fff"; x.textBaseline = "middle"; x.fillText(tag, tx + TW - tw + 2, top + 19); }
         let ty = top + PH + 12; box(tx, ty, BOX); x.textBaseline = "top"; x.font = F(22, 600); x.fillStyle = INK;
         const nm = wrapLines(x, o.c, TW - BOX - QR - 22, F(22, 600)); nm.slice(0, 2).forEach((ln, i) => x.fillText(ln, tx + BOX + 10, ty + 2 + i * 25));
         const q = qrCanvas(o.url, QR);
@@ -4654,7 +4663,9 @@ function drawMaterialPic(ctx, W, H, m, colorName, small) {
       for (let k = 0; k < (small ? 14 : 70); k++) { ctx.fillStyle = `rgba(${rand(seed + k) < 0.5 ? "255,255,255" : "0,0,0"},${(0.06 + 0.1 * rand(seed + k * 3)).toFixed(2)})`; ctx.beginPath(); ctx.ellipse(bx + rand(seed + k * 5) * bw, by + rand(seed + k * 7) * bh, (2 + rand(seed + k * 11) * 10) * (small ? 0.4 : 1), (1 + rand(seed + k * 13) * 4) * (small ? 0.4 : 1), 0, 0, 7); ctx.fill(); }
       speckles(ctx, bx, by, bw, bh, small ? 40 : 400, seed, "rgba(255,255,255,.3)", "rgba(0,0,0,.25)"); ctx.restore();
     } else { const [bx, by, bw, bh] = box(front); ctx.save(); poly(front, shade(hex, 0.92)); ctx.clip(); speckles(ctx, bx, by, bw, bh, small ? 30 : 250, seed, "rgba(255,255,255,.25)", "rgba(0,0,0,.18)"); ctx.restore(); }
-    { const [bx, by, bw, bh] = box(top); ctx.save(); poly(top, shade(hex, 1.1)); ctx.clip(); speckles(ctx, bx, by, bw, bh, small ? 30 : 300, seed + 9, "rgba(255,255,255,.25)", "rgba(0,0,0,.15)"); ctx.restore(); }
+    { const [bx, by, bw, bh] = box(top); ctx.save(); poly(top, shade(hex, 1.1)); ctx.clip(); speckles(ctx, bx, by, bw, bh, small ? 30 : 300, seed + 9, "rgba(255,255,255,.25)", "rgba(0,0,0,.15)");
+      if (/exposed aggregate/i.test(colorName || "")) for (let k = 0; k < (small ? 60 : 900); k++) { const r = (small ? 0.6 : 1.6) + rand(seed + k * 17) * (small ? 1 : 3.2); ctx.fillStyle = `hsl(${25 + rand(seed + k * 3) * 20}, ${10 + rand(seed + k * 5) * 18}%, ${30 + rand(seed + k * 7) * 45}%)`; ctx.beginPath(); ctx.ellipse(bx + rand(seed + k * 11) * bw, by + rand(seed + k * 13) * bh, r, r * 0.6, rand(seed + k) * 3, 0, 7); ctx.fill(); }
+      ctx.restore(); }
     if (m.kind === "block" && D >= 10) { // hollow cores on top of wall blocks
       for (const f of [0.28, 0.72]) { const cx = L * f, cw = L * 0.16, cd = D * 0.36, cy = D * 0.45; poly([P(cx - cw, cy - cd / 2, Hh), P(cx + cw, cy - cd / 2, Hh), P(cx + cw, cy + cd / 2, Hh), P(cx - cw, cy + cd / 2, Hh)], shade(hex, 0.45), "rgba(0,0,0,.5)"); }
     }
