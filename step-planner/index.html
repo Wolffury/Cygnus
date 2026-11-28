@@ -1588,8 +1588,10 @@ function nameLabel(ctx, v, it, text, x, y, size, align = "center", color = BP.in
   ctx.save(); ctx.font = `${weight} ${size}px "${font}", ui-monospace, monospace`; const w = ctx.measureText(text).width; ctx.restore();
   noteName(it, align === "left" ? nx + w / 2 : align === "right" ? nx - w / 2 : nx, ny, w + 8, size + 8);
 }
+let quietNames = false; // the lettered sample plan: panel letters only, no names
 let deferLabels = null; // when set, names are collected here and placed afterwards (client plan)
 function realLabel(ctx, t, x, y, size, u, weight = 600) {
+  if (quietNames) return;
   if (deferLabels) { deferLabels.push({ t, x, y, size, weight }); return; }
   const own = labelOwner; let moved = false;
   if (own) [x, y, moved] = placeName(ctx, own.v, own.it, x, y, u);
@@ -3372,13 +3374,21 @@ function builtBounds() {
   const pad = Math.max(60, 0.12 * Math.max(maxX - minX, maxY - minY));
   return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
 }
-function drawSimplePlan(ctx, X, Y, w, h, u) {
+function drawSimplePlan(ctx, X, Y, w, h, u, letters) {
+  const PANEL = /^([A-Z]{1,2})\s*[-–:]/, lab = letters ? job.items.filter((i) => PANEL.test(i.label || "")) : [], oldL = lab.map((i) => i.label); lab.forEach((i) => { i.label = ""; }); if (letters) quietNames = true;
+  try { drawSimplePlan0(ctx, X, Y, w, h, u, letters ? (v) => { for (const [k, it] of lab.entries()) { const [sx, sy] = W2S(v, it.x, it.y), r = Math.min(30 * u, Math.min(it.w, it.d) * v.s * 0.32), t = PANEL.exec(oldL[k])[1];
+    ctx.save(); ctx.fillStyle = "rgba(255,255,255,.92)"; ctx.strokeStyle = "#1d2733"; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#1d2733"; ctx.font = `700 ${Math.round(r * 1.1)}px "IBM Plex Sans", system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(t, sx, sy + r * 0.05); ctx.restore(); } } : null); }
+  finally { lab.forEach((i, k) => { i.label = oldL[k]; }); quietNames = false; }
+}
+function drawSimplePlan0(ctx, X, Y, w, h, u, after) {
   const b = builtBounds(), v = {};
   if (b) { v.s = Math.min(w / (b.maxX - b.minX), h / (b.maxY - b.minY)); v.ox = X + w / 2 - (b.minX + b.maxX) / 2 * v.s; v.oy = Y + h / 2 + (b.minY + b.maxY) / 2 * v.s; }
   else { fitView(w, h, v, 30); v.ox += X; v.oy += Y; }
   const keep = job.items; job.items = keep.filter((i) => !["dim", "spot", "contour", "cut"].includes(i.type));
   const names = []; deferLabels = names;
   try { renderSheet(ctx, X + w, Y + h, v, { unit: u, section: false, selId: null, noChrome: true, real: true, clean: true }); } finally { job.items = keep; deferLabels = null; }
+  if (after) after(v);
   const [cx, cy] = [X + w - 50 * u, Y + 50 * u]; ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(cx, cy, 36 * u, 0, 7); ctx.fill(); ctx.restore(); drawCompass(ctx, cx, cy, 26 * u, u, "#1d2733", false);
   const ft = [5, 10, 20, 40].find((f) => f * 12 * v.s >= 90 * u) || 40, bw = ft * 12 * v.s, bx = X + 20 * u, by = Y + h - 22 * u;
   ctx.save(); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(bx - 8 * u, by - 26 * u, bw + 16 * u, 36 * u); ctx.fillStyle = "#1d2733"; ctx.fillRect(bx, by, bw, 4 * u);
@@ -4187,7 +4197,11 @@ function choicesPages() {
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
     para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
-    para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
+    para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 14);
+    const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
+    x.save(); x.beginPath(); x.rect(M, y, CW, ph); x.clip(); x.translate(M, y); drawSimplePlan(x, 0, 0, CW, ph, 1.4, true); x.restore();
+    x.strokeStyle = RULE; x.lineWidth = 1.5; x.strokeRect(M, y, CW, ph); y += ph + 8;
+    x.font = F(18); x.fillStyle = MUTED; x.textBaseline = "top"; x.textAlign = "left"; x.fillText("The plan from above. Each letter is a sample panel; find its letter below.", M, y); y += 36;
   }
   else {
     para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
