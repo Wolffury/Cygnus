@@ -4196,8 +4196,17 @@ function choicesPages() {
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
-    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back. That's all I need to place the order. You can tick and type right in this PDF and save it, or print it and fill it in by hand${co.phone ? `, or just call or text me at ${co.phone} with your picks` : ""}.`, 24, INK, 6, 600);
-    para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 14);
+    const nP = list.filter((o) => !o.pattern).length, iPat = list.findIndex((o) => o.name === "Laying pattern") + 1, iBor = list.findIndex((o) => o.name === "Border") + 1;
+    para("Each lettered panel on the plan below is an example of the sizes and colours of most paver options, so you can see them side by side. Pick what you like, and I'll order it.", 24, INK, 10, 600);
+    const step = (n, head, t) => { const tw = CW - 46, ls = wrapLines(x, head + " " + t, tw, F(21)); room(ls.length * 29 + 6); x.textBaseline = "top"; x.textAlign = "left";
+      x.fillStyle = PC; x.beginPath(); x.arc(M + 15, y + 14, 15, 0, 7); x.fill(); x.fillStyle = "#fff"; x.font = F(19, 700, SANS); x.textAlign = "center"; x.fillText(String(n), M + 15, y + 4); x.textAlign = "left";
+      ls.forEach((ln, k) => { if (k === 0) { x.font = F(21, 700); x.fillStyle = INK; x.fillText(head, M + 46, y); const hw = x.measureText(head + " ").width; x.font = F(21); x.fillText(ln.slice(head.length + 1), M + 46 + hw, y); } else { x.font = F(21); x.fillStyle = INK; x.fillText(ln, M + 46, y); } y += 29; }); y += 6; };
+    let k = 0;
+    step(++k, "Pick one paver and colour.", `Tick one box in items 1${nP > 1 ? "–" + nP : ""}. The panel letter on each picture shows where it is on the plan; colours without a letter can be ordered too.`);
+    if (iPat) step(++k, "Pick one laying pattern.", `Tick one box in item ${iPat}. Each pattern says which pavers it suits.`);
+    if (iBor) step(++k, "Pick a border, or none.", `Tick one box in item ${iBor}.`);
+    step(++k, "Add your name and send it back.", `Fill it in on screen (click the boxes and type in this PDF, then save it and email it to me), or print it and send a photo${co.phone ? `, or just call or text me at ${co.phone}` : ""}. For example: "Panel C, herringbone, no border."`);
+    y += 4; para("To see real photos, scan a code with your phone's camera or click it in the PDF. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 19, MUTED, 12);
     const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
     x.save(); x.beginPath(); x.rect(M, y, CW, ph); x.clip(); x.translate(M, y); drawSimplePlan(x, 0, 0, CW, ph, 1.4, true); x.restore();
     x.strokeStyle = RULE; x.lineWidth = 1.5; x.strokeRect(M, y, CW, ph); y += ph + 8;
