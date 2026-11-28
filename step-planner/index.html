@@ -4196,7 +4196,7 @@ function choicesPages() {
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
-    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
+    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` No need to print it: a quick call or text to ${co.phone} with your picks is fine too.` : ""}`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 14);
     const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
     x.save(); x.beginPath(); x.rect(M, y, CW, ph); x.clip(); x.translate(M, y); drawSimplePlan(x, 0, 0, CW, ph, 1.4, true); x.restore();
@@ -4204,7 +4204,7 @@ function choicesPages() {
     x.font = F(18); x.fillStyle = MUTED; x.textBaseline = "top"; x.textAlign = "left"; x.fillText("The plan from above. Each letter is a sample panel; find its letter below.", M, y); y += 36;
   }
   else {
-    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
+    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` No need to print it: a quick call or text to ${co.phone} with your picks is fine too.` : ""}`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
   // ---- one block per choice
@@ -4241,12 +4241,12 @@ function choicesPages() {
   });
   // ---- notes and sign-off
   if (list.length) {
-    room(190); x.textBaseline = "alphabetic"; spaced(LL ? 4 : 1, () => { x.font = F(22, 600, HEAD); x.fillStyle = PC; x.fillText("ANYTHING ELSE?", M, y + 20); }); y += 46;
+    room(160); x.textBaseline = "alphabetic"; spaced(LL ? 4 : 1, () => { x.font = F(22, 600, HEAD); x.fillStyle = PC; x.fillText("ANYTHING ELSE?", M, y + 20); }); y += 46;
     line(M, M + CW, y); y += 52; x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "alphabetic";
     x.fillText("Name", M, y); line(M + 80, M + CW * 0.5, y + 4); x.fillText("Date", M + CW * 0.56, y); line(M + CW * 0.56 + 60, M + CW, y + 4); y += 50;
     x.fillText("Signature", M, y); line(M + 110, M + CW, y + 4); y += 40;
     const back = [co.phone, co.email].filter(Boolean).join(" · ");
-    if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back to Peter: ${back}`, M, y); }
+    if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back, or just call or text Peter with your picks: ${back}`, M, y); }
   }
   pages.forEach((pg, k) => { const g = pg.getContext("2d"); g.font = F(18, 400); g.fillStyle = MUTED; g.textBaseline = "alphabetic"; g.textAlign = "left";
     g.fillText(`${co.name ? co.name + " · " : ""}${clientTitle() || "Project"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
