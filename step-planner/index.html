@@ -4120,8 +4120,8 @@ function checklistPages() {
 // Top-down drawing of a laying pattern, for the client choices sheet
 function patternPic(g, W, H, kind, border) {
   g.fillStyle = "#cfc9bf"; g.fillRect(0, 0, W, H);
-  const hexA = "#9d9a94", hexB = "#6f5a48", u = W / 16, seed = hashStr(kind);
-  const brick = (x, y, w, h, col, k) => { g.fillStyle = shade(col, 0.88 + 0.22 * rand(seed + k)); g.fillRect(x * u + 1.5, y * u + 1.5, w * u - 3, h * u - 3); };
+  const hexA = "#a3a09a", hexB = "#6f5a48", u = W / 16, seed = hashStr(kind);
+  const brick = (x, y, w, h, col, k) => { g.fillStyle = col; g.fillRect(x * u + 1.5, y * u + 1.5, w * u - 3, h * u - 3); };
   const b = border ? 2 : 0; g.save(); g.beginPath(); g.rect(b * u, b * u, W - 2 * b * u, H - 2 * b * u); g.clip();
   let k = 0;
   if (kind === "running") for (let r = 0; r * u < H; r++) for (let c = -1; c * u < W; c += 2) brick(c + (r % 2), r, 2, 1, hexA, k++);
