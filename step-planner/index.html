@@ -4202,9 +4202,9 @@ function choicesPages() {
       x.fillStyle = PC; x.beginPath(); x.arc(M + 15, y + 14, 15, 0, 7); x.fill(); x.fillStyle = "#fff"; x.font = F(19, 700, SANS); x.textAlign = "center"; x.fillText(String(n), M + 15, y + 4); x.textAlign = "left";
       ls.forEach((ln, k) => { if (k === 0) { x.font = F(21, 700); x.fillStyle = INK; x.fillText(head, M + 46, y); const hw = x.measureText(head + " ").width; x.font = F(21); x.fillText(ln.slice(head.length + 1), M + 46 + hw, y); } else { x.font = F(21); x.fillStyle = INK; x.fillText(ln, M + 46, y); } y += 29; }); y += 6; };
     let k = 0;
-    step(++k, "Pick one paver and colour.", `Tick one box in items 1${nP > 1 ? "–" + nP : ""}. The panel letter on each picture shows where it is on the plan; colours without a letter can be ordered too.`);
-    if (iPat) step(++k, "Pick one laying pattern.", `Tick one box in item ${iPat}. Each pattern says which pavers it suits.`);
-    if (iBor) step(++k, "Pick a border, or none.", `Tick one box in item ${iBor}.`);
+    step(++k, "Pick one paver and colour.", `Tick one box under Step ${k} below. The panel letter on each picture shows where it is on the plan; colours without a letter can be ordered too.`);
+    if (iPat) step(++k, "Pick one laying pattern.", `Tick one box under Step ${k}. Each pattern says which pavers it suits.`);
+    if (iBor) step(++k, "Pick a border, or none.", `Tick one box under Step ${k}.`);
     step(++k, "Add your name and send it back.", `Fill it in on screen (click the boxes and type in this PDF, then save it and email it to me), or print it and send a photo${co.phone ? `, or just call or text me at ${co.phone}` : ""}. For example: "Panel C, herringbone, no border."`);
     y += 4; para("To see real photos, scan a code with your phone's camera or click it in the PDF. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 19, MUTED, 12);
     const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
@@ -4216,13 +4216,23 @@ function choicesPages() {
     para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back. That's all I need to place the order. You can tick and type right in this PDF and save it, or print it and fill it in by hand${co.phone ? `, or just call or text me at ${co.phone} with your picks` : ""}.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
+  // ---- a coloured band that starts each numbered step on a sample plan, matching the steps in the intro
+  const stepBand = (n, title, sub) => { const BH = 64; x.fillStyle = tintHex(PC, 0.12); x.fillRect(M, y, CW, BH); x.fillStyle = PC; x.fillRect(M, y, 8, BH);
+    x.beginPath(); x.arc(M + 48, y + BH / 2, 22, 0, 7); x.fill(); x.fillStyle = "#fff"; x.font = F(24, 700, SANS); x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(String(n), M + 48, y + BH / 2 + 1);
+    x.textAlign = "left"; x.fillStyle = INK; x.font = F(27, 700); x.fillText(`Step ${n}: ${title}`, M + 84, y + BH / 2 + 1);
+    if (sub) { x.font = F(19); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText(sub, M + CW - 16, y + BH / 2 + 1); x.textAlign = "left"; } x.textBaseline = "top"; y += BH; };
   // ---- one block per choice
   const GAP = 22, COLS = 4, TW = (CW - GAP * (COLS - 1)) / COLS, PH = Math.round(TW * 0.5), QR = 86, BOX = 30;
   list.forEach((e, n) => {
     const noteH = Math.max(0, ...e.opts.map((o) => o.note ? wrapLines(x, o.note, TW, F(16)).length * 20 + 6 : 0));
     const rows = Math.ceil(e.opts.length / COLS), tileH = PH + 12 + QR + 22 + noteH, useL = wrapLines(x, e.use, CW, F(20));
-    room(70 + useL.length * 28 + tileH); y += 8;
-    x.textBaseline = "top"; x.textAlign = "left"; x.font = F(27, 600); x.fillStyle = PC; x.fillText(`${n + 1}.  ${e.name}`, M, y);
+    const bandN = !list.sample ? 0 : !e.pattern ? (n === 0 ? 1 : 0) : e.name === "Laying pattern" ? 2 : 3, BANDH = 64;
+    const showTitle = !(list.sample && e.pattern);
+    room((bandN ? BANDH + 14 : 0) + (showTitle ? 70 : 20) + useL.length * 28 + tileH);
+    if (bandN) { y += 6; stepBand(bandN, bandN === 1 ? "Pick one paver and colour" : bandN === 2 ? "Pick one laying pattern" : "Pick a border, or none", bandN === 1 ? "Tick one box on this page or the next few pages" : "Tick one box"); y += 10; }
+    y += 8; x.textBaseline = "top"; x.textAlign = "left";
+    if (showTitle) { x.font = F(27, 600); x.fillStyle = PC; x.fillText(list.sample ? e.name : `${n + 1}.  ${e.name}`, M, y); }
+    else y -= 40;
     if (e.size) { x.font = F(19); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText(e.size, M + CW, y + 6); x.textAlign = "left"; }
     y += 40; for (const ln of useL) { x.font = F(20); x.fillStyle = "#443C34"; x.fillText(ln, M, y); y += 28; } y += 10;
     for (let r = 0; r < rows; r++) {
@@ -4250,6 +4260,7 @@ function choicesPages() {
   });
   // ---- notes and sign-off
   if (list.length) {
+    if (list.sample) { room(160 + 78); y += 6; stepBand(list.some((o) => o.pattern) ? 4 : 2, "Add your name and send it back", ""); y += 18; }
     room(160); x.textBaseline = "alphabetic"; spaced(LL ? 4 : 1, () => { x.font = F(22, 600, HEAD); x.fillStyle = PC; x.fillText("ANYTHING ELSE?", M, y + 20); }); y += 46;
     const fld = (f) => (c.__fields = c.__fields || []).push(f);
     fld({ kind: "text", name: "Anything else", x: M + 290, y: y - 36, w: CW - 290, h: 34 });
