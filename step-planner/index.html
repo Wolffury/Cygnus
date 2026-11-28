@@ -4196,7 +4196,7 @@ function choicesPages() {
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
-    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` No need to print it: a quick call or text to ${co.phone} with your picks is fine too.` : ""}`, 24, INK, 6, 600);
+    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` The boxes can't be ticked on screen, so print it to fill it in. Rather not print? Just call or text me at ${co.phone} with your picks.` : ""}`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 14);
     const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
     x.save(); x.beginPath(); x.rect(M, y, CW, ph); x.clip(); x.translate(M, y); drawSimplePlan(x, 0, 0, CW, ph, 1.4, true); x.restore();
@@ -4204,7 +4204,7 @@ function choicesPages() {
     x.font = F(18); x.fillStyle = MUTED; x.textBaseline = "top"; x.textAlign = "left"; x.fillText("The plan from above. Each letter is a sample panel; find its letter below.", M, y); y += 36;
   }
   else {
-    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` No need to print it: a quick call or text to ${co.phone} with your picks is fine too.` : ""}`, 24, INK, 6, 600);
+    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` The boxes can't be ticked on screen, so print it to fill it in. Rather not print? Just call or text me at ${co.phone} with your picks.` : ""}`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
   // ---- one block per choice
