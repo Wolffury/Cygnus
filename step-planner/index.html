@@ -4107,6 +4107,24 @@ function checklistPages() {
     g.fillText(`${co.name ? co.name + " · " : ""}${job.name || "Job"} · ${quoteNo()}`, M, H - M * 0.55); g.textAlign = "right"; g.fillText(`Page ${k + 1} of ${pages.length}`, W - M, H - M * 0.55); });
   return pages;
 }
+// Top-down drawing of a laying pattern, for the client choices sheet
+function patternPic(g, W, H, kind, border) {
+  g.fillStyle = "#cfc9bf"; g.fillRect(0, 0, W, H);
+  const hexA = "#9d9a94", hexB = "#6f5a48", u = W / 16, seed = hashStr(kind);
+  const brick = (x, y, w, h, col, k) => { g.fillStyle = shade(col, 0.88 + 0.22 * rand(seed + k)); g.fillRect(x * u + 1.5, y * u + 1.5, w * u - 3, h * u - 3); };
+  const b = border ? 2 : 0; g.save(); g.beginPath(); g.rect(b * u, b * u, W - 2 * b * u, H - 2 * b * u); g.clip();
+  let k = 0;
+  if (kind === "running") for (let r = 0; r * u < H; r++) for (let c = -1; c * u < W; c += 2) brick(c + (r % 2), r, 2, 1, hexA, k++);
+  else if (kind === "stack") for (let r = 0; r * 2 * u < H; r++) for (let c = 0; c * 2 * u < W; c++) brick(c * 2, r * 2, 2, 2, hexA, k++);
+  else if (kind === "offset") for (let r = 0; r * 2 * u < H; r++) for (let c = -1; c * 2 * u < W; c++) brick(c * 2 + (r % 2), r * 2, 2, 2, hexA, k++);
+  else if (kind === "basket") for (let r = 0; r * 2 * u < H; r++) for (let c = 0; c * 2 * u < W; c++) { if ((r + c) % 2) { brick(c * 2, r * 2, 2, 1, hexA, k++); brick(c * 2, r * 2 + 1, 2, 1, hexA, k++); } else { brick(c * 2, r * 2, 1, 2, hexA, k++); brick(c * 2 + 1, r * 2, 1, 2, hexA, k++); } }
+  else if (kind === "herring90" || kind === "herring45") {
+    if (kind === "herring45") { g.translate(W / 2, H / 2); g.rotate(Math.PI / 4); g.translate(-W / 2, -H / 2); }
+    for (let a = -30; a < 30; a++) for (let bb = -15; bb < 15; bb++) { const ox = a + bb * 2, oy = a - bb * 2; if (kind === "herring90" && (ox < -4 || oy < -4 || ox * u > W + 4 * u || oy * u > H + 4 * u)) continue; if (Math.abs(ox) > 40 || Math.abs(oy) > 40) continue; brick(ox, oy, 2, 1, hexA, k++); brick(ox, oy + 1, 1, 2, hexA, k++); }
+  } else if (kind === "random") { let y = 0; while (y * u < H) { const rh = rand(seed + y * 7) < 0.5 ? 1.5 : 2; let x = -rand(seed + y) * 2; while (x * u < W) { const w = [1.5, 2, 2.5, 3][Math.floor(rand(seed + k * 13 + y) * 4)]; brick(x, y, w, rh, hexA, k++); x += w; } y += rh; } }
+  g.restore();
+  if (border) { const col = border === 2 ? hexB : hexA; for (let x = 0; x * u < W; x++) { brick(x, 0, 1, 2, col, k++); brick(x, H / u - 2, 1, 2, col, k++); } for (let y = 2; y * u < H - 2 * u; y++) { brick(0, y, 2, 1, col, k++); brick(W / u - 2, y, 2, 1, col, k++); } }
+}
 // ---------- client choices: only the looks the client picks, so the order can be placed ----------
 function clientChoices() {
   const panel = new Map(); for (const i of job.items) { const mm = /^([A-Z]{1,2})\s*[-–:]/.exec(i.label || ""); const id = i.surface || i.block; if (mm && id) { const k = id + "|" + (i.color || ""); panel.set(k, [...(panel.get(k) || []), mm[1]]); } }
@@ -4120,7 +4138,25 @@ function clientChoices() {
   }
   for (const o of out) { o.tags = {}; if (o.m) for (const op of o.opts) { const L = panel.get(o.m.id + "|" + op.c); if (L) o.tags[op.c] = "Panel " + L.join(", "); } }
   out.sample = out.length > 1 && out.every((o) => Object.keys(o.tags).length);
-  if (out.sample) for (const o of out) { const ls = Object.values(o.tags).map((t) => t.replace(/^Panel /, "")).join(", ").split(", "); o.use = `Shown on the plan as panel${ls.length > 1 ? "s" : ""} ${listAnd(ls)}.${o.opts.length > Object.keys(o.tags).length ? " The other colours can be ordered too." : ""}`; }
+  const pv = out.filter((o) => o.m && (o.m.kind === "paver" || o.m.kind === "slab"));
+  if (pv.length) {
+    const short = (o) => o.name.replace(/^Abbotsford /, "").replace(/ 60mm| \(.*\)/g, "").replace(/^Classic Standard /, "").replace(/×\d+"? patio slab/, " slab");
+    const r = (o) => o.m.L / o.m.D, rect2 = pv.filter((o) => Math.abs(r(o) - 2) < 0.15), sq = pv.filter((o) => Math.abs(r(o) - 1) < 0.08), multi = pv.filter((o) => /Villa Stone|Old Country/.test(o.m.line || "")), plain = pv.filter((o) => !multi.includes(o));
+    const pimg = (q) => "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(q);
+    const suits = (l) => "Suits " + listAnd([...new Set(l.map(short))]);
+    const opts = [];
+    if (plain.filter((o) => !sq.includes(o)).length || rect2.length) opts.push({ c: "Running bond", note: suits(plain.filter((o) => !sq.includes(o))), pat: "running" });
+    if (rect2.length) opts.push({ c: "Herringbone, square to the house", note: suits(rect2), pat: "herring90" }, { c: "Herringbone at 45°", note: suits(rect2) + ". Strongest for driveways; more cutting", pat: "herring45" }, { c: "Basketweave", note: suits(rect2), pat: "basket" });
+    if (sq.length) opts.push({ c: "Grid (stack bond)", note: suits(sq), pat: "stack" }, { c: "Offset by half", note: suits(sq), pat: "offset" });
+    if (multi.length || pv.filter((o) => /Classic Standard/.test(o.m.line || "")).length > 1) opts.push({ c: "Random, mixed sizes", note: suits([...multi, ...pv.filter((o) => /Classic Standard/.test(o.m.line || ""))]), pat: "random" });
+    for (const o of opts) o.url = pimg(`${o.c.replace(/,.*$/, "")} paver pattern patio`);
+    out.push({ pattern: true, name: "Laying pattern", use: "How the pavers are laid. Not every pattern works with every paver; each one says which it suits.", planned: [], tags: {}, opts });
+    out.push({ pattern: true, name: "Border", use: "A row of pavers turned sideways around the edge (a soldier course) frames the patio and locks the edge.", planned: [], tags: {}, opts: [
+      { c: "No border", pat: "running", border: 0, url: pimg("paver patio running bond no border") },
+      { c: "Border, same colour", pat: "running", border: 1, url: pimg("paver patio soldier course border same colour") },
+      { c: "Border, contrasting colour", note: "Tell me the colour in Anything else", pat: "running", border: 2, url: pimg("paver patio soldier course border contrasting colour") }] });
+  }
+  if (out.sample) for (const o of out) if (!o.pattern) { const ls = Object.values(o.tags).map((t) => t.replace(/^Panel /, "")).join(", ").split(", "); o.use = `Shown on the plan as panel${ls.length > 1 ? "s" : ""} ${listAnd(ls)}.${o.opts.length > Object.keys(o.tags).length ? " The other colours can be ordered too." : ""}`; }
   const R = (job.est || {}).railOwner || 0, rails = job.items.filter((i) => i.type === "rail");
   if (rails.length && !R) { const pl = !!(job.est || {}).railPlastic, cols = RAIL_COLORS.filter((c) => !pl || c !== "Cedar");
     out.push({ rail: true, name: pl ? "Handrail: recycled plastic lumber" : "Handrail", use: "The colour of the handrail.", planned: [...new Set(rails.map((r) => r.color))], opts: cols.map((c) => ({ c, url: img(`${pl ? "recycled plastic lumber" : "wood"} handrail ${c}`) })) }); }
@@ -4150,17 +4186,18 @@ function choicesPages() {
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
-    para("Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.", 24, INK, 6, 600);
+    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
   else {
-    para(`Please tick one colour for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
+    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
   // ---- one block per choice
   const GAP = 22, COLS = 4, TW = (CW - GAP * (COLS - 1)) / COLS, PH = Math.round(TW * 0.5), QR = 86, BOX = 30;
   list.forEach((e, n) => {
-    const rows = Math.ceil(e.opts.length / COLS), tileH = PH + 12 + QR + 22, useL = wrapLines(x, e.use, CW, F(20));
+    const noteH = Math.max(0, ...e.opts.map((o) => o.note ? wrapLines(x, o.note, TW, F(16)).length * 20 + 6 : 0));
+    const rows = Math.ceil(e.opts.length / COLS), tileH = PH + 12 + QR + 22 + noteH, useL = wrapLines(x, e.use, CW, F(20));
     room(70 + useL.length * 28 + tileH); y += 8;
     x.textBaseline = "top"; x.textAlign = "left"; x.font = F(27, 600); x.fillStyle = PC; x.fillText(`${n + 1}.  ${e.name}`, M, y);
     if (e.size) { x.font = F(19); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText(e.size, M + CW, y + 6); x.textAlign = "left"; }
@@ -4169,13 +4206,16 @@ function choicesPages() {
       room(tileH + 10); const top = y;
       e.opts.slice(r * COLS, r * COLS + COLS).forEach((o, k) => {
         const tx = M + k * (TW + GAP), pc = document.createElement("canvas"); pc.width = TW * 2; pc.height = PH * 2; const g = pc.getContext("2d");
-        if (e.rail) { g.fillStyle = "#eef2f5"; g.fillRect(0, 0, pc.width, pc.height); g.fillStyle = hexOf(o.c); g.fillRect(pc.width * 0.06, pc.height * 0.3, pc.width * 0.88, pc.height * 0.16); g.fillRect(pc.width * 0.08, pc.height * 0.6, pc.width * 0.84, pc.height * 0.1); g.fillStyle = "#8f979e"; for (const f of [0.2, 0.5, 0.8]) g.fillRect(pc.width * f - 8, pc.height * 0.26, 16, pc.height * 0.74); }
+        if (o.pat) patternPic(g, pc.width, pc.height, o.pat, o.border || 0);
+        else if (e.rail) { g.fillStyle = "#eef2f5"; g.fillRect(0, 0, pc.width, pc.height); g.fillStyle = hexOf(o.c); g.fillRect(pc.width * 0.06, pc.height * 0.3, pc.width * 0.88, pc.height * 0.16); g.fillRect(pc.width * 0.08, pc.height * 0.6, pc.width * 0.84, pc.height * 0.1); g.fillStyle = "#8f979e"; for (const f of [0.2, 0.5, 0.8]) g.fillRect(pc.width * f - 8, pc.height * 0.26, 16, pc.height * 0.74); }
         else drawMaterialPic(g, pc.width, pc.height, e.m, o.c, false);
         x.drawImage(pc, tx, top, TW, PH); const tag = (e.tags || {})[o.c] || (!list.sample && e.planned.includes(o.c) ? "In the plan" : ""), plan = !!tag;
         x.strokeStyle = plan ? PC : RULE; x.lineWidth = plan ? 3 : 1.5; x.strokeRect(tx, top, TW, PH);
         if (plan) { x.font = F(16, 600, SANS); const tw = x.measureText(tag).width + 16; x.fillStyle = PC; x.fillRect(tx + TW - tw - 6, top + 6, tw, 26); x.fillStyle = "#fff"; x.textBaseline = "middle"; x.fillText(tag, tx + TW - tw + 2, top + 19); }
-        let ty = top + PH + 12; box(tx, ty, BOX); x.textBaseline = "top"; x.font = F(22, 600); x.fillStyle = INK;
-        const nm = wrapLines(x, o.c, TW - BOX - QR - 22, F(22, 600)); nm.slice(0, 2).forEach((ln, i) => x.fillText(ln, tx + BOX + 10, ty + 2 + i * 25));
+        let ty = top + PH + 12; box(tx, ty, BOX); x.textBaseline = "top"; x.fillStyle = INK;
+        const nw = TW - BOX - QR - 22; let fs = 22; x.font = F(fs, 600); while (fs > 16 && Math.max(...o.c.split(/\s+/).map((w) => x.measureText(w).width)) > nw) { fs--; x.font = F(fs, 600); }
+        const nm = wrapLines(x, o.c, nw, F(fs, 600)); x.font = F(fs, 600); nm.slice(0, 3).forEach((ln, i) => x.fillText(ln, tx + BOX + 10, ty + 2 + i * (fs + 3)));
+        if (o.note) { x.font = F(16); x.fillStyle = MUTED; wrapLines(x, o.note, TW, F(16)).forEach((ln, i) => x.fillText(ln, tx, ty + QR + 24 + i * 20)); }
         const q = qrCanvas(o.url, QR);
         if (q) { x.drawImage(q, tx + TW - QR, ty); x.font = F(14); x.fillStyle = MUTED; x.textAlign = "right"; x.fillText("Scan for photos", tx + TW, ty + QR + 2); x.textAlign = "left"; }
         else { x.font = F(18); x.fillStyle = PC; x.fillText("Photos ›", tx + TW - QR, ty); }
