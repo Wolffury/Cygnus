@@ -4196,7 +4196,7 @@ function choicesPages() {
   y += 8; x.strokeStyle = tintHex(PC, 0.6); x.lineWidth = 1.5; x.beginPath(); x.moveTo(M, y); x.lineTo(M + CW, y); x.stroke(); y += 24;
   if (!list.length) { para("Nothing on this project has a colour to choose.", 24, INK); }
   else if (list.sample) {
-    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` The boxes can't be ticked on screen, so print it to fill it in. Rather not print? Just call or text me at ${co.phone} with your picks.` : ""}`, 24, INK, 6, 600);
+    para(`Each lettered panel on the plan is a sample of one paver. Tick the one paver and colour you'd like${list.some((o) => o.pattern) ? ", then a laying pattern and a border" : ""}, sign at the bottom, and send it back. That's all I need to place the order. You can tick and type right in this PDF and save it, or print it and fill it in by hand${co.phone ? `, or just call or text me at ${co.phone} with your picks` : ""}.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 14);
     const ph = simplePlanBox(CW, H - y - M - foot - 70); room(ph + 52);
     x.save(); x.beginPath(); x.rect(M, y, CW, ph); x.clip(); x.translate(M, y); drawSimplePlan(x, 0, 0, CW, ph, 1.4, true); x.restore();
@@ -4204,7 +4204,7 @@ function choicesPages() {
     x.font = F(18); x.fillStyle = MUTED; x.textBaseline = "top"; x.textAlign = "left"; x.fillText("The plan from above. Each letter is a sample panel; find its letter below.", M, y); y += 36;
   }
   else {
-    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back (a phone photo is fine). That's all I need to place the order.${co.phone ? ` The boxes can't be ticked on screen, so print it to fill it in. Rather not print? Just call or text me at ${co.phone} with your picks.` : ""}`, 24, INK, 6, 600);
+    para(`Please tick one choice for ${list.length === 1 ? "the item" : `each of the ${list.length} items`} below, sign at the bottom, and send it back. That's all I need to place the order. You can tick and type right in this PDF and save it, or print it and fill it in by hand${co.phone ? `, or just call or text me at ${co.phone} with your picks` : ""}.`, 24, INK, 6, 600);
     para("Scan a code with your phone's camera, or click it in the PDF, to see photos of that colour online. \"In the plan\" marks the colour shown in the drawings. Real colours vary a little from batch to batch; ask if you'd like to see a sample.", 20, MUTED, 18);
   }
   // ---- one block per choice
@@ -4226,7 +4226,7 @@ function choicesPages() {
         x.drawImage(pc, tx, top, TW, PH); const tag = (e.tags || {})[o.c] || (!list.sample && e.planned.includes(o.c) ? "In the plan" : ""), plan = !!tag;
         x.strokeStyle = plan ? PC : RULE; x.lineWidth = plan ? 3 : 1.5; x.strokeRect(tx, top, TW, PH);
         if (plan) { x.font = F(16, 600, SANS); const tw = x.measureText(tag).width + 16; x.fillStyle = PC; x.fillRect(tx + TW - tw - 6, top + 6, tw, 26); x.fillStyle = "#fff"; x.textBaseline = "middle"; x.fillText(tag, tx + TW - tw + 2, top + 19); }
-        let ty = top + PH + 12; box(tx, ty, BOX); x.textBaseline = "top"; x.fillStyle = INK;
+        let ty = top + PH + 12; box(tx, ty, BOX); (c.__fields = c.__fields || []).push({ kind: "radio", group: list.sample && !e.pattern ? "paver" : "g" + n, tip: list.sample && !e.pattern ? "Paver and colour" : e.name, opt: (list.sample && !e.pattern ? e.name + " – " : "") + o.c, x: tx, y: ty, w: BOX, h: BOX }); x.textBaseline = "top"; x.fillStyle = INK;
         const nw = TW - BOX - QR - 22; let fs = 22; x.font = F(fs, 600); while (fs > 16 && Math.max(...o.c.split(/\s+/).map((w) => x.measureText(w).width)) > nw) { fs--; x.font = F(fs, 600); }
         const nm = wrapLines(x, o.c, nw, F(fs, 600)); x.font = F(fs, 600); nm.slice(0, 3).forEach((ln, i) => x.fillText(ln, tx + BOX + 10, ty + 2 + i * (fs + 3)));
         if (o.note) { x.font = F(16); x.fillStyle = MUTED; wrapLines(x, o.note, TW, F(16)).forEach((ln, i) => x.fillText(ln, tx, ty + QR + 24 + i * 20)); }
@@ -4242,9 +4242,12 @@ function choicesPages() {
   // ---- notes and sign-off
   if (list.length) {
     room(160); x.textBaseline = "alphabetic"; spaced(LL ? 4 : 1, () => { x.font = F(22, 600, HEAD); x.fillStyle = PC; x.fillText("ANYTHING ELSE?", M, y + 20); }); y += 46;
+    const fld = (f) => (c.__fields = c.__fields || []).push(f);
+    fld({ kind: "text", name: "Anything else", x: M + 290, y: y - 36, w: CW - 290, h: 34 });
     line(M, M + CW, y); y += 52; x.font = F(21); x.fillStyle = MUTED; x.textBaseline = "alphabetic";
-    x.fillText("Name", M, y); line(M + 80, M + CW * 0.5, y + 4); x.fillText("Date", M + CW * 0.56, y); line(M + CW * 0.56 + 60, M + CW, y + 4); y += 50;
-    x.fillText("Signature", M, y); line(M + 110, M + CW, y + 4); y += 40;
+    x.fillText("Name", M, y); line(M + 80, M + CW * 0.5, y + 4); x.fillText("Date", M + CW * 0.56, y); line(M + CW * 0.56 + 60, M + CW, y + 4);
+    fld({ kind: "text", name: "Name", x: M + 82, y: y - 28, w: CW * 0.5 - 84, h: 31 }); fld({ kind: "text", name: "Date", x: M + CW * 0.56 + 62, y: y - 28, w: CW * 0.44 - 64, h: 31 }); y += 50;
+    x.fillText("Signature", M, y); line(M + 110, M + CW, y + 4); fld({ kind: "text", name: "Signature", tip: "Type your name to sign", x: M + 112, y: y - 28, w: CW - 114, h: 31 }); y += 40;
     const back = [co.phone, co.email].filter(Boolean).join(" · ");
     if (back) { x.font = F(20); x.fillStyle = INK; x.fillText(`Send it back, or just call or text me with your picks: ${back}`, M, y); }
   }
@@ -4290,7 +4293,7 @@ $("cpScopeReset").onclick = () => { cdoc().scope = null; $("cpScope").value = sc
 $("cpTimeReset").onclick = () => { cdoc().timeline = null; $("cpTime").value = timelineAuto(); cpSave(); cpRender(); };
 async function cpJpegs() { const pages = cpChosen(), out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()), links: pg.__links || [] }); } return out; }
 $("cpPdf").onclick = async () => { try { if (!cpChosen().length) { toast("Tick at least one page."); return; } saveFile(`${slug(clientTitle())}_${quoteNo()}_client.pdf`, pdfFromJpegs(await cpJpegs())); } catch (e) { toast("Couldn't make the PDF: " + e.message); } };
-async function pagesPdf(pages, name) { const out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()), links: pg.__links || [] }); } return saveFile(name, pdfFromJpegs(out)); }
+async function pagesPdf(pages, name) { const out = []; for (const pg of pages) { const b = await new Promise((r) => pg.toBlob(r, "image/jpeg", 0.9)); out.push({ w: 8.5, h: 11, px: pg.width, py: pg.height, jpg: new Uint8Array(await b.arrayBuffer()), links: pg.__links || [], fields: pg.__fields || [] }); } return saveFile(name, pdfFromJpegs(out)); }
 function printPages(pages, pdfName) {
   const box = $("cpPrint"); box.innerHTML = "";
   for (const pg of pages) { const im = new Image(); im.src = pg.toDataURL("image/jpeg", 0.92); box.appendChild(im); }
@@ -5017,24 +5020,50 @@ async function makePrintPdf() {
 }
 // Minimal PDF writer: one full-page JPEG per page.
 function pdfFromJpegs(pages) {
-  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  // Pages are JPEG images; links become link annotations, and pg.fields become fillable form fields
+  // (radio groups for "pick one", text boxes) drawn over the picture.
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0, next = 3;
   const put = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); len += b.length; };
   const obj = (id, body) => { offs[id] = len; put(`${id} 0 obj\n`); body(); put("\nendobj\n"); };
+  const esc = (u) => String(u).replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7e]/g, (c) => c === "’" ? "'" : c === "×" ? "x" : c === "°" ? " deg" : encodeURIComponent(c));
+  const tstr = (t) => `(${String(t).replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7e]/g, (c) => ({ "×": "x", "°": " deg", "″": '"', "’": "'", "–": "-" })[c] || "")})`;
   put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
-  const N = pages.length, kids = pages.map((_, k) => `${3 + k * 3} 0 R`).join(" ");
-  obj(1, () => put("<< /Type /Catalog /Pages 2 0 R >>"));
-  obj(2, () => put(`<< /Type /Pages /Kids [${kids}] /Count ${N} >>`));
-  pages.forEach((pg, k) => {
-    const id = 3 + k * 3, W = (pg.w * 72).toFixed(2), H = (pg.h * 72).toFixed(2), cs = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
-    const sx = (pg.w * 72) / pg.px, sy = (pg.h * 72) / pg.py, esc = (u) => String(u).replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7e]/g, encodeURIComponent);
-    const annots = (pg.links || []).map((l) => `<< /Type /Annot /Subtype /Link /Rect [${(l.x * sx).toFixed(1)} ${((pg.py - l.y - l.h) * sy).toFixed(1)} ${((l.x + l.w) * sx).toFixed(1)} ${((pg.py - l.y) * sy).toFixed(1)}] /Border [0 0 0] /A << /S /URI /URI (${esc(l.url)}) >> >>`).join(" ");
-    obj(id, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R${annots ? ` /Annots [${annots}]` : ""} >>`));
+  const N = pages.length, pageIds = [], fieldRefs = [], groups = new Map(), helv = next++, zadb = next++;
+  const anyFields = pages.some((pg) => (pg.fields || []).length);
+  for (const pg of pages) {
+    const id = next; next += 3; pageIds.push(id);
+    const W = pg.w * 72, H = pg.h * 72, cs = `q ${W.toFixed(2)} 0 0 ${H.toFixed(2)} 0 0 cm /Im0 Do Q`, sx = W / pg.px, sy = H / pg.py;
+    const R = (r) => [r.x * sx, (pg.py - r.y - r.h) * sy, (r.x + r.w) * sx, (pg.py - r.y) * sy].map((v) => v.toFixed(1)).join(" ");
+    const annots = (pg.links || []).map((l) => `<< /Type /Annot /Subtype /Link /Rect [${R(l)}] /Border [0 0 0] /A << /S /URI /URI (${esc(l.url)}) >> >>`);
+    const widgets = [];
+    for (const f of pg.fields || []) {
+      const wid = next++, w = (f.w * sx).toFixed(2), h = (f.h * sy).toFixed(2);
+      if (f.kind === "radio") {
+        if (!groups.has(f.group)) groups.set(f.group, { id: next++, kids: [], tip: f.tip || f.group });
+        const g = groups.get(f.group), on = "O" + g.kids.length, apOn = next++, apOff = next++; g.kids.push(wid);
+        const cw = +w, ch = +h, tick = `q 0.12 0.11 0.1 RG ${(Math.min(cw, ch) * 0.13).toFixed(2)} w 1 J 1 j ${(cw * 0.2).toFixed(2)} ${(ch * 0.52).toFixed(2)} m ${(cw * 0.42).toFixed(2)} ${(ch * 0.24).toFixed(2)} l ${(cw * 0.84).toFixed(2)} ${(ch * 0.82).toFixed(2)} l S Q`;
+        widgets.push([wid, () => put(`<< /Type /Annot /Subtype /Widget /Parent ${g.id} 0 R /Rect [${R(f)}] /P ${id} 0 R /F 4 /AS /Off /MK << >> /AP << /N << /${on} ${apOn} 0 R /Off ${apOff} 0 R >> >> /TU ${tstr(f.opt || "")} >>`)]);
+        widgets.push([apOn, () => put(`<< /Type /XObject /Subtype /Form /BBox [0 0 ${w} ${h}] /Length ${tick.length} >>\nstream\n${tick}\nendstream`)]);
+        widgets.push([apOff, () => put(`<< /Type /XObject /Subtype /Form /BBox [0 0 ${w} ${h}] /Length 0 >>\nstream\n\nendstream`)]);
+      } else {
+        fieldRefs.push(wid);
+        widgets.push([wid, () => put(`<< /Type /Annot /Subtype /Widget /FT /Tx /T ${tstr(f.name)} /TU ${tstr(f.tip || f.name)} /Rect [${R(f)}] /P ${id} 0 R /F 4 /Ff ${f.multi ? 4096 : 0} /DA (/Helv ${f.multi ? 11 : 0} Tf 0 g) /V () /MK << >> >>`)]);
+      }
+      annots.push(`${wid} 0 R`);
+    }
+    obj(id, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W.toFixed(2)} ${H.toFixed(2)}] /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> /Contents ${id + 1} 0 R${annots.length ? ` /Annots [${annots.join(" ")}]` : ""} >>`));
     obj(id + 1, () => put(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
     obj(id + 2, () => { put(`<< /Type /XObject /Subtype /Image /Width ${pg.px} /Height ${pg.py} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.jpg.length} >>\nstream\n`); put(pg.jpg); put("\nendstream"); });
-  });
-  const xref = len, count = 3 + N * 3;
-  put(`xref\n0 ${count}\n0000000000 65535 f \n` + offs.slice(1).map((o) => String(o).padStart(10, "0") + " 00000 n \n").join(""));
-  put(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    for (const [wid, body] of widgets) obj(wid, body);
+  }
+  let gi = 0; for (const [, g] of groups) { gi++; fieldRefs.push(g.id); obj(g.id, () => put(`<< /FT /Btn /Ff 49152 /T (choice${gi}) /TU ${tstr(g.tip)} /V /Off /Kids [${g.kids.map((k) => k + " 0 R").join(" ")}] >>`)); }
+  obj(helv, () => put("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
+  obj(zadb, () => put("<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>"));
+  obj(1, () => put(`<< /Type /Catalog /Pages 2 0 R${anyFields ? ` /AcroForm << /Fields [${fieldRefs.map((r) => r + " 0 R").join(" ")}] /NeedAppearances true /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv ${helv} 0 R /ZaDb ${zadb} 0 R >> >> >>` : ""} >>`));
+  obj(2, () => put(`<< /Type /Pages /Kids [${pageIds.map((i) => i + " 0 R").join(" ")}] /Count ${N} >>`));
+  const xref = len, count = next;
+  let tbl = `xref\n0 ${count}\n0000000000 65535 f \n`; for (let i = 1; i < count; i++) tbl += offs[i] != null ? String(offs[i]).padStart(10, "0") + " 00000 n \n" : "0000000000 65535 f \n";
+  put(tbl); put(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return new Blob(parts, { type: "application/pdf" });
 }
 $("printBtn").onclick = prOpen;
